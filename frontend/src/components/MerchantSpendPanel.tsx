@@ -1,34 +1,27 @@
 "use client";
 
+import { motion } from "framer-motion";
 import type { MerchantSpend } from "@/lib/types";
 import { formatInr } from "@/lib/api";
 import { CATEGORY_META, MERCHANT_CATEGORY } from "@/lib/categories";
 import { LiveCounter } from "@/components/LiveCounter";
+import { SpotlightCard } from "@/components/SpotlightCard";
+import { BrandMark } from "@/components/BrandMark";
 
 interface MerchantSpendPanelProps {
   items: MerchantSpend[];
 }
-
-const MERCHANT_COLOR: Record<string, string> = {
-  Swiggy: "#8b7cff",
-  Bistro: "#a78bfa",
-  MakeMyTrip: "#5ecbff",
-  Rapido: "#6d5cff",
-  Zepto: "#c084fc",
-  District: "#7c6af5",
-};
 
 export function MerchantSpendPanel({ items }: MerchantSpendPanelProps) {
   const max = Math.max(...items.map((i) => i.total), 1);
   const trackedTotal = items.reduce((sum, i) => sum + i.total, 0);
 
   return (
-    <section className="panel merchant-panel live-panel">
-      <div className="live-aura soft" aria-hidden />
+    <SpotlightCard className="panel merchant-panel">
       <header className="panel-head">
-        <h2 className="display-title">Tracked apps</h2>
-        <p>
-          Tagged by lifestyle category
+        <h2 className="ui-header">Tracked apps</h2>
+        <p className="meta">
+          Tagged by lifestyle
           {trackedTotal > 0 ? (
             <>
               {" "}
@@ -42,60 +35,56 @@ export function MerchantSpendPanel({ items }: MerchantSpendPanelProps) {
 
       <div className="merchant-grid">
         {items.map((item, index) => {
-          const accent = MERCHANT_COLOR[item.merchant] ?? "#e8b84a";
           const empty = item.count === 0;
           const category = MERCHANT_CATEGORY[item.merchant] ?? "other";
           const categoryLabel = CATEGORY_META[category].label;
+          const width = empty ? 0 : (item.total / max) * 100;
 
           return (
-            <article
+            <motion.div
               key={item.merchant}
-              className={`merchant-card live-card ${empty ? "empty" : ""}`}
-              style={{
-                ["--accent" as string]: accent,
-                ["--delay" as string]: `${index * 0.12}s`,
-              }}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.04 * index, type: "spring", bounce: 0.25 }}
             >
-              <div className="live-orb tiny" aria-hidden />
-              <div className="merchant-top">
-                <div>
-                  <span className={`cat-chip cat-${category}`}>{categoryLabel}</span>
-                  <h3>{item.merchant}</h3>
+              <SpotlightCard className={`merchant-card ${empty ? "empty" : ""}`}>
+                <div className="merchant-top">
+                  <div className="merchant-title">
+                    <BrandMark name={item.merchant} size={20} />
+                    <div>
+                      <span className="cat-chip">{categoryLabel}</span>
+                      <h3 className="ui-header">{item.merchant}</h3>
+                    </div>
+                  </div>
+                  <strong className="display-num sm">
+                    {empty ? (
+                      "—"
+                    ) : (
+                      <LiveCounter
+                        value={item.total}
+                        format={(n) => formatInr(n)}
+                      />
+                    )}
+                  </strong>
                 </div>
-                <strong>
-                  {empty ? (
-                    "—"
-                  ) : (
-                    <LiveCounter
-                      value={item.total}
-                      format={(n) => formatInr(n)}
-                    />
-                  )}
-                </strong>
-              </div>
-              <p className="merchant-meta">
-                {empty
-                  ? "No payments found"
-                  : `${item.count} payment${item.count === 1 ? "" : "s"} · last ${item.lastDate}`}
-              </p>
-              <div className="live-bar">
-                <span
-                  className="live-bar-fill"
-                  style={{
-                    width: empty ? "0%" : `${(item.total / max) * 100}%`,
-                  }}
-                />
-                <span
-                  className="live-bar-glow"
-                  style={{
-                    width: empty ? "0%" : `${(item.total / max) * 100}%`,
-                  }}
-                />
-              </div>
-            </article>
+                <p className="meta">
+                  {empty
+                    ? "No payments found"
+                    : `${item.count} payment${item.count === 1 ? "" : "s"} · last ${item.lastDate}`}
+                </p>
+                <div className="progress-track">
+                  <motion.span
+                    className="progress-fill"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${width}%` }}
+                    transition={{ type: "spring", bounce: 0.3, delay: 0.1 + index * 0.04 }}
+                  />
+                </div>
+              </SpotlightCard>
+            </motion.div>
           );
         })}
       </div>
-    </section>
+    </SpotlightCard>
   );
 }

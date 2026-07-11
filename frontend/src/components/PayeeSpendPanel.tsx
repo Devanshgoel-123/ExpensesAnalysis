@@ -1,8 +1,10 @@
 "use client";
 
+import { motion } from "framer-motion";
 import type { PayeeSpend } from "@/lib/types";
 import { formatInr, formatShortDate } from "@/lib/api";
 import { LiveCounter } from "@/components/LiveCounter";
+import { SpotlightCard } from "@/components/SpotlightCard";
 
 interface PayeeSpendPanelProps {
   items: PayeeSpend[];
@@ -10,51 +12,52 @@ interface PayeeSpendPanelProps {
 
 export function PayeeSpendPanel({ items }: PayeeSpendPanelProps) {
   return (
-    <section className="panel payee-panel live-panel">
-      <div className="live-aura soft" aria-hidden />
+    <SpotlightCard className="panel payee-panel">
       <header className="panel-head">
-        <h2 className="display-title">Tracked people</h2>
-        <p>Payments matched to named payees</p>
+        <h2 className="ui-header">Tracked people</h2>
+        <p className="meta">Payments matched to named payees</p>
       </header>
 
       <div className="payee-list">
         {items.map((item, index) => (
-          <article
+          <motion.div
             key={item.name}
-            className={`payee-card live-card ${item.count === 0 ? "empty" : ""}`}
-            style={{ ["--delay" as string]: `${index * 0.12}s` }}
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 * index }}
           >
-            <div className="live-orb tiny" aria-hidden />
-            <div className="payee-top">
-              <h3>{item.name}</h3>
-              <strong>
-                {item.count === 0 ? (
-                  "—"
-                ) : (
-                  <LiveCounter value={item.total} format={(n) => formatInr(n)} />
-                )}
-              </strong>
-            </div>
-            <p className="payee-meta">
-              {item.count === 0
-                ? "No payments found"
-                : `${item.count} payment${item.count === 1 ? "" : "s"} · last ${item.lastDate}`}
-            </p>
-            {item.days.length > 0 ? (
-              <div className="day-chips live-chips">
-                {item.days.map((day, i) => (
-                  <span
-                    key={day}
-                    style={{ ["--delay" as string]: `${i * 0.08}s` }}
-                  >
-                    {formatShortDate(day)}
-                  </span>
-                ))}
+            <SpotlightCard
+              className={`payee-card ${item.count === 0 ? "empty" : ""}`}
+            >
+              <div className="payee-top">
+                <h3 className="ui-header">{item.name}</h3>
+                <strong className="display-num sm">
+                  {item.count === 0 ? (
+                    "—"
+                  ) : (
+                    <LiveCounter
+                      value={item.total}
+                      format={(n) => formatInr(n)}
+                    />
+                  )}
+                </strong>
               </div>
-            ) : null}
-          </article>
+              <p className="meta">
+                {item.count === 0
+                  ? "No payments found"
+                  : `${item.count} payment${item.count === 1 ? "" : "s"} · last ${item.lastDate}`}
+              </p>
+              {item.days.length > 0 ? (
+                <div className="day-chips">
+                  {item.days.map((day) => (
+                    <span key={day}>{formatShortDate(day)}</span>
+                  ))}
+                </div>
+              ) : null}
+            </SpotlightCard>
+          </motion.div>
         ))}
       </div>
-    </section>
+    </SpotlightCard>
   );
 }

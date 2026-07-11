@@ -17,23 +17,23 @@ export function UploadPanel({ onParsed, loading, error }: UploadPanelProps) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!file) return;
+    if (!file || loading) return;
     await onParsed(file, password);
   }
 
   function pickFile(next: File | null) {
-    if (!next) return;
+    if (!next || loading) return;
     if (!next.name.toLowerCase().endsWith(".pdf")) return;
     setFile(next);
   }
 
   return (
-    <form className="upload-panel" onSubmit={handleSubmit}>
+    <form className="upload-panel" onSubmit={handleSubmit} aria-busy={loading}>
       <div
-        className={`dropzone ${dragOver ? "active" : ""} ${file ? "has-file" : ""}`}
+        className={`dropzone ${dragOver ? "active" : ""} ${file ? "has-file" : ""} ${loading ? "is-loading" : ""}`}
         onDragOver={(e) => {
           e.preventDefault();
-          setDragOver(true);
+          if (!loading) setDragOver(true);
         }}
         onDragLeave={() => setDragOver(false)}
         onDrop={(e) => {
@@ -41,10 +41,14 @@ export function UploadPanel({ onParsed, loading, error }: UploadPanelProps) {
           setDragOver(false);
           pickFile(e.dataTransfer.files[0] ?? null);
         }}
-        onClick={() => inputRef.current?.click()}
+        onClick={() => {
+          if (!loading) inputRef.current?.click();
+        }}
         role="button"
-        tabIndex={0}
+        tabIndex={loading ? -1 : 0}
+        aria-disabled={loading}
         onKeyDown={(e) => {
+          if (loading) return;
           if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
         }}
       >
@@ -53,6 +57,7 @@ export function UploadPanel({ onParsed, loading, error }: UploadPanelProps) {
           type="file"
           accept="application/pdf,.pdf"
           hidden
+          disabled={loading}
           onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
         />
         <FileUp size={28} strokeWidth={1.5} />
@@ -61,9 +66,11 @@ export function UploadPanel({ onParsed, loading, error }: UploadPanelProps) {
             {file ? file.name : "Drop your bank PDF here"}
           </p>
           <p className="drop-sub">
-            {file
-              ? `${(file.size / 1024).toFixed(0)} KB · click to replace`
-              : "Password-protected UPI statements supported"}
+            {loading
+              ? "Unlocking PDF and extracting transactions…"
+              : file
+                ? `${(file.size / 1024).toFixed(0)} KB · click to replace`
+                : "Password-protected UPI statements supported"}
           </p>
         </div>
       </div>
@@ -78,15 +85,33 @@ export function UploadPanel({ onParsed, loading, error }: UploadPanelProps) {
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Usually DOB / phone / PAN"
           autoComplete="off"
+          disabled={loading}
         />
       </label>
 
       {error ? <p className="form-error">{error}</p> : null}
 
-      <button type="submit" className="cta" disabled={!file || loading}>
+      {loading ? (
+        <div className="loading-status" role="status" aria-live="polite">
+          <Loader2 className="spin" size={18} />
+          <div>
+            <p className="loading-title">Parsing statement…</p>
+            <p className="loading-sub">
+              This can take a few seconds for large PDFs
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      <button
+        type="submit"
+        className={`cta ${loading ? "is-loading" : ""}`}
+        disabled={!file || loading}
+      >
         {loading ? (
           <>
-            <Loader2 className="spin" size={18} /> Parsing statement…
+            <Loader2 className="spin" size={18} />
+            Parsing statement…
           </>
         ) : (
           "Build dashboard"

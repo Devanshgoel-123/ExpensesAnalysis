@@ -1,15 +1,7 @@
 "use client";
 
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import type { DailySpend } from "@/lib/types";
 import { formatInr, formatShortDate } from "@/lib/api";
 
@@ -17,65 +9,78 @@ interface DailyChartProps {
   data: DailySpend[];
 }
 
-const BAR_COLORS = ["#8b7cff", "#6d5cff", "#5b8dff", "#7c6af5", "#9a8cff"];
-
 export function DailyChart({ data }: DailyChartProps) {
+  const max = Math.max(...data.map((d) => d.amount), 1);
+  const [hover, setHover] = useState<{
+    index: number;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  const ticks = useMemo(
+    () => data.map((d, i) => ({ ...d, showLabel: i % 3 === 0 || i === data.length - 1 })),
+    [data],
+  );
+
+  const hovered = hover ? data[hover.index] : null;
+
   return (
-    <section className="panel chart-panel interactive-card">
+    <section className="panel chart-panel">
       <header className="panel-head">
-        <h2>Daily spend</h2>
-        <p>Debits by day</p>
+        <h2 className="ui-header">Daily spend</h2>
+        <p className="meta">Debits by day</p>
       </header>
-      <div className="chart-wrap">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
-            <XAxis
-              dataKey="date"
-              tickFormatter={formatShortDate}
-              stroke="transparent"
-              tick={{ fill: "rgba(255,255,255,0.45)", fontSize: 11 }}
-              axisLine={false}
-              tickLine={false}
-              minTickGap={24}
-            />
-            <YAxis
-              tickFormatter={(v) =>
-                `₹${Number(v) >= 1000 ? `${Math.round(Number(v) / 1000)}k` : v}`
-              }
-              stroke="transparent"
-              tick={{ fill: "rgba(255,255,255,0.45)", fontSize: 11 }}
-              axisLine={false}
-              tickLine={false}
-              width={48}
-            />
-            <Tooltip
-              cursor={{ fill: "rgba(109, 92, 255, 0.08)" }}
-              contentStyle={{
-                background: "rgba(18, 18, 24, 0.95)",
-                border: "1px solid rgba(139, 124, 255, 0.35)",
-                borderRadius: 14,
-                color: "#fff",
-                boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
-              }}
-              labelFormatter={(label) => formatShortDate(String(label))}
-              formatter={(value) => [formatInr(Number(value ?? 0)), "Spent"]}
-            />
-            <Bar
-              dataKey="amount"
-              radius={[10, 10, 4, 4]}
-              maxBarSize={42}
-              animationDuration={900}
-            >
-              {data.map((_, index) => (
-                <Cell
-                  key={`bar-${index}`}
-                  fill={BAR_COLORS[index % BAR_COLORS.length]}
+
+      <div
+        className="bar-chart"
+        onMouseLeave={() => setHover(null)}
+      >
+        <div className="bar-chart-plot">
+          {ticks.map((d, index) => {
+            const heightPct = Math.max(4, (d.amount / max) * 100);
+            return (
+              <div
+                key={d.date}
+                className="bar-col"
+                onMouseMove={(e) => {
+                  const rect = e.currentTarget.parentElement?.getBoundingClientRect();
+                  if (!rect) return;
+                  setHover({
+                    index,
+                    x: e.clientX - rect.left,
+                    y: e.clientY - rect.top,
+                  });
+                }}
+              >
+                <motion.div
+                  className="bar-fill"
+                  initial={{ height: 0 }}
+                  animate={{ height: `${heightPct}%` }}
+                  transition={{ type: "spring", bounce: 0.3, delay: index * 0.025 }}
                 />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+                {d.showLabel ? (
+                  <span className="bar-label">{formatShortDate(d.date)}</span>
+                ) : (
+                  <span className="bar-label ghost" />
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {hovered && hover ? (
+          <div
+            className="chart-tooltip"
+            style={{
+              left: Math.min(Math.max(hover.x, 72), 10000),
+              top: Math.max(hover.y - 12, 8),
+              transform: "translate(-50%, -100%)",
+            }}
+          >
+            <p className="meta">{formatShortDate(hovered.date)}</p>
+            <strong className="display-num sm">{formatInr(hovered.amount)}</strong>
+          </div>
+        ) : null}
       </div>
     </section>
   );

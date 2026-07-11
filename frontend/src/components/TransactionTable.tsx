@@ -1,9 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import type { Transaction } from "@/lib/types";
 import { formatInrExact, formatShortDate } from "@/lib/api";
 import { CATEGORY_META, MERCHANT_CATEGORY } from "@/lib/categories";
+import { BrandMark } from "@/components/BrandMark";
+import { SpotlightCard } from "@/components/SpotlightCard";
 
 interface TransactionTableProps {
   items: Transaction[];
@@ -39,11 +42,9 @@ export function TransactionTable({ items }: TransactionTableProps) {
     next.sort((a, b) => {
       let cmp = 0;
       if (sortKey === "amount") cmp = a.amount - b.amount;
-      else if (sortKey === "provider") {
-        cmp = providerOf(a).localeCompare(providerOf(b));
-      } else if (sortKey === "type") {
-        cmp = a.type.localeCompare(b.type);
-      } else {
+      else if (sortKey === "provider") cmp = providerOf(a).localeCompare(providerOf(b));
+      else if (sortKey === "type") cmp = a.type.localeCompare(b.type);
+      else {
         cmp =
           a.date.localeCompare(b.date) ||
           (a.time ?? "").localeCompare(b.time ?? "");
@@ -68,41 +69,24 @@ export function TransactionTable({ items }: TransactionTableProps) {
   }
 
   return (
-    <section className="panel txn-panel interactive-card">
+    <SpotlightCard className="panel txn-panel">
       <header className="panel-head txn-head">
         <div>
-          <h2>Transactions</h2>
-          <p>{items.length} parsed rows</p>
+          <h2 className="ui-header">Transactions</h2>
+          <p className="meta">{items.length} parsed rows</p>
         </div>
         <div className="sort-bar">
-          <button
-            type="button"
-            className={`sort-chip ${sortKey === "amount" ? "active" : ""}`}
-            onClick={() => toggleSort("amount")}
-          >
-            Amount{sortMark("amount")}
-          </button>
-          <button
-            type="button"
-            className={`sort-chip ${sortKey === "provider" ? "active" : ""}`}
-            onClick={() => toggleSort("provider")}
-          >
-            Provider{sortMark("provider")}
-          </button>
-          <button
-            type="button"
-            className={`sort-chip ${sortKey === "date" ? "active" : ""}`}
-            onClick={() => toggleSort("date")}
-          >
-            Date{sortMark("date")}
-          </button>
-          <button
-            type="button"
-            className={`sort-chip ${sortKey === "type" ? "active" : ""}`}
-            onClick={() => toggleSort("type")}
-          >
-            Type{sortMark("type")}
-          </button>
+          {(["amount", "provider", "date", "type"] as SortKey[]).map((key) => (
+            <button
+              key={key}
+              type="button"
+              className={`sort-chip ${sortKey === key ? "active" : ""}`}
+              onClick={() => toggleSort(key)}
+            >
+              {key[0].toUpperCase() + key.slice(1)}
+              {sortMark(key)}
+            </button>
+          ))}
         </div>
       </header>
       <div className="table-scroll">
@@ -123,14 +107,27 @@ export function TransactionTable({ items }: TransactionTableProps) {
             {sorted.map((txn, i) => {
               const lifestyle = lifestyleOf(txn);
               const provider = providerOf(txn);
+              const isOther = provider === "Other" || (!txn.merchant && !txn.payee);
 
               return (
-                <tr key={`${txn.date}-${txn.amount}-${i}`}>
+                <motion.tr
+                  key={`${txn.date}-${txn.amount}-${i}`}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: Math.min(i * 0.012, 0.4) }}
+                >
                   <td>{formatShortDate(txn.date)}</td>
                   <td className="mono">{txn.time ?? "—"}</td>
                   <td className="desc">{txn.description}</td>
                   <td>
-                    <span className="pill merchant">{provider}</span>
+                    <span className={`provider-cell ${isOther ? "other" : ""}`}>
+                      {txn.merchant || txn.payee ? (
+                        <BrandMark name={txn.merchant ?? txn.payee ?? provider} />
+                      ) : null}
+                      <span className={isOther ? "badge-other" : "provider-name"}>
+                        {provider}
+                      </span>
+                    </span>
                   </td>
                   <td>
                     {lifestyle ? (
@@ -149,12 +146,12 @@ export function TransactionTable({ items }: TransactionTableProps) {
                     {txn.type === "debit" ? "−" : "+"}
                     {formatInrExact(txn.amount)}
                   </td>
-                </tr>
+                </motion.tr>
               );
             })}
           </tbody>
         </table>
       </div>
-    </section>
+    </SpotlightCard>
   );
 }

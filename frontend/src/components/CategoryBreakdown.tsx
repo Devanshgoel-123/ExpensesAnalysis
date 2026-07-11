@@ -1,13 +1,14 @@
 "use client";
 
+import { motion } from "framer-motion";
 import type { AmountBand, MerchantSpend } from "@/lib/types";
 import { formatInr } from "@/lib/api";
 import {
   CATEGORY_META,
-  MERCHANT_CATEGORY,
   type LifestyleCategory,
 } from "@/lib/categories";
 import { LiveCounter } from "@/components/LiveCounter";
+import { SpotlightCard } from "@/components/SpotlightCard";
 
 interface CategoryBreakdownProps {
   merchants: MerchantSpend[];
@@ -34,7 +35,9 @@ function buildBuckets(
     return {
       total: rows.reduce((s, m) => s + m.total, 0),
       count: rows.reduce((s, m) => s + m.count, 0),
-      members: names.filter((n) => (merchants.find((m) => m.merchant === n)?.count ?? 0) > 0),
+      members: names.filter(
+        (n) => (merchants.find((m) => m.merchant === n)?.count ?? 0) > 0,
+      ),
     };
   };
 
@@ -80,11 +83,10 @@ export function CategoryBreakdown({
   const max = Math.max(...buckets.map((b) => b.total), 1);
 
   return (
-    <section className="panel category-panel live-panel">
-      <div className="live-aura" aria-hidden />
+    <SpotlightCard className="panel category-panel">
       <header className="panel-head">
-        <h2 className="display-title">Lifestyle split</h2>
-        <p>Food · Travel · Cigarettes — live totals from your statement</p>
+        <h2 className="ui-header">Lifestyle split</h2>
+        <p className="meta">Food · Travel · Cigarettes — live totals</p>
       </header>
 
       <div className="category-grid">
@@ -94,57 +96,57 @@ export function CategoryBreakdown({
           const width = empty ? 0 : (bucket.total / max) * 100;
 
           return (
-            <article
+            <motion.div
               key={bucket.id}
-              className={`category-card live-card cat-${bucket.id} ${empty ? "empty" : ""}`}
-              style={{
-                ["--accent" as string]: meta.accent,
-                ["--delay" as string]: `${index * 0.15}s`,
-              }}
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.06 * index, type: "spring", bounce: 0.28 }}
             >
-              <div className="live-orb" aria-hidden />
-              <div className="category-label-row">
-                <span className="category-kicker">{meta.label}</span>
-                <span className="live-dot" aria-hidden />
-              </div>
-              <h3 className="category-amount">
-                {empty ? (
-                  "—"
-                ) : (
-                  <LiveCounter
-                    value={bucket.total}
-                    format={(n) => formatInr(n)}
+              <SpotlightCard
+                className={`category-card cat-${bucket.id} ${empty ? "empty" : ""}`}
+              >
+                <div className="category-label-row">
+                  <span className="category-kicker">{meta.label}</span>
+                  <span className="live-dot" aria-hidden />
+                </div>
+                <h3 className="display-num">
+                  {empty ? (
+                    "—"
+                  ) : (
+                    <LiveCounter
+                      value={bucket.total}
+                      format={(n) => formatInr(n)}
+                    />
+                  )}
+                </h3>
+                <p className="meta">{meta.blurb}</p>
+                <p className="meta">
+                  {empty ? (
+                    "No hits yet"
+                  ) : (
+                    <>
+                      <LiveCounter value={bucket.count} /> payments
+                    </>
+                  )}
+                </p>
+                <div className="category-members">
+                  {bucket.members.map((m) => (
+                    <span key={m}>{m}</span>
+                  ))}
+                </div>
+                <div className="progress-track">
+                  <motion.span
+                    className="progress-fill"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${width}%` }}
+                    transition={{ type: "spring", bounce: 0.3, delay: 0.12 }}
                   />
-                )}
-              </h3>
-              <p className="category-blurb">{meta.blurb}</p>
-              <p className="category-count">
-                {empty ? (
-                  "No hits yet"
-                ) : (
-                  <>
-                    <LiveCounter value={bucket.count} /> payments
-                  </>
-                )}
-              </p>
-              <div className="category-members">
-                {bucket.members.map((m) => (
-                  <span key={m}>{m}</span>
-                ))}
-              </div>
-              <div className="live-bar">
-                <span className="live-bar-fill" style={{ width: `${width}%` }} />
-                <span className="live-bar-glow" style={{ width: `${width}%` }} />
-              </div>
-            </article>
+                </div>
+              </SpotlightCard>
+            </motion.div>
           );
         })}
       </div>
-    </section>
+    </SpotlightCard>
   );
-}
-
-export function merchantCategoryLabel(merchant: string): string {
-  const cat = MERCHANT_CATEGORY[merchant];
-  return cat ? CATEGORY_META[cat].label : "Other";
 }
