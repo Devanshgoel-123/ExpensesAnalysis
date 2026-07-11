@@ -61,7 +61,7 @@ function buildBuckets(
       count: cigaretteBand.count,
       members: cigaretteBand.days.length
         ? [`${cigaretteBand.days.length} days`]
-        : ["₹25–₹50"],
+        : ["₹25–₹60"],
     },
     {
       id: "other",

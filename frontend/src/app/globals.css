@@ -467,6 +467,14 @@ input {
   font-size: 0.78rem;
 }
 
+.pill.lifestyle {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.78rem;
+  color: var(--accent, var(--cream));
+  border-color: color-mix(in srgb, var(--accent, var(--line)) 45%, transparent);
+}
+
 .site-nav {
   display: flex;
   justify-content: space-between;
@@ -1013,6 +1021,17 @@ td.credit {
   50% {
     transform: translateY(-2px);
     border-color: color-mix(in srgb, var(--accent, var(--gold)) 45%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-aura,
+  .live-orb,
+  .live-dot,
+  .live-card,
+  .live-bar-glow,
+  .live-chips span {
+    animation: none !important;
   }
 }
 

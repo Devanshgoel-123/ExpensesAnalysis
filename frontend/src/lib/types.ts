@@ -2,6 +2,7 @@ export type TransactionType = "debit" | "credit";
 
 export interface Transaction {
   date: string;
+  time: string | null;
   description: string;
   amount: number;
   type: TransactionType;
@@ -64,7 +65,7 @@ export interface ParseResult {
   upiRanking: UpiRanking[];
   merchantSpend: MerchantSpend[];
   payeeSpend: PayeeSpend[];
-  amountBand25to50: AmountBand;
+  amountBand25to60: AmountBand;
   transactions: Transaction[];
   meta: {
     pagesTextChars: number;

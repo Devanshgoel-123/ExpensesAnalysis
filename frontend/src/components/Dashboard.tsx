@@ -17,9 +17,9 @@ import { AmountBandPanel } from "@/components/AmountBandPanel";
 import { TransactionTable } from "@/components/TransactionTable";
 
 const EMPTY_BAND = {
-  label: "₹25 – ₹50",
+  label: "₹25 – ₹60",
   min: 25,
-  max: 50,
+  max: 60,
   count: 0,
   total: 0,
   days: [] as string[],
@@ -102,14 +102,14 @@ export function Dashboard() {
 
       <CategoryBreakdown
         merchants={data.merchantSpend ?? []}
-        cigaretteBand={data.amountBand25to50 ?? EMPTY_BAND}
+        cigaretteBand={data.amountBand25to60 ?? EMPTY_BAND}
       />
 
       <MerchantSpendPanel items={data.merchantSpend ?? []} />
 
       <div className="grid-main">
         <PayeeSpendPanel items={data.payeeSpend ?? []} />
-        <AmountBandPanel band={data.amountBand25to50 ?? EMPTY_BAND} />
+        <AmountBandPanel band={data.amountBand25to60 ?? EMPTY_BAND} />
       </div>
 
       <TransactionTable items={data.transactions} />

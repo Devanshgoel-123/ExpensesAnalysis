@@ -25,7 +25,7 @@ export const CATEGORY_META: Record<
   },
   cigarettes: {
     label: "Cigarettes",
-    blurb: "Tiny spends ₹25–₹50",
+    blurb: "Tiny spends ₹25–₹60",
     accent: "#d4a017",
   },
   other: {

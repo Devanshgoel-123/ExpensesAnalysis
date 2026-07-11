@@ -20,7 +20,7 @@ const NODES = [
   {
     title: "Analytics layer",
     detail:
-      "Daily spend · UPI rollups · Apps · Deepan · ₹25–50 band",
+      "Daily spend · UPI rollups · Apps · Deepan · ₹25–60 band",
   },
 ];
 
@@ -70,7 +70,7 @@ Express API (:4000)  POST /api/parse
         ├─ upiRanking
         ├─ merchantSpend (Swiggy, Bistro, MakeMyTrip…)
         ├─ payeeSpend (Deepan)
-        └─ amountBand25to50 (count + days)
+        └─ amountBand25to60 (count + days)
    │
    ▼
 Dashboard panels`}</pre>

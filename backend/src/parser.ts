@@ -110,10 +110,64 @@ const HDFC_ROW_RE =
   /^(\d{2}\/\d{2}\/\d{2})\s+(.+?)\s+(\d{6,})\s+(\d{2}\/\d{2}\/\d{2})\s+(.+)$/;
 
 const CREDIT_NARRATION_RE =
-  /\b(cash\s*deposit|salary|interest|refund|neft\s*cr|imps\s*cr|rtgs\s*cr|upi.*credit|credited)\b/i;
+  /\b(cash\s*deposit|salary|interest|refund|neft\s*cr|imps\s*cr|rtgs\s*cr|upi[- ].*\bcr\b|credited|received|deposit amt)\b/i;
 
+/** Strong debit signals only — do NOT treat every UPI- as debit (UPI can credit too). */
 const DEBIT_NARRATION_RE =
-  /\b(upi-|atm-|pos-|ach\s*dr|nach|emi|charges|fee|withdrawal|purchase)\b/i;
+  /\b(atm-?wdl|atm\s*withdrawal|pos-|ach\s*dr|nach|emi|charges|fee|withdrawal|purchase|paid\s+to|sent\s+to)\b/i;
+
+const TIME_RE =
+  /\b([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?\s*(?:AM|PM|am|pm)?\b/;
+
+function extractTime(text: string): string | null {
+  const match = text.match(TIME_RE);
+  if (!match) return null;
+  const raw = match[0].replace(/\s+/g, " ").trim().toUpperCase();
+  // Normalize to HH:MM or HH:MM:SS
+  const parts = raw.match(
+    /^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i,
+  );
+  if (!parts) return raw;
+  let hour = Number(parts[1]);
+  const minute = parts[2];
+  const second = parts[3];
+  const meridiem = parts[4]?.toUpperCase();
+  if (meridiem === "PM" && hour < 12) hour += 12;
+  if (meridiem === "AM" && hour === 12) hour = 0;
+  const hh = String(hour).padStart(2, "0");
+  return second ? `${hh}:${minute}:${second}` : `${hh}:${minute}`;
+}
+
+function classifyByBalance(
+  txnAmount: number,
+  closingBalance: number,
+  prevBalance: number | null,
+): TransactionType | null {
+  if (prevBalance === null) return null;
+  const delta = Math.round((closingBalance - prevBalance) * 100) / 100;
+  if (Math.abs(delta - txnAmount) <= 0.05) return "credit";
+  if (Math.abs(delta + txnAmount) <= 0.05) return "debit";
+  if (delta > 0.05) return "credit";
+  if (delta < -0.05) return "debit";
+  return null;
+}
+
+function inferType(
+  narration: string,
+  txnAmount: number,
+  closingBalance: number,
+  prevBalance: number | null,
+): TransactionType {
+  // Closing-balance movement is the source of truth on HDFC statements
+  const fromBalance = classifyByBalance(txnAmount, closingBalance, prevBalance);
+  if (fromBalance) return fromBalance;
+
+  if (CREDIT_NARRATION_RE.test(narration)) return "credit";
+  if (DEBIT_NARRATION_RE.test(narration)) return "debit";
+
+  // Ambiguous (common for UPI) without a prior balance
+  return "debit";
+}
 
 function toIsoDate(raw: string): string | null {
   const parts = raw.split("/").map(Number);
@@ -157,33 +211,13 @@ function extractUpi(narration: string): string | null {
   return candidate;
 }
 
-function inferType(
-  narration: string,
-  txnAmount: number,
-  closingBalance: number,
-  prevBalance: number | null,
-): TransactionType {
-  if (CREDIT_NARRATION_RE.test(narration)) return "credit";
-  if (DEBIT_NARRATION_RE.test(narration)) return "debit";
-
-  if (prevBalance !== null) {
-    const delta = Math.round((closingBalance - prevBalance) * 100) / 100;
-    if (Math.abs(delta - txnAmount) < 0.01) return "credit";
-    if (Math.abs(delta + txnAmount) < 0.01) return "debit";
-    if (closingBalance > prevBalance) return "credit";
-    if (closingBalance < prevBalance) return "debit";
-  }
-
-  // Spend-oriented default for ambiguous UPI rows
-  return "debit";
-}
-
 function cleanNarration(narration: string): string {
   return narration.replace(/\s+/g, " ").trim().slice(0, 180);
 }
 
 interface ParsedRow {
   date: string;
+  time: string | null;
   narration: string;
   amount: number;
   type: TransactionType;
@@ -240,6 +274,7 @@ function parseHdfcRow(
 
   return {
     date,
+    time: extractTime(line),
     narration,
     amount: Math.round(amount * 100) / 100,
     type,
@@ -276,6 +311,7 @@ function parseLooseRow(
 
   return {
     date,
+    time: extractTime(line),
     narration,
     amount: Math.round(amount * 100) / 100,
     type: inferType(narration, amount, closingBalance, prevBalance),
@@ -344,7 +380,8 @@ export async function extractTextFromPdf(
 }
 
 export function parseTransactions(text: string): Transaction[] {
-  const transactions: Transaction[] = [];
+  type Internal = Transaction & { closingBalance: number; order: number };
+  const internals: Internal[] = [];
   const seen = new Set<string>();
   let prevBalance: number | null = null;
 
@@ -359,14 +396,15 @@ export function parseTransactions(text: string): Transaction[] {
       parseHdfcRow(line, prevBalance) ?? parseLooseRow(line, prevBalance);
     if (!parsed) continue;
 
-    const key = `${parsed.date}|${parsed.amount}|${parsed.type}|${parsed.narration.slice(0, 60)}`;
+    const key = `${parsed.date}|${parsed.amount}|${parsed.narration.slice(0, 60)}|${parsed.closingBalance}`;
     if (seen.has(key)) continue;
     seen.add(key);
 
     prevBalance = parsed.closingBalance;
 
-    transactions.push({
+    internals.push({
       date: parsed.date,
+      time: parsed.time,
       description: parsed.narration,
       amount: parsed.amount,
       type: parsed.type,
@@ -374,14 +412,27 @@ export function parseTransactions(text: string): Transaction[] {
       merchant: detectMerchant(parsed.narration),
       payee: detectPayee(parsed.narration),
       raw: parsed.raw,
+      closingBalance: parsed.closingBalance,
+      order: internals.length,
     });
   }
 
-  return transactions.sort((a, b) =>
-    a.date === b.date
-      ? a.description.localeCompare(b.description)
-      : a.date.localeCompare(b.date),
-  );
+  // Second pass: reclassify using consecutive closing balances (statement order)
+  for (let i = 1; i < internals.length; i++) {
+    const prev = internals[i - 1].closingBalance;
+    const cur = internals[i];
+    const fromBalance = classifyByBalance(cur.amount, cur.closingBalance, prev);
+    if (fromBalance) cur.type = fromBalance;
+  }
+
+  return internals
+    .map(({ closingBalance: _c, order: _o, ...txn }) => txn)
+    .sort((a, b) =>
+      a.date === b.date
+        ? (a.time ?? "").localeCompare(b.time ?? "") ||
+          a.description.localeCompare(b.description)
+        : a.date.localeCompare(b.date),
+    );
 }
 
 export function buildAnalytics(transactions: Transaction[]): ParseResult {
@@ -476,16 +527,16 @@ export function buildAnalytics(transactions: Transaction[]): ParseResult {
   let bandCount = 0;
   let bandTotal = 0;
   for (const t of debits) {
-    if (t.amount >= 25 && t.amount <= 50) {
+    if (t.amount >= 25 && t.amount <= 60) {
       bandCount += 1;
       bandTotal += t.amount;
       bandDays.add(t.date);
     }
   }
-  const amountBand25to50: AmountBand = {
-    label: "₹25 – ₹50",
+  const amountBand25to60: AmountBand = {
+    label: "₹25 – ₹60",
     min: 25,
-    max: 50,
+    max: 60,
     count: bandCount,
     total: Math.round(bandTotal * 100) / 100,
     days: [...bandDays].sort(),
@@ -512,7 +563,7 @@ export function buildAnalytics(transactions: Transaction[]): ParseResult {
     upiRanking,
     merchantSpend,
     payeeSpend,
-    amountBand25to50,
+    amountBand25to60,
     transactions: [...transactions].sort((a, b) => b.date.localeCompare(a.date)),
     meta: {
       pagesTextChars: 0,
