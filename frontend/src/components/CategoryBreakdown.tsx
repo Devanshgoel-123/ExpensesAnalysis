@@ -26,7 +26,7 @@ function buildBuckets(
   merchants: MerchantSpend[],
   cigaretteBand: AmountBand,
 ): CategoryBucket[] {
-  const foodMerchants = ["Swiggy", "Bistro", "Zepto"];
+  const foodMerchants = ["Swiggy", "Bistro", "Zepto", "Ayodhya"];
   const travelMerchants = ["MakeMyTrip"];
   const otherMerchants = ["Rapido", "District"];
 

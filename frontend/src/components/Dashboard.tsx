@@ -59,7 +59,7 @@ export function Dashboard() {
             <h1 className="ui-header">Your spends. Sorted. Understood.</h1>
             <p className="lede">
               Upload a password-protected bank PDF. We parse daily spend, UPI
-              payees, Food / Travel / Cigarettes, and Deepan — calmly.
+              payees, Food / Travel / Cigarettes, and people you track — calmly.
             </p>
           </header>
           <UploadPanel onParsed={handleParse} loading={loading} error={error} />

@@ -16,7 +16,7 @@ type SortKey = "date" | "amount" | "provider" | "type";
 type SortDir = "asc" | "desc";
 
 function providerOf(txn: Transaction): string {
-  return txn.merchant ?? txn.payee ?? txn.upiId ?? "Other";
+  return txn.payee ?? txn.merchant ?? txn.upiId ?? "Other";
 }
 
 function lifestyleOf(txn: Transaction): { label: string; className: string } | null {

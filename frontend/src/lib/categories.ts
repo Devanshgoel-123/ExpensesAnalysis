@@ -4,6 +4,7 @@ export const MERCHANT_CATEGORY: Record<string, LifestyleCategory> = {
   Swiggy: "food",
   Bistro: "food",
   Zepto: "food",
+  Ayodhya: "food",
   MakeMyTrip: "travel",
   Rapido: "other",
   District: "other",
@@ -15,7 +16,7 @@ export const CATEGORY_META: Record<
 > = {
   food: {
     label: "Food",
-    blurb: "Swiggy · Bistro · Zepto",
+    blurb: "Swiggy · Bistro · Zepto · Ayodhya",
     accent: "#8b7cff",
   },
   travel: {

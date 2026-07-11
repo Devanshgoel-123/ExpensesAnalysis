@@ -1,8 +1,10 @@
 "use client";
 
+import { useMemo } from "react";
 import { motion } from "framer-motion";
 import type { PayeeSpend } from "@/lib/types";
 import { formatInr, formatShortDate } from "@/lib/api";
+import { TRACKED_PEOPLE } from "@/lib/people";
 import { LiveCounter } from "@/components/LiveCounter";
 import { SpotlightCard } from "@/components/SpotlightCard";
 
@@ -11,15 +13,33 @@ interface PayeeSpendPanelProps {
 }
 
 export function PayeeSpendPanel({ items }: PayeeSpendPanelProps) {
+  const people = useMemo(() => {
+    const byName = new Map(items.map((item) => [item.name.toLowerCase(), item]));
+    return TRACKED_PEOPLE.map((name) => {
+      const found = byName.get(name.toLowerCase());
+      return (
+        found ?? {
+          name,
+          total: 0,
+          count: 0,
+          lastDate: "",
+          days: [] as string[],
+        }
+      );
+    }).sort((a, b) => b.total - a.total);
+  }, [items]);
+
   return (
     <SpotlightCard className="panel payee-panel">
       <header className="panel-head">
         <h2 className="ui-header">Tracked people</h2>
-        <p className="meta">Payments matched to named payees</p>
+        <p className="meta">
+          Deepan · Mehak · Tanisha · Tapasya
+        </p>
       </header>
 
       <div className="payee-list">
-        {items.map((item, index) => (
+        {people.map((item, index) => (
           <motion.div
             key={item.name}
             initial={{ opacity: 0, y: 14 }}

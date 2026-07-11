@@ -19,6 +19,7 @@ import type {
 const TRACKED_MERCHANTS: Array<{ name: string; pattern: RegExp }> = [
   { name: "Bistro", pattern: /bistro/i },
   { name: "Swiggy", pattern: /swiggy/i },
+  { name: "Ayodhya", pattern: /ayodhya/i },
   {
     name: "MakeMyTrip",
     pattern: /makemytrip|make\s*my\s*trip|make\s*my|mmt\b|makemytrip\d*online/i,
@@ -30,6 +31,9 @@ const TRACKED_MERCHANTS: Array<{ name: string; pattern: RegExp }> = [
 
 const TRACKED_PAYEES: Array<{ name: string; pattern: RegExp }> = [
   { name: "Deepan", pattern: /deepan/i },
+  { name: "Mehak", pattern: /mehak/i },
+  { name: "Tanisha", pattern: /tanisha/i },
+  { name: "Tapasya", pattern: /tapasya/i },
 ];
 
 export function detectMerchant(text: string): string | null {
@@ -475,6 +479,7 @@ export function buildAnalytics(transactions: Transaction[]): ParseResult {
   for (const name of [
     "Swiggy",
     "Bistro",
+    "Ayodhya",
     "MakeMyTrip",
     "Rapido",
     "Zepto",
@@ -509,7 +514,8 @@ export function buildAnalytics(transactions: Transaction[]): ParseResult {
       days: [],
     });
   }
-  for (const t of debits) {
+  // People tracking includes both money sent (debit) and received (credit)
+  for (const t of transactions) {
     if (!t.payee) continue;
     const bucket = payeeMap.get(t.payee);
     if (!bucket) continue;

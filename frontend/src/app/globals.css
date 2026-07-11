@@ -49,9 +49,10 @@ input {
 
 .shell {
   position: relative;
-  width: min(1120px, calc(100% - 2rem));
+  width: min(1200px, calc(100% - 3rem));
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 2.25rem 0 5rem;
+  padding: 2rem 0 4.5rem;
   z-index: 1;
 }
 
@@ -59,6 +60,9 @@ input {
 .dashboard-content {
   position: relative;
   z-index: 2;
+  width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 /* Mesh gradient backdrop */
@@ -218,8 +222,10 @@ input {
 }
 
 .panel {
-  padding: 1.25rem 1.3rem 1.35rem;
+  padding: 1.25rem 1.35rem 1.4rem;
   margin-bottom: 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
 }
 
 .stat {
@@ -232,6 +238,7 @@ input {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 2rem;
+  padding: 0 1rem;
 }
 
 .nav-brand {
@@ -546,6 +553,7 @@ input {
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1.5rem;
+  padding: 0 1rem;
 }
 
 .stats-row,
@@ -559,6 +567,16 @@ input {
 .stats-row {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-bottom: 1rem;
+  gap: 0.95rem;
+}
+
+.stats-row > * {
+  min-width: 0;
+}
+
+.stat {
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
 }
 
 .grid-main {
@@ -567,7 +585,7 @@ input {
 }
 
 .merchant-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
 }
 
 .category-grid {
@@ -870,11 +888,13 @@ input {
 .table-scroll {
   overflow: auto;
   max-height: 440px;
+  isolation: isolate;
 }
 
 table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 0.875rem;
 }
 
@@ -884,18 +904,20 @@ td {
   padding: 1rem 0.7rem;
   border-bottom: 1px solid var(--line);
   vertical-align: middle;
+  background: transparent;
 }
 
 th {
   position: sticky;
   top: 0;
-  background: rgba(9, 9, 11, 0.92);
-  backdrop-filter: blur(10px);
-  color: var(--muted);
+  z-index: 3;
+  background: #09090b;
+  color: rgba(255, 255, 255, 0.55);
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-weight: 500;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 td.desc {
@@ -1089,7 +1111,9 @@ td.credit {
 
 @media (max-width: 640px) {
   .shell {
-    width: min(100% - 1.25rem, 1120px);
+    width: calc(100% - 1.5rem);
+    margin: 0 auto;
+    padding: 1.25rem 0 3rem;
   }
 
   .landing {
