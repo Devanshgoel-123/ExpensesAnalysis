@@ -18,7 +18,7 @@ export function StatsRow({ summary }: StatsRowProps) {
   return (
     <div className="stats-row">
       {stats.map((stat) => (
-        <article key={stat.label} className={`stat ${stat.tone}`}>
+        <article key={stat.label} className={`stat interactive-card ${stat.tone}`}>
           <p>{stat.label}</p>
           <strong>{stat.value}</strong>
         </article>

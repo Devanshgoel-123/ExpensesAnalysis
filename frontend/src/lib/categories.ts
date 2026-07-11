@@ -16,21 +16,21 @@ export const CATEGORY_META: Record<
   food: {
     label: "Food",
     blurb: "Swiggy · Bistro · Zepto",
-    accent: "#ff8a4c",
+    accent: "#8b7cff",
   },
   travel: {
     label: "Travel",
     blurb: "MakeMyTrip",
-    accent: "#5eb0ff",
+    accent: "#5ecbff",
   },
   cigarettes: {
     label: "Cigarettes",
     blurb: "Tiny spends ₹25–₹60",
-    accent: "#d4a017",
+    accent: "#c084fc",
   },
   other: {
     label: "Other apps",
     blurb: "Rapido · District",
-    accent: "#7ddea0",
+    accent: "#6d5cff",
   },
 };

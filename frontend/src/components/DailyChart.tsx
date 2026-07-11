@@ -1,9 +1,10 @@
 "use client";
 
 import {
-  Area,
-  AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
+  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -16,59 +17,64 @@ interface DailyChartProps {
   data: DailySpend[];
 }
 
+const BAR_COLORS = ["#8b7cff", "#6d5cff", "#5b8dff", "#7c6af5", "#9a8cff"];
+
 export function DailyChart({ data }: DailyChartProps) {
   return (
-    <section className="panel chart-panel">
+    <section className="panel chart-panel interactive-card">
       <header className="panel-head">
         <h2>Daily spend</h2>
-        <p>Debits grouped by day</p>
+        <p>Debits by day</p>
       </header>
       <div className="chart-wrap">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="spendFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#e8b84a" stopOpacity={0.35} />
-                <stop offset="100%" stopColor="#e8b84a" stopOpacity={0} />
-              </linearGradient>
-            </defs>
+          <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
             <XAxis
               dataKey="date"
               tickFormatter={formatShortDate}
-              stroke="rgba(255,255,255,0.35)"
-              tick={{ fill: "rgba(232,228,220,0.55)", fontSize: 11 }}
+              stroke="transparent"
+              tick={{ fill: "rgba(255,255,255,0.45)", fontSize: 11 }}
               axisLine={false}
               tickLine={false}
-              minTickGap={28}
+              minTickGap={24}
             />
             <YAxis
-              tickFormatter={(v) => `₹${Number(v) >= 1000 ? `${Math.round(Number(v) / 1000)}k` : v}`}
-              stroke="rgba(255,255,255,0.35)"
-              tick={{ fill: "rgba(232,228,220,0.55)", fontSize: 11 }}
+              tickFormatter={(v) =>
+                `₹${Number(v) >= 1000 ? `${Math.round(Number(v) / 1000)}k` : v}`
+              }
+              stroke="transparent"
+              tick={{ fill: "rgba(255,255,255,0.45)", fontSize: 11 }}
               axisLine={false}
               tickLine={false}
               width={48}
             />
             <Tooltip
+              cursor={{ fill: "rgba(109, 92, 255, 0.08)" }}
               contentStyle={{
-                background: "#15110e",
-                border: "1px solid rgba(232,184,74,0.25)",
-                borderRadius: 8,
-                color: "#f4efe6",
+                background: "rgba(18, 18, 24, 0.95)",
+                border: "1px solid rgba(139, 124, 255, 0.35)",
+                borderRadius: 14,
+                color: "#fff",
+                boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
               }}
               labelFormatter={(label) => formatShortDate(String(label))}
               formatter={(value) => [formatInr(Number(value ?? 0)), "Spent"]}
             />
-            <Area
-              type="monotone"
+            <Bar
               dataKey="amount"
-              stroke="#e8b84a"
-              strokeWidth={2}
-              fill="url(#spendFill)"
+              radius={[10, 10, 4, 4]}
+              maxBarSize={42}
               animationDuration={900}
-            />
-          </AreaChart>
+            >
+              {data.map((_, index) => (
+                <Cell
+                  key={`bar-${index}`}
+                  fill={BAR_COLORS[index % BAR_COLORS.length]}
+                />
+              ))}
+            </Bar>
+          </BarChart>
         </ResponsiveContainer>
       </div>
     </section>

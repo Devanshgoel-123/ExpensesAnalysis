@@ -1,23 +1,11 @@
 import type { Metadata } from "next";
-import { Fraunces, Sora, JetBrains_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
-const fraunces = Fraunces({
+const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-fraunces",
-  weight: ["500", "600", "700"],
-});
-
-const sora = Sora({
-  subsets: ["latin"],
-  variable: "--font-sora",
+  variable: "--font-inter",
   weight: ["400", "500", "600", "700"],
-});
-
-const jetbrains = JetBrains_Mono({
-  subsets: ["latin"],
-  variable: "--font-jetbrains",
-  weight: ["400", "500"],
 });
 
 export const metadata: Metadata = {
@@ -33,11 +21,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${fraunces.variable} ${sora.variable} ${jetbrains.variable}`}
-      >
-        {children}
-      </body>
+      <body className={inter.variable}>{children}</body>
     </html>
   );
 }

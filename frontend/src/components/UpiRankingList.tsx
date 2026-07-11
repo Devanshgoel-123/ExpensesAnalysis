@@ -11,7 +11,7 @@ export function UpiRankingList({ items }: UpiRankingListProps) {
   const max = items[0]?.total ?? 1;
 
   return (
-    <section className="panel upi-panel">
+    <section className="panel upi-panel interactive-card">
       <header className="panel-head">
         <h2>Spend by UPI ID</h2>
         <p>Same payee, aggregated</p>

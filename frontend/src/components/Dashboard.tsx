@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { parseStatement } from "@/lib/api";
 import type { ParseResult } from "@/lib/types";
+import { GlowBackdrop } from "@/components/GlowBackdrop";
 import { SiteNav } from "@/components/SiteNav";
 import { UploadPanel } from "@/components/UploadPanel";
 import { StatsRow } from "@/components/StatsRow";
@@ -46,21 +47,23 @@ export function Dashboard() {
   if (!data) {
     return (
       <main className="shell landing">
-        <div className="atmosphere" aria-hidden />
+        <GlowBackdrop />
         <SiteNav />
+        <div className="badge-pill">
+          <Sparkles size={13} /> Built for UPI statements
+        </div>
         <header className="brand-block">
           <p className="brand">Ledgerline</p>
-          <h1>See where your money actually went.</h1>
+          <h1>Your spends. Sorted. Understood.</h1>
           <p className="lede">
-            Upload a password-protected bank or UPI statement. We parse daily
-            spend, roll up UPI IDs, and split Food / Travel / Cigarettes.
+            Upload a password-protected bank PDF. We parse daily spend, UPI
+            payees, Food / Travel / Cigarettes, and Deepan — calmly.
           </p>
         </header>
         <UploadPanel onParsed={handleParse} loading={loading} error={error} />
         <footer className="foot-note">
-          <Sparkles size={14} /> See the{" "}
-          <Link href="/architecture">system architecture</Link> for how parsing
-          works.
+          See the <Link href="/architecture">system architecture</Link>
+          <ArrowRight size={14} />
         </footer>
       </main>
     );
@@ -73,7 +76,7 @@ export function Dashboard() {
 
   return (
     <main className="shell dashboard">
-      <div className="atmosphere dim" aria-hidden />
+      <GlowBackdrop />
       <SiteNav />
       <header className="dash-top">
         <div>

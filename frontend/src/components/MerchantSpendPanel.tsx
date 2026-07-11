@@ -10,12 +10,12 @@ interface MerchantSpendPanelProps {
 }
 
 const MERCHANT_COLOR: Record<string, string> = {
-  Swiggy: "#fc8019",
-  Bistro: "#e85d4c",
-  MakeMyTrip: "#5eb0ff",
-  Rapido: "#ffc200",
-  Zepto: "#34d399",
-  District: "#4ecdc4",
+  Swiggy: "#8b7cff",
+  Bistro: "#a78bfa",
+  MakeMyTrip: "#5ecbff",
+  Rapido: "#6d5cff",
+  Zepto: "#c084fc",
+  District: "#7c6af5",
 };
 
 export function MerchantSpendPanel({ items }: MerchantSpendPanelProps) {

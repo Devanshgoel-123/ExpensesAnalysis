@@ -1,4 +1,5 @@
 import { SiteNav } from "@/components/SiteNav";
+import { GlowBackdrop } from "@/components/GlowBackdrop";
 
 const NODES = [
   {
@@ -27,7 +28,7 @@ const NODES = [
 export default function ArchitecturePage() {
   return (
     <main className="shell architecture-page">
-      <div className="atmosphere dim" aria-hidden />
+      <GlowBackdrop />
       <SiteNav />
 
       <header className="arch-hero">
