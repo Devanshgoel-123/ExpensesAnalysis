@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { Instrument_Serif, JetBrains_Mono } from "next/font/google";
+import { AuthProvider } from "@/lib/auth";
 import "./globals.css";
 
 const instrument = Instrument_Serif({
@@ -20,7 +21,7 @@ const jetbrains = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Ledgerline — UPI Expense Dashboard",
   description:
-    "Parse password-protected bank statements and track daily spend by UPI ID.",
+    "Invite-only multi-user UPI expense product with saved imports, rules, and optional Gmail backfill.",
 };
 
 export default function RootLayout({
@@ -33,7 +34,7 @@ export default function RootLayout({
       <body
         className={`${GeistSans.variable} ${GeistSans.className} ${instrument.variable} ${jetbrains.variable}`}
       >
-        {children}
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );

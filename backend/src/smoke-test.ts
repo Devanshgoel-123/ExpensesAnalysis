@@ -67,6 +67,9 @@ const band = analytics.amountBand25to60;
 if (band.count !== 2 || band.total !== 90) {
   throw new Error(`Band 25-60 mismatch: ${JSON.stringify(band)}`);
 }
+if (band.dayCounts["2026-07-03"] !== 1 || band.dayCounts["2026-07-04"] !== 1) {
+  throw new Error(`Band daily counts mismatch: ${JSON.stringify(band.dayCounts)}`);
+}
 
 console.log({
   mmt: { amount: mmt.amount, type: mmt.type },

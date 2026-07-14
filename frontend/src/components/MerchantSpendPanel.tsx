@@ -50,7 +50,11 @@ export function MerchantSpendPanel({ items }: MerchantSpendPanelProps) {
               <SpotlightCard className={`merchant-card ${empty ? "empty" : ""}`}>
                 <div className="merchant-top">
                   <div className="merchant-title">
-                    <BrandMark name={item.merchant} size={20} />
+                    <BrandMark
+                      name={item.merchant}
+                      size={20}
+                      logoUrl={item.logoUrl}
+                    />
                     <div>
                       <span className="cat-chip">{categoryLabel}</span>
                       <h3 className="ui-header">{item.merchant}</h3>

@@ -529,14 +529,14 @@ export function buildAnalytics(transactions: Transaction[]): ParseResult {
   }
   const payeeSpend = [...payeeMap.values()].sort((a, b) => b.total - a.total);
 
-  const bandDays = new Set<string>();
+  const bandDayCounts: Record<string, number> = {};
   let bandCount = 0;
   let bandTotal = 0;
   for (const t of debits) {
     if (t.amount >= 25 && t.amount <= 60) {
       bandCount += 1;
       bandTotal += t.amount;
-      bandDays.add(t.date);
+      bandDayCounts[t.date] = (bandDayCounts[t.date] ?? 0) + 1;
     }
   }
   const amountBand25to60: AmountBand = {
@@ -545,7 +545,8 @@ export function buildAnalytics(transactions: Transaction[]): ParseResult {
     max: 60,
     count: bandCount,
     total: Math.round(bandTotal * 100) / 100,
-    days: [...bandDays].sort(),
+    days: Object.keys(bandDayCounts).sort(),
+    dayCounts: bandDayCounts,
   };
 
   const totalSpent =

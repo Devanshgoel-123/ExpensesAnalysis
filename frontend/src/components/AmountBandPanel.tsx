@@ -64,6 +64,7 @@ export function AmountBandPanel({
         >
           <ActivityHeatmap
             days={band.days}
+            dayCounts={band.dayCounts}
             dateFrom={dateFrom ?? band.days[0]}
             dateTo={dateTo ?? band.days[band.days.length - 1]}
           />

@@ -2,13 +2,14 @@
 
 interface ActivityHeatmapProps {
   days: string[];
+  dayCounts?: Record<string, number>;
   dateFrom?: string | null;
   dateTo?: string | null;
 }
 
 function addDays(iso: string, n: number): string {
-  const d = new Date(`${iso}T00:00:00`);
-  d.setDate(d.getDate() + n);
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
 
@@ -23,7 +24,12 @@ function buildRange(from: string, to: string): string[] {
   return out;
 }
 
-export function ActivityHeatmap({ days, dateFrom, dateTo }: ActivityHeatmapProps) {
+export function ActivityHeatmap({
+  days,
+  dayCounts,
+  dateFrom,
+  dateTo,
+}: ActivityHeatmapProps) {
   const active = new Set(days);
   const sorted = [...days].sort();
   const from = dateFrom ?? sorted[0];
@@ -39,19 +45,35 @@ export function ActivityHeatmap({ days, dateFrom, dateTo }: ActivityHeatmapProps
     <div className="heatmap">
       <div className="heatmap-grid">
         {range.map((day) => {
-          const on = active.has(day);
+          const count = dayCounts?.[day] ?? (active.has(day) ? 1 : 0);
+          const level = Math.min(count, 4);
+          const transactionLabel = `${count} transaction${count === 1 ? "" : "s"}`;
           return (
             <span
               key={day}
-              className={`heat-cell ${on ? "on" : ""}`}
-              title={day}
+              className={`heat-cell level-${level}`}
+              title={`${day} · ${transactionLabel}`}
+              aria-label={`${day}: ${transactionLabel}`}
             />
           );
         })}
       </div>
-      <p className="meta heatmap-legend">
-        {days.length} active day{days.length === 1 ? "" : "s"} · purple = purchase
-      </p>
+      <div className="heatmap-footer">
+        <p className="meta">
+          {days.length} active day{days.length === 1 ? "" : "s"}
+        </p>
+        <div className="heatmap-scale" aria-label="Transaction activity scale">
+          <span className="meta">Less</span>
+          {[0, 1, 2, 3, 4].map((level) => (
+            <span
+              key={level}
+              className={`heat-cell level-${level}`}
+              aria-hidden
+            />
+          ))}
+          <span className="meta">More</span>
+        </div>
+      </div>
     </div>
   );
 }

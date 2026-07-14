@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { parseStatement } from "@/lib/api";
+import { fetchDashboard, parseStatement } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import type { ParseResult } from "@/lib/types";
 import { GlowBackdrop } from "@/components/GlowBackdrop";
 import { SiteNav } from "@/components/SiteNav";
@@ -17,6 +18,8 @@ import { CategoryBreakdown } from "@/components/CategoryBreakdown";
 import { PayeeSpendPanel } from "@/components/PayeeSpendPanel";
 import { AmountBandPanel } from "@/components/AmountBandPanel";
 import { TransactionTable } from "@/components/TransactionTable";
+import { SettingsPanel } from "@/components/SettingsPanel";
+import { AuthGate } from "@/components/AuthGate";
 
 const EMPTY_BAND = {
   label: "₹25 – ₹60",
@@ -25,18 +28,42 @@ const EMPTY_BAND = {
   count: 0,
   total: 0,
   days: [] as string[],
+  dayCounts: {} as Record<string, number>,
 };
 
-export function Dashboard() {
+function DashboardInner() {
+  const { token, logout } = useAuth();
   const [data, setData] = useState<ParseResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const bump = useCallback(() => setRefreshKey((k) => k + 1), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.resolve().then(async () => {
+      if (!token || cancelled) return;
+      try {
+        const result = await fetchDashboard(token);
+        if (cancelled) return;
+        if (result.transactions.length > 0) setData(result);
+        else setData(null);
+      } catch {
+        // Keep current view if dashboard reload fails.
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, refreshKey]);
 
   async function handleParse(file: File, password: string) {
+    if (!token) return;
     setLoading(true);
     setError(null);
     try {
-      const result = await parseStatement(file, password);
+      const result = await parseStatement(file, password, token);
       setData(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -52,17 +79,20 @@ export function Dashboard() {
         <div className="landing-content">
           <SiteNav />
           <div className="badge-pill">
-            <Sparkles size={13} /> Built for UPI statements
+            <Sparkles size={13} /> Invite-only multi-user beta
           </div>
           <header className="brand-block">
             <p className="brand">Ledgerline</p>
             <h1 className="ui-header">Your spends. Sorted. Understood.</h1>
             <p className="lede">
-              Upload a password-protected bank PDF. We parse daily spend, UPI
-              payees, Food / Travel / Cigarettes, and people you track — calmly.
+              Upload a password-protected bank PDF, track people with your own
+              rules, and optionally connect Gmail for statement backfill.
             </p>
           </header>
           <UploadPanel onParsed={handleParse} loading={loading} error={error} />
+          <div style={{ marginTop: "1.5rem" }}>
+            <SettingsPanel onChanged={bump} />
+          </div>
           <footer className="foot-note">
             See the <Link href="/architecture">system architecture</Link>
             <ArrowRight size={14} />
@@ -93,16 +123,21 @@ export function Dashboard() {
             <h1 className="ui-header">Expense dashboard</h1>
             <p className="meta">{range}</p>
           </div>
-          <button
-            type="button"
-            className="ghost"
-            onClick={() => {
-              setData(null);
-              setError(null);
-            }}
-          >
-            <ArrowLeft size={16} /> New statement
-          </button>
+          <div className="sort-bar">
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => {
+                setData(null);
+                setError(null);
+              }}
+            >
+              <ArrowLeft size={16} /> Import another
+            </button>
+            <button type="button" className="ghost" onClick={logout}>
+              Log out
+            </button>
+          </div>
         </motion.header>
 
         <StatsRow summary={data.summary} />
@@ -153,11 +188,27 @@ export function Dashboard() {
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.22, duration: 0.35 }}
+        >
+          <SettingsPanel onChanged={bump} />
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.24, duration: 0.35 }}
         >
           <TransactionTable items={data.transactions} />
         </motion.div>
       </div>
     </main>
+  );
+}
+
+export function Dashboard() {
+  return (
+    <AuthGate>
+      <DashboardInner />
+    </AuthGate>
   );
 }

@@ -1,24 +1,15 @@
 "use client";
 
-const BRAND_DOMAIN: Record<string, string> = {
-  Swiggy: "swiggy.com",
-  Bistro: "swiggy.com",
-  MakeMyTrip: "makemytrip.com",
-  Rapido: "rapido.bike",
-  Zepto: "zeptonow.com",
-  District: "district.in",
-};
-
 interface BrandMarkProps {
   name: string;
   size?: number;
+  logoUrl?: string | null;
 }
 
-export function BrandMark({ name, size = 18 }: BrandMarkProps) {
-  const domain = BRAND_DOMAIN[name];
-  const initial = name.charAt(0).toUpperCase();
+export function BrandMark({ name, size = 18, logoUrl }: BrandMarkProps) {
+  const initial = name.charAt(0).toUpperCase() || "?";
 
-  if (!domain) {
+  if (!logoUrl) {
     return (
       <span className="brand-mark fallback" style={{ width: size, height: size }}>
         {initial}
@@ -26,7 +17,9 @@ export function BrandMark({ name, size = 18 }: BrandMarkProps) {
     );
   }
 
-  const src = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+  const src = logoUrl.startsWith("http") || logoUrl.startsWith("/")
+    ? logoUrl
+    : `/${logoUrl}`;
 
   return (
     <span className="brand-mark" style={{ width: size, height: size }}>
@@ -38,6 +31,13 @@ export function BrandMark({ name, size = 18 }: BrandMarkProps) {
         height={size}
         loading="lazy"
         referrerPolicy="no-referrer"
+        onError={(event) => {
+          const parent = event.currentTarget.parentElement;
+          if (parent) {
+            parent.classList.add("fallback");
+            parent.textContent = initial;
+          }
+        }}
       />
     </span>
   );

@@ -1,6 +1,7 @@
 export type TransactionType = "debit" | "credit";
 
 export interface Transaction {
+  id?: string;
   date: string;
   time: string | null;
   description: string;
@@ -10,6 +11,9 @@ export interface Transaction {
   merchant: string | null;
   payee: string | null;
   raw: string;
+  providerId?: string | null;
+  category?: string | null;
+  logoUrl?: string | null;
 }
 
 export interface MerchantSpend {
@@ -17,6 +21,8 @@ export interface MerchantSpend {
   total: number;
   count: number;
   lastDate: string;
+  logoUrl?: string | null;
+  providerId?: string | null;
 }
 
 export interface PayeeSpend {
@@ -34,6 +40,7 @@ export interface AmountBand {
   count: number;
   total: number;
   days: string[];
+  dayCounts?: Record<string, number>;
 }
 
 export interface DailySpend {

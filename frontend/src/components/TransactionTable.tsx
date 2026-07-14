@@ -20,6 +20,10 @@ function providerOf(txn: Transaction): string {
 }
 
 function lifestyleOf(txn: Transaction): { label: string; className: string } | null {
+  if (txn.category && CATEGORY_META[txn.category as keyof typeof CATEGORY_META]) {
+    const key = txn.category as keyof typeof CATEGORY_META;
+    return { label: CATEGORY_META[key].label, className: key };
+  }
   const merchantCat = txn.merchant ? MERCHANT_CATEGORY[txn.merchant] : undefined;
   if (merchantCat) {
     return {
@@ -122,7 +126,10 @@ export function TransactionTable({ items }: TransactionTableProps) {
                   <td>
                     <span className={`provider-cell ${isOther ? "other" : ""}`}>
                       {txn.merchant || txn.payee ? (
-                        <BrandMark name={txn.merchant ?? txn.payee ?? provider} />
+                        <BrandMark
+                          name={txn.merchant ?? txn.payee ?? provider}
+                          logoUrl={txn.logoUrl}
+                        />
                       ) : null}
                       <span className={isOther ? "badge-other" : "provider-name"}>
                         {provider}
