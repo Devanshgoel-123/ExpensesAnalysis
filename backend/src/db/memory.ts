@@ -4,6 +4,7 @@ import type {
   CategoryRow,
   GmailConnectionRow,
   ImportRow,
+  ListTransactionsOptions,
   NewTransactionInput,
   ProviderRow,
   Store,
@@ -32,6 +33,14 @@ export class MemoryStore implements Store {
     [];
 
   async migrate(): Promise<void> {
+    // no-op — schema is implicit in the in-memory collections
+  }
+
+  async healthCheck(): Promise<boolean> {
+    return true;
+  }
+
+  async close(): Promise<void> {
     // no-op
   }
 
@@ -258,10 +267,16 @@ export class MemoryStore implements Store {
     return { inserted, skipped };
   }
 
-  async listTransactions(userId: string): Promise<TransactionRow[]> {
-    return this.transactions
+  async listTransactions(
+    userId: string,
+    options?: ListTransactionsOptions,
+  ): Promise<TransactionRow[]> {
+    const rows = this.transactions
       .filter((t) => t.userId === userId)
       .sort((a, b) => b.date.localeCompare(a.date));
+    const offset = options?.offset ?? 0;
+    if (options?.limit === undefined) return rows.slice(offset);
+    return rows.slice(offset, offset + options.limit);
   }
 
   async getTransaction(

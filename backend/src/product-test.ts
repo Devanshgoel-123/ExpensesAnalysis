@@ -5,7 +5,7 @@
 
 async function main() {
   process.env.DATABASE_URL = "memory";
-  process.env.JWT_SECRET = "test-jwt-secret";
+  process.env.JWT_SECRET = "test-jwt-secret-16chars";
   process.env.ENCRYPTION_KEY =
     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
   process.env.INVITE_CODES = "test-invite";

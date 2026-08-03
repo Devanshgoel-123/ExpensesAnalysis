@@ -3,6 +3,7 @@ import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { config } from "../config.js";
 import { getStore } from "../db/index.js";
+import { AppError } from "../errors/AppError.js";
 
 export interface AuthUser {
   id: string;
@@ -23,10 +24,10 @@ export function signToken(user: AuthUser): string {
   });
 }
 
-export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+export function requireAuth(req: Request, _res: Response, next: NextFunction): void {
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) {
-    res.status(401).json({ detail: "Authentication required" });
+    next(AppError.unauthorized());
     return;
   }
   try {
@@ -37,7 +38,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     req.user = { id: payload.sub, email: payload.email };
     next();
   } catch {
-    res.status(401).json({ detail: "Invalid or expired token" });
+    next(AppError.unauthorized("Invalid or expired token"));
   }
 }
 
@@ -50,18 +51,14 @@ export async function registerUser(input: {
   const store = await getStore();
   const ok = await store.consumeInvite(input.inviteCode.trim());
   if (!ok) {
-    throw Object.assign(new Error("Invalid or exhausted invite code"), {
-      status: 403,
-    });
+    throw AppError.forbidden("Invalid or exhausted invite code");
   }
   const existing = await store.findUserByEmail(input.email);
   if (existing) {
-    throw Object.assign(new Error("Email already registered"), { status: 409 });
+    throw AppError.conflict("Email already registered");
   }
   if (input.password.length < 8) {
-    throw Object.assign(new Error("Password must be at least 8 characters"), {
-      status: 400,
-    });
+    throw AppError.badRequest("Password must be at least 8 characters");
   }
   const passwordHash = await bcrypt.hash(input.password, 12);
   const user = await store.createUser({
@@ -81,11 +78,11 @@ export async function loginUser(input: {
   const store = await getStore();
   const user = await store.findUserByEmail(input.email);
   if (!user) {
-    throw Object.assign(new Error("Invalid email or password"), { status: 401 });
+    throw AppError.unauthorized("Invalid email or password");
   }
   const match = await bcrypt.compare(input.password, user.passwordHash);
   if (!match) {
-    throw Object.assign(new Error("Invalid email or password"), { status: 401 });
+    throw AppError.unauthorized("Invalid email or password");
   }
   await store.audit(user.id, "auth.login", {});
   const authUser = { id: user.id, email: user.email };

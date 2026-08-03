@@ -146,8 +146,17 @@ export interface NewTransactionInput {
   raw: string | null;
 }
 
+export interface ListTransactionsOptions {
+  limit?: number;
+  offset?: number;
+}
+
 export interface Store {
   migrate(): Promise<void>;
+  /** Lightweight connectivity / readiness probe. */
+  healthCheck(): Promise<boolean>;
+  /** Release resources (connection pool). */
+  close(): Promise<void>;
   createUser(input: {
     email: string;
     passwordHash: string;
@@ -216,7 +225,10 @@ export interface Store {
     userId: string,
     rows: NewTransactionInput[],
   ): Promise<{ inserted: number; skipped: number }>;
-  listTransactions(userId: string): Promise<TransactionRow[]>;
+  listTransactions(
+    userId: string,
+    options?: ListTransactionsOptions,
+  ): Promise<TransactionRow[]>;
   getTransaction(
     userId: string,
     id: string,

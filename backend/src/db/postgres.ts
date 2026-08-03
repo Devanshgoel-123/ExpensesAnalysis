@@ -1,12 +1,13 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import pg from "pg";
+import { config } from "../config.js";
+import { logger } from "../logger/index.js";
+import { migrateUp } from "./migrator.js";
 import type {
   AccountRow,
   CategoryRow,
   GmailConnectionRow,
   ImportRow,
+  ListTransactionsOptions,
   NewTransactionInput,
   ProviderRow,
   Store,
@@ -15,8 +16,6 @@ import type {
   UserRow,
   UserRuleRow,
 } from "./types.js";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function mapUser(row: Record<string, unknown>): UserRow {
   return {
@@ -147,26 +146,36 @@ export class PostgresStore implements Store {
   private pool: pg.Pool;
 
   constructor(databaseUrl: string) {
-    this.pool = new pg.Pool({ connectionString: databaseUrl });
+    this.pool = new pg.Pool({
+      connectionString: databaseUrl,
+      max: config.dbPool.max,
+      idleTimeoutMillis: config.dbPool.idleTimeoutMillis,
+      connectionTimeoutMillis: config.dbPool.connectionTimeoutMillis,
+    });
+    this.pool.on("error", (err) => {
+      logger.error({ err }, "Unexpected Postgres pool error");
+    });
   }
 
   async migrate(): Promise<void> {
-    const candidates = [
-      path.join(__dirname, "schema.sql"),
-      path.join(process.cwd(), "src/db/schema.sql"),
-      path.join(process.cwd(), "dist/db/schema.sql"),
-    ];
-    let sql: string | null = null;
-    for (const candidate of candidates) {
-      try {
-        sql = await readFile(candidate, "utf8");
-        break;
-      } catch {
-        // try next
-      }
+    const applied = await migrateUp(this.pool);
+    if (applied.length === 0) {
+      logger.info("Database schema is up to date");
     }
-    if (!sql) throw new Error("Could not find schema.sql");
-    await this.pool.query(sql);
+  }
+
+  async healthCheck(): Promise<boolean> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("SELECT 1");
+      return true;
+    } finally {
+      client.release();
+    }
+  }
+
+  async close(): Promise<void> {
+    await this.pool.end();
   }
 
   async createUser(input: {
@@ -602,10 +611,22 @@ export class PostgresStore implements Store {
     return { inserted, skipped };
   }
 
-  async listTransactions(userId: string): Promise<TransactionRow[]> {
+  async listTransactions(
+    userId: string,
+    options?: ListTransactionsOptions,
+  ): Promise<TransactionRow[]> {
+    const limit = options?.limit;
+    const offset = options?.offset ?? 0;
+    if (limit === undefined) {
+      const result = await this.pool.query(
+        `SELECT * FROM transactions WHERE user_id = $1 ORDER BY date DESC, created_at DESC OFFSET $2`,
+        [userId, offset],
+      );
+      return result.rows.map(mapTx);
+    }
     const result = await this.pool.query(
-      `SELECT * FROM transactions WHERE user_id = $1 ORDER BY date DESC, created_at DESC`,
-      [userId],
+      `SELECT * FROM transactions WHERE user_id = $1 ORDER BY date DESC, created_at DESC LIMIT $2 OFFSET $3`,
+      [userId, limit, offset],
     );
     return result.rows.map(mapTx);
   }
@@ -781,24 +802,37 @@ export class PostgresStore implements Store {
   }
 
   async deleteUserData(userId: string): Promise<void> {
-    await this.pool.query(`DELETE FROM transaction_overrides WHERE user_id = $1`, [
-      userId,
-    ]);
-    await this.pool.query(`DELETE FROM transactions WHERE user_id = $1`, [userId]);
-    await this.pool.query(`DELETE FROM imports WHERE user_id = $1`, [userId]);
-    await this.pool.query(`DELETE FROM user_rules WHERE user_id = $1`, [userId]);
-    await this.pool.query(`DELETE FROM accounts WHERE user_id = $1`, [userId]);
-    await this.pool.query(
-      `DELETE FROM providers WHERE user_id = $1 AND is_global = FALSE`,
-      [userId],
-    );
-    await this.pool.query(
-      `DELETE FROM categories WHERE user_id = $1 AND is_global = FALSE`,
-      [userId],
-    );
-    await this.pool.query(`DELETE FROM gmail_connections WHERE user_id = $1`, [
-      userId,
-    ]);
-    await this.softDeleteUser(userId);
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(`DELETE FROM transaction_overrides WHERE user_id = $1`, [
+        userId,
+      ]);
+      await client.query(`DELETE FROM transactions WHERE user_id = $1`, [userId]);
+      await client.query(`DELETE FROM imports WHERE user_id = $1`, [userId]);
+      await client.query(`DELETE FROM user_rules WHERE user_id = $1`, [userId]);
+      await client.query(`DELETE FROM accounts WHERE user_id = $1`, [userId]);
+      await client.query(
+        `DELETE FROM providers WHERE user_id = $1 AND is_global = FALSE`,
+        [userId],
+      );
+      await client.query(
+        `DELETE FROM categories WHERE user_id = $1 AND is_global = FALSE`,
+        [userId],
+      );
+      await client.query(`DELETE FROM gmail_connections WHERE user_id = $1`, [
+        userId,
+      ]);
+      await client.query(
+        `UPDATE users SET deleted_at = NOW() WHERE id = $1`,
+        [userId],
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 }
