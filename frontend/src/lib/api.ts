@@ -10,7 +10,9 @@ export interface AuthUser {
 
 async function parseError(res: Response): Promise<string> {
   const data = await res.json().catch(() => ({}));
-  return typeof data.detail === "string" ? data.detail : "Request failed";
+  if (typeof data?.error?.message === "string") return data.error.message;
+  if (typeof data?.detail === "string") return data.detail;
+  return "Request failed";
 }
 
 function authHeaders(token: string): HeadersInit {

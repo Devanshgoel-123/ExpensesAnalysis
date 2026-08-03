@@ -15,5 +15,31 @@ services:
       timeout: 5s
       retries: 10
 
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgres://ledgerline:ledgerline@postgres:5432/ledgerline
+      CORS_ORIGINS: http://localhost:3000
+      FRONTEND_URL: http://localhost:3000
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY}
+      INVITE_CODES: ${INVITE_CODES:-beta-ledgerline}
+      LOG_LEVEL: info
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4000/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
 volumes:
   ledgerline_pg:
