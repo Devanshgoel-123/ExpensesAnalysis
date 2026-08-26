@@ -9,23 +9,24 @@ import {
   TrendingUp,
   Wallet,
 } from "lucide-react";
+import Link from "next/link";
 import { googleLoginUrl } from "@/lib/api";
 
 const FEATURES = [
   {
     icon: Wallet,
-    title: "UPI, sorted by lifestyle",
-    detail: "Swiggy, Rapido, Zepto — tagged automatically from your statement.",
+    title: "Lifestyle categories",
+    detail: "Food, travel, outing, investments — understood from your UPI trail.",
   },
   {
     icon: TrendingUp,
-    title: "Daily spend limits",
-    detail: "Set a cap and see exactly which days you crossed it.",
+    title: "Daily budget health",
+    detail: "See how fast you're spending against a daily limit — calmly.",
   },
   {
     icon: Mail,
-    title: "Bank mail pooling",
-    detail: "Gmail pulls HDFC PDFs — only senders you allow, nothing else.",
+    title: "Private bank-mail import",
+    detail: "Gmail is read-only. Only allowlisted bank senders are searched.",
   },
 ];
 
@@ -57,10 +58,10 @@ function PreviewCard() {
     <div className="login-preview" aria-hidden>
       <div className="login-preview-head">
         <span className="login-preview-label">August snapshot</span>
-        <span className="login-preview-pill">Live</span>
+        <span className="login-preview-pill">Insight</span>
       </div>
-      <p className="login-preview-amount">₹24,180</p>
-      <p className="meta login-preview-sub">spent across 47 debits</p>
+      <p className="login-preview-amount">₹42,840</p>
+      <p className="meta login-preview-sub">spent this month · ₹1,380/day avg</p>
       <div className="login-preview-chips">
         <span>Swiggy ₹4.2k</span>
         <span>Rapido ₹890</span>
@@ -74,7 +75,7 @@ function PreviewCard() {
         <span style={{ height: "60%" }} />
         <span style={{ height: "38%" }} />
       </div>
-      <p className="login-preview-alert">2 days over ₹2,000 daily limit</p>
+      <p className="login-preview-alert">3 days over your daily limit</p>
     </div>
   );
 }
@@ -86,29 +87,25 @@ interface LoginPageProps {
 export function LoginPage({ authError }: LoginPageProps) {
   return (
     <main className="login-screen">
-      <div className="login-screen-bg" aria-hidden>
-        <div className="login-orb login-orb-a" />
-        <div className="login-orb login-orb-b" />
-        <div className="login-grid-lines" />
-      </div>
+      <div className="login-screen-bg" aria-hidden />
 
       <div className="login-frame">
         <motion.section
           className="login-hero"
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45 }}
+          transition={{ duration: 0.4 }}
         >
           <div className="login-hero-copy">
             <p className="login-eyebrow">
-              <Sparkles size={14} /> Personal finance, not another spreadsheet
+              <Sparkles size={14} /> Your money, finally understandable
             </p>
             <h1 className="login-headline">
-              Know where every <em>rupee</em> went.
+              See where every <em>rupee</em> actually went.
             </h1>
             <p className="login-tagline">
-              Upload a bank PDF or pool statement mail. Ledgerline classifies UPI
-              spends, tracks habits, and flags days you blow past your budget.
+              Ledgerline turns UPI statements into lifestyle insight — not another
+              accounting spreadsheet.
             </p>
 
             <ul className="login-features">
@@ -117,9 +114,9 @@ export function LoginPage({ authError }: LoginPageProps) {
                 return (
                   <motion.li
                     key={feature.title}
-                    initial={{ opacity: 0, x: -12 }}
+                    initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.08 * index, duration: 0.35 }}
+                    transition={{ delay: 0.06 * index, duration: 0.3 }}
                   >
                     <span className="login-feature-icon">
                       <Icon size={18} />
@@ -139,15 +136,15 @@ export function LoginPage({ authError }: LoginPageProps) {
 
         <motion.section
           className="login-card"
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, duration: 0.45 }}
+          transition={{ delay: 0.08, duration: 0.4 }}
         >
           <p className="brand compact login-card-brand">Ledgerline</p>
-          <h2 className="login-card-title">Start in one tap</h2>
+          <h2 className="login-card-title">Welcome</h2>
           <p className="meta login-card-lede">
-            Sign in with Google. We&apos;ll ask for profile access and Gmail
-            read-only so statement pooling works out of the box.
+            Connect Google, import your first statement, set a daily limit, and
+            see your month clearly.
           </p>
 
           {authError ? <p className="form-error">{authError}</p> : null}
@@ -161,21 +158,21 @@ export function LoginPage({ authError }: LoginPageProps) {
           <ul className="login-trust">
             <li>
               <ShieldCheck size={16} />
-              Bank senders only — never your full inbox
+              Gmail read-only — bank senders you allow only
             </li>
             <li>
               <ShieldCheck size={16} />
-              Revoke access anytime in Google Account
+              Never scans your entire inbox
             </li>
             <li>
               <ShieldCheck size={16} />
-              7-day session, no password to remember
+              7-day session · revoke anytime
             </li>
           </ul>
 
           <p className="login-fine-print">
             By continuing you agree Google will show email &amp; Gmail read-only
-            scopes on the consent screen.
+            scopes. Read the <Link href="/privacy">privacy policy</Link>.
           </p>
         </motion.section>
       </div>

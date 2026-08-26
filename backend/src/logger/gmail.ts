@@ -26,7 +26,7 @@ export const gmailLog = {
         alertImported: input.alerts.imported,
         alertSkipped: input.alerts.skipped,
       },
-      `pooling ✓ ${input.month} — PDF +${input.statements.imported} · alerts +${input.alerts.imported}`,
+      `pooling ✓ ${input.month} — alerts +${input.alerts.imported} · PDF +${input.statements.imported}`,
     );
   },
 

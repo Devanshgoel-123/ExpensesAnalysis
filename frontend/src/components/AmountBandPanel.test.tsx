@@ -6,7 +6,7 @@ import { sampleBand } from "@/test/fixtures";
 describe("AmountBandPanel", () => {
   it("shows cigarette band stats", () => {
     render(<AmountBandPanel band={sampleBand} />);
-    expect(screen.getByText(/Tiny spends/)).toBeInTheDocument();
+    expect(screen.getByText(/Potential cigarette-pattern spending/)).toBeInTheDocument();
     expect(screen.getByText("Count")).toBeInTheDocument();
     expect(screen.getByText("Days")).toBeInTheDocument();
   });

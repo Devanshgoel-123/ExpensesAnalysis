@@ -19,8 +19,8 @@ export function UpiRankingList({ items, month }: UpiRankingListProps) {
       <header className="panel-head">
         <h2 className="ui-header">Top UPI handles</h2>
         <p className="meta">
-          Most common transfer targets
-          {month ? ` · ${month}` : ""} — by spend
+          Ranked by spend
+          {month ? ` · ${month}` : ""}
         </p>
       </header>
 
@@ -31,14 +31,12 @@ export function UpiRankingList({ items, month }: UpiRankingListProps) {
           {items.slice(0, 12).map((item, index) => (
             <motion.li
               key={item.upiId}
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.03 }}
+              transition={{ delay: index * 0.025 }}
             >
               <div className="upi-row">
-                <span className="upi-rank">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
+                <span className="upi-rank">{index + 1}</span>
                 <div className="upi-meta">
                   <strong className="mono">{item.upiId}</strong>
                   <span className="meta">
@@ -50,7 +48,7 @@ export function UpiRankingList({ items, month }: UpiRankingListProps) {
                   <LiveCounter
                     value={item.total}
                     format={(n) => formatInr(n)}
-                    durationMs={1100 + index * 40}
+                    durationMs={1000 + index * 30}
                   />
                 </span>
               </div>

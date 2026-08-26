@@ -26,8 +26,8 @@ export function NotFoundView() {
             <motion.span
               key={`${digit}-${i}`}
               className="not-found-digit"
-              initial={{ opacity: 0, y: 40, filter: "blur(12px)" }}
-              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.08 * i, duration: 0.6, ease: easeOut }}
             >
               {digit}

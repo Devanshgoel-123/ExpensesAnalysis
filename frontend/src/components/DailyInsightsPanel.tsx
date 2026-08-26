@@ -8,9 +8,13 @@ import { SpotlightCard } from "@/components/SpotlightCard";
 
 interface DailyInsightsPanelProps {
   insights: DailyInsights;
+  avgDailySpend?: number;
 }
 
-export function DailyInsightsPanel({ insights }: DailyInsightsPanelProps) {
+export function DailyInsightsPanel({
+  insights,
+  avgDailySpend,
+}: DailyInsightsPanelProps) {
   if (!insights.enabled || insights.limit == null) {
     return (
       <SpotlightCard className="panel">
@@ -20,33 +24,80 @@ export function DailyInsightsPanel({ insights }: DailyInsightsPanelProps) {
             Set a daily spend cap in settings to see over-budget days.
           </p>
         </header>
+        <p className="meta-lg" style={{ marginTop: "0.5rem" }}>
+          A daily limit turns raw transactions into a calm financial health
+          signal — without judgment.
+        </p>
       </SpotlightCard>
     );
   }
 
   const overCount = insights.daysOverLimit.length;
+  const avg = avgDailySpend ?? null;
+  const delta =
+    avg != null && insights.limit != null ? avg - insights.limit : null;
 
   return (
     <SpotlightCard className="panel">
       <header className="panel-head">
         <h2 className="ui-header">Daily limit insights</h2>
         <p className="meta">
-          Cap {formatInr(insights.limit)} · {overCount} day{overCount === 1 ? "" : "s"}{" "}
-          over
+          Cap {formatInr(insights.limit)} · {overCount} day
+          {overCount === 1 ? "" : "s"} over
         </p>
       </header>
 
-      <div className="band-stats">
-        <div>
-          <p className="meta">Over budget</p>
+      <div className="health-hero">
+        <div className="health-metric">
+          <p className="stat-kicker">Daily limit</p>
           <strong className="display-num sm">
-            <LiveCounter value={overCount} />
+            <LiveCounter value={insights.limit} format={(n) => formatInr(n)} />
+          </strong>
+          <p className="meta">your target</p>
+        </div>
+        <div className="health-metric">
+          <p className="stat-kicker">Average spend</p>
+          <strong className="display-num sm">
+            {avg == null ? (
+              "—"
+            ) : (
+              <LiveCounter value={avg} format={(n) => formatInr(n)} />
+            )}
+          </strong>
+          <p className="meta">per spending day</p>
+        </div>
+        <div
+          className={`health-metric${
+            delta == null ? "" : delta > 0 ? " delta-up" : " delta-down"
+          }`}
+        >
+          <p className="stat-kicker">vs target</p>
+          <strong className="display-num sm">
+            {delta == null
+              ? "—"
+              : `${delta > 0 ? "+" : "−"}${formatInr(Math.abs(delta))}/day`}
+          </strong>
+          <p className="meta">
+            {delta == null
+              ? "Need spend data"
+              : delta > 0
+                ? "above target"
+                : "at or under target"}
+          </p>
+        </div>
+      </div>
+
+      <div className="band-stats health">
+        <div>
+          <p className="meta">Days within limit</p>
+          <strong className="display-num sm">
+            <LiveCounter value={insights.daysUnderLimit} />
           </strong>
         </div>
         <div>
-          <p className="meta">Under budget</p>
+          <p className="meta">Days over limit</p>
           <strong className="display-num sm">
-            <LiveCounter value={insights.daysUnderLimit} />
+            <LiveCounter value={overCount} />
           </strong>
         </div>
         <div>
@@ -62,12 +113,19 @@ export function DailyInsightsPanel({ insights }: DailyInsightsPanelProps) {
             )}
           </strong>
         </div>
+        <div>
+          <p className="meta">Worst day</p>
+          <strong className="display-num sm">
+            {insights.worstDay ? formatInr(insights.worstDay.amount) : "—"}
+          </strong>
+        </div>
       </div>
 
       {insights.worstDay ? (
         <p className="meta" style={{ marginTop: "0.75rem" }}>
           Worst day: {formatShortDate(insights.worstDay.date)} (
-          {formatInr(insights.worstDay.amount)}, +{formatInr(insights.worstDay.overBy)})
+          {formatInr(insights.worstDay.amount)}, +
+          {formatInr(insights.worstDay.overBy)})
         </p>
       ) : (
         <p className="meta" style={{ marginTop: "0.75rem" }}>

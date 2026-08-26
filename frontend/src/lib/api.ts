@@ -142,6 +142,8 @@ export async function enablePooling(
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<{
     month: string;
+    statements: { scanned: number; imported: number; skipped: number };
+    alerts: { scanned: number; imported: number; skipped: number };
     backfill: { imported: number; skipped: number; scanned: number };
     notice: string;
   }>;

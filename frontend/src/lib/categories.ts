@@ -24,36 +24,36 @@ export const CATEGORY_META: Record<
   food: {
     label: "Food",
     blurb: "Swiggy · Bistro · Zepto · Ayodhya",
-    accent: "#8b7cff",
+    accent: "var(--cat-food)",
   },
   shopping: {
     label: "Shopping",
     blurb: "Retail & marketplace spends",
-    accent: "#f59e0b",
+    accent: "var(--cat-shopping)",
   },
   travel: {
     label: "Travel",
     blurb: "MakeMyTrip · flights · hotels",
-    accent: "#5ecbff",
+    accent: "var(--cat-travel)",
   },
   outing: {
     label: "Outing",
     blurb: "Rapido · District · local rides",
-    accent: "#34d399",
+    accent: "var(--cat-outing)",
   },
   investments: {
     label: "Investments",
     blurb: "Brokers · SIPs · mutual funds",
-    accent: "#38bdf8",
+    accent: "var(--cat-investments)",
   },
   cigarettes: {
     label: "Cigarettes",
-    blurb: "Tiny spends ₹25–₹60",
-    accent: "#c084fc",
+    blurb: "Potential cigarette-pattern spending ₹25–₹60",
+    accent: "var(--cat-cigarettes)",
   },
   other: {
     label: "Other",
     blurb: "Uncategorized apps & people",
-    accent: "#6d5cff",
+    accent: "var(--cat-other)",
   },
 };

@@ -16,10 +16,10 @@ export function PayeeSpendPanel({ items }: PayeeSpendPanelProps) {
   return (
     <SpotlightCard className="panel payee-panel">
       <header className="panel-head">
-        <h2 className="ui-header">Tracked people</h2>
+        <h2 className="ui-header">People</h2>
         <p className="meta">
           {people.length === 0
-            ? "Add tracking rules in Account & automation"
+            ? "Add tracking rules in Settings to follow who you pay"
             : `${people.length} people from your rules`}
         </p>
       </header>
@@ -31,15 +31,22 @@ export function PayeeSpendPanel({ items }: PayeeSpendPanelProps) {
           {people.map((item, index) => (
             <motion.div
               key={item.name}
-              initial={{ opacity: 0, y: 14 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05 * index }}
+              transition={{ delay: 0.04 * index }}
             >
               <SpotlightCard
                 className={`payee-card ${item.count === 0 ? "empty" : ""}`}
               >
                 <div className="payee-top">
-                  <h3 className="ui-header">{item.name}</h3>
+                  <div>
+                    <h3 className="ui-header">{item.name}</h3>
+                    <p className="meta">
+                      {item.count === 0
+                        ? "No payments found"
+                        : `${item.count} payment${item.count === 1 ? "" : "s"}`}
+                    </p>
+                  </div>
                   <strong className="display-num sm">
                     {item.count === 0 ? (
                       "—"
@@ -51,14 +58,14 @@ export function PayeeSpendPanel({ items }: PayeeSpendPanelProps) {
                     )}
                   </strong>
                 </div>
-                <p className="meta">
-                  {item.count === 0
-                    ? "No payments found"
-                    : `${item.count} payment${item.count === 1 ? "" : "s"} · last ${item.lastDate}`}
-                </p>
+                {item.lastDate ? (
+                  <p className="meta" style={{ marginTop: "0.45rem" }}>
+                    Last paid {formatShortDate(item.lastDate)}
+                  </p>
+                ) : null}
                 {item.days.length > 0 ? (
                   <div className="day-chips">
-                    {item.days.map((day) => (
+                    {item.days.slice(0, 8).map((day) => (
                       <span key={day}>{formatShortDate(day)}</span>
                     ))}
                   </div>

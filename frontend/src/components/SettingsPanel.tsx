@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import {
   createRule,
@@ -14,8 +15,6 @@ import {
   listRules,
   updatePreferences,
 } from "@/lib/api";
-import Link from "next/link";
-import { SpotlightCard } from "@/components/SpotlightCard";
 
 export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
   const { token, logout, destroyAccount, user } = useAuth();
@@ -35,6 +34,7 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
   const [dailyLimit, setDailyLimit] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showDanger, setShowDanger] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -66,246 +66,324 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
   if (!token) return null;
 
   return (
-    <SpotlightCard className="panel">
-      <header className="panel-head">
-        <h2 className="ui-header">Account & automation</h2>
-        <p className="meta">
-          Signed in as {user?.email}. Track people with rules — no hardcoded names.
+    <div className="settings-sections">
+      <header>
+        <h2 className="month-label">Settings</h2>
+        <p className="meta" style={{ marginTop: "0.35rem" }}>
+          Signed in as {user?.email}
         </p>
       </header>
 
-      <div className="band-stats" style={{ marginBottom: "1rem" }}>
-        <div>
-          <p className="meta">Gmail</p>
-          <strong>
-            {gmail?.connected ? gmail.email : gmail?.configured ? "Not connected" : "Not configured"}
-          </strong>
+      {(message || error) && (
+        <div className="panel" style={{ marginBottom: 0 }}>
+          {message ? <p className="meta">{message}</p> : null}
+          {error ? <p className="form-error">{error}</p> : null}
         </div>
-        <div>
-          <p className="meta">Rules</p>
-          <strong>{rules.length}</strong>
-        </div>
-        <div>
-          <p className="meta">Suggestions</p>
-          <strong>{suggestions.length}</strong>
-        </div>
-      </div>
+      )}
 
-      <div className="sort-bar" style={{ marginBottom: "1rem" }}>
-        {gmail?.configured && !gmail.connected && (
-          <button
-            type="button"
-            className="ghost"
-            onClick={async () => {
-              try {
-                const { url } = await gmailConnectUrl(token);
-                window.location.href = url;
-              } catch (err) {
-                setError(err instanceof Error ? err.message : "Connect failed");
-              }
-            }}
-          >
-            Connect Gmail
-          </button>
-        )}
-        {gmail?.connected && (
-          <>
+      <section className="settings-section">
+        <h3 className="ui-header">Daily limit</h3>
+        <p className="meta">
+          Cap debit spend per day. Overview and Daily Limit use this as a calm
+          health signal.
+        </p>
+        <div className="upload-panel" style={{ maxWidth: "100%" }}>
+          <label className="field">
+            <span>Max debit per day (₹)</span>
+            <input
+              type="number"
+              min={1}
+              step={100}
+              value={dailyLimit}
+              onChange={(e) => setDailyLimit(e.target.value)}
+              placeholder="e.g. 1500"
+            />
+          </label>
+          <div className="sort-bar">
             <button
               type="button"
-              className="ghost"
+              className="cta"
               onClick={async () => {
                 try {
-                  const result = await gmailBackfill(token, statementPassword);
+                  setError(null);
+                  const parsed = dailyLimit.trim() ? Number(dailyLimit) : null;
+                  if (
+                    parsed != null &&
+                    (!Number.isFinite(parsed) || parsed <= 0)
+                  ) {
+                    setError("Enter a positive amount or clear the field");
+                    return;
+                  }
+                  await updatePreferences(token, { dailySpendLimit: parsed });
                   setMessage(
-                    `Backfill: imported ${result.imported}, skipped ${result.skipped}`,
+                    parsed ? `Daily limit set to ₹${parsed}` : "Daily limit cleared",
                   );
                   onChanged?.();
                 } catch (err) {
-                  setError(err instanceof Error ? err.message : "Backfill failed");
+                  setError(
+                    err instanceof Error ? err.message : "Could not save limit",
+                  );
                 }
               }}
             >
-              Run Gmail backfill
+              Save daily limit
             </button>
+            {dailyLimit ? (
+              <button
+                type="button"
+                className="ghost"
+                onClick={async () => {
+                  setDailyLimit("");
+                  await updatePreferences(token, { dailySpendLimit: null });
+                  setMessage("Daily limit cleared");
+                  onChanged?.();
+                }}
+              >
+                Clear
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h3 className="ui-header">Gmail connection</h3>
+        <p className="meta">
+          Read-only access for bank statement emails. Only senders on your
+          allowlist are searched.
+        </p>
+        <div className="band-stats" style={{ marginBottom: "0.85rem" }}>
+          <div>
+            <p className="meta">Status</p>
+            <strong>
+              {gmail?.connected
+                ? gmail.email
+                : gmail?.configured
+                  ? "Not connected"
+                  : "Not configured"}
+            </strong>
+          </div>
+          <div>
+            <p className="meta">Rules</p>
+            <strong>{rules.length}</strong>
+          </div>
+          <div>
+            <p className="meta">Suggestions</p>
+            <strong>{suggestions.length}</strong>
+          </div>
+        </div>
+        <div className="sort-bar">
+          {gmail?.configured && !gmail.connected && (
             <button
               type="button"
-              className="ghost"
+              className="cta"
               onClick={async () => {
-                await gmailDisconnect(token);
-                await refresh();
+                try {
+                  const { url } = await gmailConnectUrl(token);
+                  window.location.href = url;
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "Connect failed");
+                }
               }}
             >
-              Disconnect Gmail
+              Connect Gmail
             </button>
-          </>
+          )}
+          {gmail?.connected && (
+            <>
+              <button
+                type="button"
+                className="ghost"
+                onClick={async () => {
+                  try {
+                    const result = await gmailBackfill(token, statementPassword);
+                    setMessage(
+                      `Backfill: imported ${result.imported}, skipped ${result.skipped}`,
+                    );
+                    onChanged?.();
+                  } catch (err) {
+                    setError(
+                      err instanceof Error ? err.message : "Backfill failed",
+                    );
+                  }
+                }}
+              >
+                Run Gmail backfill
+              </button>
+              <button
+                type="button"
+                className="ghost"
+                onClick={async () => {
+                  await gmailDisconnect(token);
+                  await refresh();
+                }}
+              >
+                Disconnect Gmail
+              </button>
+            </>
+          )}
+        </div>
+        {gmail?.connected && (
+          <label className="field" style={{ marginTop: "0.85rem" }}>
+            <span>Statement PDF password (optional, for this backfill)</span>
+            <input
+              type="password"
+              value={statementPassword}
+              onChange={(e) => setStatementPassword(e.target.value)}
+              placeholder="Only sent for this request"
+            />
+          </label>
         )}
-        <button type="button" className="ghost" onClick={logout}>
-          Log out
-        </button>
-        <button
-          type="button"
-          className="ghost"
-          onClick={async () => {
-            if (!confirm("Delete your account and all financial data?")) return;
-            await destroyAccount();
-          }}
-        >
-          Delete account
-        </button>
-        <Link href="/privacy" className="ghost">
-          Privacy policy
-        </Link>
-      </div>
+        {gmail?.notice ? (
+          <p className="meta" style={{ marginTop: "0.75rem" }}>
+            {gmail.notice}
+          </p>
+        ) : null}
+        <p className="meta" style={{ marginTop: "0.75rem" }}>
+          Manage bank sender allowlist on the Import screen.
+        </p>
+      </section>
 
-      {gmail?.connected && (
-        <label className="field" style={{ marginBottom: "1rem" }}>
-          <span>Statement PDF password (optional, used for Gmail imports)</span>
-          <input
-            type="password"
-            value={statementPassword}
-            onChange={(e) => setStatementPassword(e.target.value)}
-            placeholder="Only sent for this backfill request"
-          />
-        </label>
-      )}
-
-      {gmail?.notice && <p className="meta" style={{ marginBottom: "1rem" }}>{gmail.notice}</p>}
-
-      <h3 className="ui-header" style={{ fontSize: "1rem" }}>Daily spend limit</h3>
-      <div className="upload-panel" style={{ maxWidth: "100%", marginTop: "0.75rem", marginBottom: "1rem" }}>
-        <label className="field">
-          <span>Max debit per day (₹)</span>
-          <input
-            type="number"
-            min={1}
-            step={100}
-            value={dailyLimit}
-            onChange={(e) => setDailyLimit(e.target.value)}
-            placeholder="e.g. 2000"
-          />
-        </label>
-        <div className="sort-bar">
+      <section className="settings-section">
+        <h3 className="ui-header">Tracking rules</h3>
+        <p className="meta">
+          Name people you care about. Matching is based on narration / UPI text
+          you control.
+        </p>
+        <div className="upload-panel" style={{ maxWidth: "100%" }}>
+          <label className="field">
+            <span>Name</span>
+            <input
+              value={payeeName}
+              onChange={(e) => setPayeeName(e.target.value)}
+              placeholder="Deepan"
+            />
+          </label>
+          <label className="field">
+            <span>Match narration / UPI contains</span>
+            <input
+              value={matchText}
+              onChange={(e) => setMatchText(e.target.value)}
+              placeholder="deepan"
+            />
+          </label>
           <button
             type="button"
             className="cta"
             onClick={async () => {
               try {
                 setError(null);
-                const parsed = dailyLimit.trim() ? Number(dailyLimit) : null;
-                if (parsed != null && (!Number.isFinite(parsed) || parsed <= 0)) {
-                  setError("Enter a positive amount or clear the field");
-                  return;
-                }
-                await updatePreferences(token, { dailySpendLimit: parsed });
-                setMessage(parsed ? `Daily limit set to ₹${parsed}` : "Daily limit cleared");
+                await createRule(token, {
+                  name: `Track ${payeeName}`,
+                  priority: 20,
+                  matchNarrationRe: matchText,
+                  setPayeeName: payeeName,
+                });
+                setPayeeName("");
+                setMatchText("");
+                await refresh();
                 onChanged?.();
+                setMessage("Rule saved");
               } catch (err) {
-                setError(err instanceof Error ? err.message : "Could not save limit");
+                setError(
+                  err instanceof Error ? err.message : "Could not save rule",
+                );
               }
             }}
           >
-            Save daily limit
+            Save tracking rule
           </button>
-          {dailyLimit ? (
-            <button
-              type="button"
-              className="ghost"
-              onClick={async () => {
-                setDailyLimit("");
-                await updatePreferences(token, { dailySpendLimit: null });
-                setMessage("Daily limit cleared");
-                onChanged?.();
-              }}
-            >
-              Clear
-            </button>
-          ) : null}
         </div>
-      </div>
 
-      <h3 className="ui-header" style={{ fontSize: "1rem" }}>Track a person</h3>
-      <div className="upload-panel" style={{ maxWidth: "100%", marginTop: "0.75rem" }}>
-        <label className="field">
-          <span>Name</span>
-          <input value={payeeName} onChange={(e) => setPayeeName(e.target.value)} placeholder="Deepan" />
-        </label>
-        <label className="field">
-          <span>Match narration / UPI contains</span>
-          <input value={matchText} onChange={(e) => setMatchText(e.target.value)} placeholder="deepan" />
-        </label>
-        <button
-          type="button"
-          className="cta"
-          onClick={async () => {
-            try {
-              setError(null);
-              await createRule(token, {
-                name: `Track ${payeeName}`,
-                priority: 20,
-                matchNarrationRe: matchText,
-                setPayeeName: payeeName,
-              });
-              setPayeeName("");
-              setMatchText("");
-              await refresh();
-              onChanged?.();
-              setMessage("Rule saved");
-            } catch (err) {
-              setError(err instanceof Error ? err.message : "Could not save rule");
-            }
-          }}
-        >
-          Save tracking rule
-        </button>
-      </div>
+        {suggestions.length > 0 && (
+          <div style={{ marginTop: "1rem" }}>
+            <p className="meta">Frequent counterparties — click to track</p>
+            <div className="day-chips" style={{ marginTop: "0.5rem" }}>
+              {suggestions.slice(0, 8).map((s) => (
+                <button
+                  key={s.label + s.count}
+                  type="button"
+                  className="sort-chip"
+                  onClick={() => {
+                    setPayeeName(s.label);
+                    setMatchText(s.label);
+                  }}
+                >
+                  {s.label} · {s.count}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
-      {suggestions.length > 0 && (
-        <div style={{ marginTop: "1rem" }}>
-          <p className="meta">Frequent counterparties — click to track</p>
-          <div className="day-chips" style={{ marginTop: "0.5rem" }}>
-            {suggestions.slice(0, 8).map((s) => (
+        <ul className="upi-list" style={{ marginTop: "1rem", maxHeight: 180 }}>
+          {rules.map((rule) => (
+            <li key={String(rule.id)} className="upi-row">
+              <span className="upi-rank">rule</span>
+              <div className="upi-meta">
+                <strong>{String(rule.name)}</strong>
+                <span className="meta">
+                  {String(rule.setPayeeName || rule.setCategorySlug || "custom")}
+                </span>
+              </div>
               <button
-                key={s.label + s.count}
                 type="button"
-                className="sort-chip"
-                onClick={() => {
-                  setPayeeName(s.label);
-                  setMatchText(s.label);
+                className="ghost"
+                onClick={async () => {
+                  await deleteRule(token, String(rule.id));
+                  await refresh();
                 }}
               >
-                {s.label} · {s.count}
+                Remove
               </button>
-            ))}
-          </div>
-        </div>
-      )}
+            </li>
+          ))}
+        </ul>
+      </section>
 
-      <ul className="upi-list" style={{ marginTop: "1rem", maxHeight: 180 }}>
-        {rules.map((rule) => (
-          <li key={String(rule.id)} className="upi-row">
-            <span className="upi-rank">rule</span>
-            <div className="upi-meta">
-              <strong>{String(rule.name)}</strong>
-              <span className="meta">
-                {String(rule.setPayeeName || rule.setCategorySlug || "custom")}
-              </span>
-            </div>
+      <section className="settings-section">
+        <h3 className="ui-header">Account</h3>
+        <p className="meta">Session and privacy controls.</p>
+        <div className="sort-bar">
+          <button type="button" className="ghost" onClick={logout}>
+            Log out
+          </button>
+          <Link href="/privacy" className="ghost">
+            Privacy policy
+          </Link>
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => setShowDanger((v) => !v)}
+          >
+            {showDanger ? "Hide delete options" : "Delete account…"}
+          </button>
+        </div>
+        {showDanger ? (
+          <div
+            className="import-privacy"
+            style={{
+              marginTop: "0.85rem",
+              background: "var(--danger-soft)",
+              color: "var(--danger)",
+            }}
+          >
+            <p className="meta" style={{ color: "inherit", marginBottom: "0.65rem" }}>
+              This permanently deletes your account and financial data.
+            </p>
             <button
               type="button"
               className="ghost"
               onClick={async () => {
-                await deleteRule(token, String(rule.id));
-                await refresh();
+                if (!confirm("Delete your account and all financial data?")) return;
+                await destroyAccount();
               }}
             >
-              Remove
+              Confirm delete account
             </button>
-          </li>
-        ))}
-      </ul>
-
-      {message && <p className="meta" style={{ marginTop: "0.75rem" }}>{message}</p>}
-      {error && <p className="form-error">{error}</p>}
-    </SpotlightCard>
+          </div>
+        ) : null}
+      </section>
+    </div>
   );
 }

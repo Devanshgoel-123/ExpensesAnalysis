@@ -5,6 +5,7 @@ import { GlowBackdrop } from "@/components/GlowBackdrop";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { DashboardHeader } from "@/components/layout/DashboardHeader";
 import { CommandPalette } from "@/components/layout/CommandPalette";
+import { MobileNav } from "@/components/layout/MobileNav";
 import type { DashboardView } from "@/lib/dashboardViews";
 
 interface AppShellProps {
@@ -69,8 +70,11 @@ export function AppShell({
           onRefresh={onRefresh}
           onLogout={onLogout}
         />
-        <main className="app-content">{children}</main>
+        <main className="app-content" id="main-content">
+          {children}
+        </main>
       </div>
+      <MobileNav current={view} onNavigate={onViewChange} />
       <CommandPalette
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}

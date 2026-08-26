@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { X } from "lucide-react";
+import { Moon, Sun, X } from "lucide-react";
 import {
   DASHBOARD_NAV,
   DASHBOARD_NAV_GROUPS,
@@ -10,6 +10,7 @@ import {
 } from "@/lib/dashboardViews";
 import { UserAvatar } from "@/components/layout/UserAvatar";
 import { userInitials } from "@/lib/userInitials";
+import { useTheme } from "@/lib/theme";
 
 interface SidebarProps {
   open: boolean;
@@ -27,6 +28,7 @@ export function Sidebar({
   userEmail,
 }: SidebarProps) {
   const navById = new Map(DASHBOARD_NAV.map((item) => [item.id, item]));
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <>
@@ -44,16 +46,27 @@ export function Sidebar({
         ) : null}
       </AnimatePresence>
 
-      <aside className={`app-sidebar${open ? " open" : ""}`} aria-label="Dashboard navigation">
+      <aside
+        className={`app-sidebar${open ? " open" : ""}`}
+        aria-label="Dashboard navigation"
+      >
         <div className="sidebar-top">
           <div className="sidebar-brand-row">
-            <UserAvatar initials={userInitials({ email: userEmail })} title={userEmail ?? undefined} />
+            <UserAvatar
+              initials={userInitials({ email: userEmail })}
+              title={userEmail ?? undefined}
+            />
             <div>
               <p className="brand compact">Ledgerline</p>
               <p className="meta sidebar-email">{userEmail ?? "Signed in"}</p>
             </div>
           </div>
-          <button type="button" className="icon-btn sidebar-close" onClick={onClose} aria-label="Close sidebar">
+          <button
+            type="button"
+            className="icon-btn sidebar-close"
+            onClick={onClose}
+            aria-label="Close sidebar"
+          >
             <X size={18} />
           </button>
         </div>
@@ -72,13 +85,14 @@ export function Sidebar({
                     key={item.id}
                     type="button"
                     className={`sidebar-link${active ? " active" : ""}`}
+                    aria-current={active ? "page" : undefined}
                     onClick={() => {
                       onNavigate(item.id);
                       onClose();
                     }}
                   >
-                    <span className="sidebar-link-icon">
-                      <Icon size={18} />
+                    <span className="sidebar-link-icon" aria-hidden>
+                      <Icon size={16} />
                     </span>
                     <span className="sidebar-link-copy">
                       <strong>{item.label}</strong>
@@ -92,6 +106,19 @@ export function Sidebar({
         </nav>
 
         <div className="sidebar-foot">
+          <div className="sidebar-theme-row">
+            <span className="meta">Appearance</span>
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={toggleTheme}
+              aria-label={
+                theme === "light" ? "Switch to dark mode" : "Switch to light mode"
+              }
+            >
+              {theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
+            </button>
+          </div>
           <Link href="/architecture" className="sidebar-foot-link" onClick={onClose}>
             Architecture
           </Link>

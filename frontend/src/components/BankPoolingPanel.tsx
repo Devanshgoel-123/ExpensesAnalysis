@@ -141,7 +141,7 @@ export function BankPoolingPanel({
         password,
       });
       setMessage(
-        `Pooling on for ${month}: imported ${result.backfill.imported}, skipped ${result.backfill.skipped}.`,
+        `Pooling active for ${month} — alerts +${result.alerts.imported}, PDF +${result.statements.imported} (${result.backfill.skipped} skipped). Hourly sync stays on.`,
       );
       await refresh();
       onChanged?.();
@@ -157,8 +157,8 @@ export function BankPoolingPanel({
       <header className="panel-head">
         <h2 className="ui-header">Bank mail & pooling</h2>
         <p className="meta">
-          Pick your bank and statement sender handles. Pooling only searches those
-          bank emails — nothing else from your mailbox is stored.
+          Pick your bank sender handles. Alert emails (debit/credit) are synced
+          first; PDF statements are only used as a secondary backfill.
         </p>
       </header>
 
@@ -175,8 +175,16 @@ export function BankPoolingPanel({
         </div>
         <div>
           <p className="meta">Pooling</p>
-          <strong>{gmail?.poolingEnabled ? "Enabled" : "Off"}</strong>
+          <strong style={gmail?.poolingEnabled ? { color: "var(--credit)" } : undefined}>
+            {gmail?.poolingEnabled ? "Active" : "Off"}
+          </strong>
         </div>
+        {gmail?.lastSyncAt && (
+          <div>
+            <p className="meta">Last sync</p>
+            <strong>{new Date(gmail.lastSyncAt).toLocaleString()}</strong>
+          </div>
+        )}
         <div>
           <p className="meta">Accounts</p>
           <strong>{accounts.length}</strong>

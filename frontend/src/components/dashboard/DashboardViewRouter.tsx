@@ -1,5 +1,8 @@
 "use client";
 
+import { Leaf } from "lucide-react";
+import { HeroCard } from "@/components/layout/HeroCard";
+import { PageReveal } from "@/components/motion/PageReveal";
 import type { AmountBand, DailyInsights, ParseResult } from "@/lib/types";
 import type { DashboardView } from "@/lib/dashboardViews";
 import { OverviewView } from "@/components/dashboard/OverviewView";
@@ -11,9 +14,6 @@ import { HabitsView } from "@/components/dashboard/HabitsView";
 import { TransactionsView } from "@/components/dashboard/TransactionsView";
 import { ImportView } from "@/components/dashboard/ImportView";
 import { SettingsView } from "@/components/dashboard/SettingsView";
-import { HeroCard } from "@/components/layout/HeroCard";
-import { PageReveal } from "@/components/motion/PageReveal";
-import { Sparkles } from "lucide-react";
 
 interface DashboardViewRouterProps {
   view: DashboardView;
@@ -60,12 +60,15 @@ export function DashboardViewRouter({
     return (
       <PageReveal>
         <HeroCard
-          kicker="No statement yet"
-          kickerIcon={Sparkles}
-          title="Import a month to begin."
-          lede="Upload a bank PDF or enable Gmail pooling for allowlisted statement senders. Analytics stay empty until the first import lands."
+          kicker="First insight starts here"
+          kickerIcon={Leaf}
+          title="Import a statement to understand your month."
+          lede="Upload a bank PDF or enable Gmail pooling for allowlisted statement senders. Empty charts stay hidden until your first import lands — then Overview lights up."
           primary={{ label: "Open import", onClick: () => onViewChange("import") }}
-          secondary={{ label: "Open settings", onClick: () => onViewChange("settings") }}
+          secondary={{
+            label: "Set daily limit",
+            onClick: () => onViewChange("settings"),
+          }}
         />
       </PageReveal>
     );
@@ -84,7 +87,12 @@ export function DashboardViewRouter({
         />
       );
     case "insights":
-      return <InsightsView insights={dailyInsights} />;
+      return (
+        <InsightsView
+          insights={dailyInsights}
+          avgDailySpend={data.summary.avgDailySpend}
+        />
+      );
     case "categories":
       return (
         <CategoriesView

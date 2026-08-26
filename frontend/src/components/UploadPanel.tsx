@@ -114,7 +114,7 @@ export function UploadPanel({ onParsed, loading, error }: UploadPanelProps) {
             Parsing statement…
           </>
         ) : (
-          "Build dashboard"
+          "Parse statement"
         )}
       </button>
     </form>

@@ -36,7 +36,7 @@ export function ActivityHeatmap({
   const to = dateTo ?? sorted[sorted.length - 1];
 
   if (!from || !to) {
-    return <p className="meta">No cigarette-range days yet.</p>;
+    return <p className="meta">No pattern days in this range yet.</p>;
   }
 
   const range = buildRange(from, to);

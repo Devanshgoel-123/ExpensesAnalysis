@@ -4,7 +4,7 @@ import { loginOrRegisterWithGoogle, requireAuth } from "../auth/service.js";
 import { config } from "../config.js";
 import { encryptSecret } from "../crypto/secrets.js";
 import { getStore } from "../db/index.js";
-import type { AccountRow, GmailConnectionRow } from "../db/types.js";
+import type { AccountRow } from "../db/types.js";
 import { AppError } from "../errors/AppError.js";
 import { gmailLog } from "../logger/gmail.js";
 import { validate } from "../middleware/validate.js";
@@ -325,7 +325,7 @@ gmailRouter.post(
     const sync = await runPoolingSync({
       userId: req.user!.id,
       connection: ready,
-      account: updated,
+      account: updated ?? account,
       password: body.password ?? "",
       maxMessages: body.maxMessages ?? 25,
       month,
@@ -350,7 +350,7 @@ gmailRouter.post(
         skipped: sync.statements.skipped + sync.alerts.skipped,
       },
       notice:
-        "Pooling enabled. Hourly sync stays active for bank PDFs and alert emails.",
+        "Pooling enabled. Alert emails are synced first; PDF statements are a secondary backfill.",
     });
   },
 );

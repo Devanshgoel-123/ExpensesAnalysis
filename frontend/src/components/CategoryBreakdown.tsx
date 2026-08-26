@@ -53,9 +53,7 @@ function buildBuckets(
       }
 
       const rows = byCategory.get(category.slug) ?? [];
-      const members = rows
-        .filter((r) => r.count > 0)
-        .map((r) => r.merchant);
+      const members = rows.filter((r) => r.count > 0).map((r) => r.merchant);
 
       return {
         id: category.slug,
@@ -75,33 +73,42 @@ export function CategoryBreakdown({
   categories,
 }: CategoryBreakdownProps) {
   const buckets = buildBuckets(merchants, cigaretteBand, categories);
+  const grandTotal = buckets.reduce((s, b) => s + b.total, 0) || 1;
   const max = Math.max(...buckets.map((b) => b.total), 1);
 
   return (
     <SpotlightCard className="panel category-panel">
       <header className="panel-head">
         <h2 className="ui-header">Lifestyle split</h2>
-        <p className="meta">Food · Outing · Travel · Investments — live totals</p>
+        <p className="meta">
+          What kind of life are you spending money on?
+        </p>
       </header>
 
       <div className="category-grid">
         {buckets.map((bucket, index) => {
           const empty = bucket.count === 0;
           const width = empty ? 0 : (bucket.total / max) * 100;
+          const pct = empty ? 0 : Math.round((bucket.total / grandTotal) * 100);
 
           return (
             <motion.div
               key={bucket.id}
-              initial={{ opacity: 0, y: 18 }}
+              initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.06 * index, type: "spring", bounce: 0.28 }}
+              transition={{ delay: 0.05 * index }}
             >
               <SpotlightCard
                 className={`category-card cat-${bucket.id} ${empty ? "empty" : ""}`}
               >
                 <div className="category-label-row">
-                  <span className="category-kicker">{bucket.label}</span>
-                  <span className="live-dot" aria-hidden />
+                  <span
+                    className="category-kicker"
+                    style={{ color: bucket.accent || undefined }}
+                  >
+                    {bucket.label}
+                  </span>
+                  <span className="meta">{empty ? "—" : `${pct}%`}</span>
                 </div>
                 <h3 className="display-num">
                   {empty ? (
@@ -124,16 +131,19 @@ export function CategoryBreakdown({
                   )}
                 </p>
                 <div className="category-members">
-                  {bucket.members.map((m) => (
+                  {bucket.members.slice(0, 4).map((m) => (
                     <span key={m}>{m}</span>
                   ))}
                 </div>
                 <div className="progress-track">
                   <motion.span
                     className="progress-fill"
+                    style={{
+                      background: bucket.accent || "var(--primary)",
+                    }}
                     initial={{ width: 0 }}
                     animate={{ width: `${width}%` }}
-                    transition={{ type: "spring", bounce: 0.3, delay: 0.12 }}
+                    transition={{ type: "spring", bounce: 0.2, delay: 0.08 }}
                   />
                 </div>
               </SpotlightCard>

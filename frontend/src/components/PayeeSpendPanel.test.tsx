@@ -17,7 +17,7 @@ describe("PayeeSpendPanel", () => {
         ]}
       />,
     );
-    expect(screen.getByText("Tracked people")).toBeInTheDocument();
+    expect(screen.getByText("People")).toBeInTheDocument();
     expect(screen.getByText("Deepan")).toBeInTheDocument();
   });
 });

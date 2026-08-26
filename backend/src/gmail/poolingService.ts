@@ -37,12 +37,23 @@ export function currentMonth(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
+/** Statement PDF mail — handled by the secondary statement path, not alert storage. */
+function isStatementLikeEmail(subject: string, snippet: string): boolean {
+  const text = `${subject} ${snippet}`.toLowerCase();
+  return /e-?statement|account statement|\bstatement\b/.test(text);
+}
+
+/** Alert emails get the full scan budget; PDF statements use a smaller secondary cap. */
+export function statementScanBudget(maxMessages: number): number {
+  return Math.min(10, Math.max(3, Math.floor(maxMessages / 3)));
+}
+
 async function processAlertMessage(input: {
   userId: string;
   accountId: string;
   connection: GmailConnectionRow;
   messageId: string;
-}): Promise<"imported" | "skipped" | "stored"> {
+}): Promise<"imported" | "skipped" | "stored" | "not_alert"> {
   const store = await getStore();
   const existingMail = await store.findMailMessageByGmailId(
     input.userId,
@@ -53,6 +64,10 @@ async function processAlertMessage(input: {
   }
 
   const details = await fetchMessageDetails(input.connection, input.messageId);
+  if (isStatementLikeEmail(details.subject, details.snippet)) {
+    return "not_alert";
+  }
+
   const parsed = parseBankAlertEmail(details.subject, details.bodyText);
   const bodyExcerpt = (details.bodyText || details.snippet).slice(0, 2000);
   const fingerprint = sha256Hex(`mail:${input.messageId}`);
@@ -244,17 +259,7 @@ export async function runPoolingSync(input: {
     before: bounds.before,
   });
 
-  const statements = await scanQuery({
-    userId: input.userId,
-    accountId: input.account.id,
-    connection,
-    senders: input.account.statementSenderEmails,
-    query: statementQuery,
-    password,
-    maxMessages,
-    mode: "statement",
-  });
-
+  // Alert emails are primary; PDF statements are a secondary backfill.
   const alerts = await scanQuery({
     userId: input.userId,
     accountId: input.account.id,
@@ -264,6 +269,17 @@ export async function runPoolingSync(input: {
     password,
     maxMessages,
     mode: "alert",
+  });
+
+  const statements = await scanQuery({
+    userId: input.userId,
+    accountId: input.account.id,
+    connection,
+    senders: input.account.statementSenderEmails,
+    query: statementQuery,
+    password,
+    maxMessages: statementScanBudget(maxMessages),
+    mode: "statement",
   });
 
   const store = await getStore();
@@ -288,12 +304,17 @@ export async function runPoolingPoll(
 ): Promise<void> {
   const ready = await ensureHistoryId(connection);
   await syncHistory(ready, async (messageId) => {
-    await processAlertMessage({
+    const alertResult = await processAlertMessage({
       userId: account.userId,
       accountId: account.id,
       connection: ready,
       messageId,
-    }).catch(() => undefined);
+    }).catch(() => "not_alert" as const);
+
+    if (alertResult === "imported" || alertResult === "skipped" || alertResult === "stored") {
+      return;
+    }
+
     await processStatementMessage({
       userId: account.userId,
       connection: ready,

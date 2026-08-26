@@ -4,9 +4,9 @@ import {
   CreditCard,
   Flame,
   LayoutDashboard,
+  List,
   Settings2,
   Upload,
-  UserRound,
   Users,
   Wallet,
 } from "lucide-react";
@@ -33,19 +33,19 @@ export const DASHBOARD_NAV: DashboardNavItem[] = [
   {
     id: "overview",
     label: "Overview",
-    description: "Totals & daily chart",
+    description: "Month at a glance",
     icon: LayoutDashboard,
   },
   {
     id: "insights",
-    label: "Daily limit",
-    description: "Over-budget days",
+    label: "Daily Limit",
+    description: "Budget health",
     icon: BarChart3,
   },
   {
     id: "categories",
     label: "Lifestyle",
-    description: "Category & app spend",
+    description: "Where life costs go",
     icon: Wallet,
   },
   {
@@ -56,21 +56,21 @@ export const DASHBOARD_NAV: DashboardNavItem[] = [
   },
   {
     id: "upi",
-    label: "UPI handles",
+    label: "UPI Handles",
     description: "Top transfer targets",
     icon: CreditCard,
   },
   {
     id: "habits",
     label: "Habits",
-    description: "Small spends band",
+    description: "Recurring small spends",
     icon: Flame,
   },
   {
     id: "transactions",
     label: "Transactions",
     description: "Full statement list",
-    icon: UserRound,
+    icon: List,
   },
   {
     id: "import",
@@ -81,15 +81,27 @@ export const DASHBOARD_NAV: DashboardNavItem[] = [
   {
     id: "settings",
     label: "Settings",
-    description: "Limits & automation",
+    description: "Limits & account",
     icon: Settings2,
   },
 ];
 
 export const DASHBOARD_NAV_GROUPS: { label: string; ids: DashboardView[] }[] = [
-  { label: "Overview", ids: ["overview", "insights", "categories"] },
-  { label: "Spend", ids: ["people", "upi", "habits", "transactions"] },
-  { label: "System", ids: ["import", "settings"] },
+  {
+    label: "Insights",
+    ids: ["overview", "insights", "categories", "people", "upi", "habits"],
+  },
+  { label: "Data", ids: ["transactions", "import"] },
+  { label: "System", ids: ["settings"] },
+];
+
+/** Primary destinations shown in the mobile bottom bar. */
+export const MOBILE_NAV_IDS: DashboardView[] = [
+  "overview",
+  "insights",
+  "transactions",
+  "import",
+  "settings",
 ];
 
 export function viewLabel(id: DashboardView): string {

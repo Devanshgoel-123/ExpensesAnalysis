@@ -1,9 +1,10 @@
 "use client";
 
-import { ArrowLeft, LogOut, Menu, RefreshCw, Search } from "lucide-react";
+import { ArrowLeft, LogOut, Menu, Moon, RefreshCw, Search, Sun } from "lucide-react";
 import { viewLabel, type DashboardView } from "@/lib/dashboardViews";
 import { UserAvatar } from "@/components/layout/UserAvatar";
 import { userInitials } from "@/lib/userInitials";
+import { useTheme } from "@/lib/theme";
 
 interface DashboardHeaderProps {
   view: DashboardView;
@@ -30,10 +31,17 @@ export function DashboardHeader({
   onRefresh,
   onLogout,
 }: DashboardHeaderProps) {
+  const { theme, toggleTheme } = useTheme();
+
   return (
     <header className="app-header">
       <div className="app-header-left">
-        <button type="button" className="icon-btn" onClick={onMenuOpen} aria-label="Open menu">
+        <button
+          type="button"
+          className="icon-btn menu-btn"
+          onClick={onMenuOpen}
+          aria-label="Open menu"
+        >
           <Menu size={20} />
         </button>
         <div>
@@ -42,12 +50,22 @@ export function DashboardHeader({
         </div>
       </div>
       <button type="button" className="header-search" onClick={onOpenSearch}>
-        <Search size={16} />
-        <span>Search views, architecture, privacy…</span>
+        <Search size={16} aria-hidden />
+        <span>Search views…</span>
         <kbd className="kbd">⌘K</kbd>
       </button>
       <div className="app-header-actions">
         {monthControl}
+        <button
+          type="button"
+          className="icon-btn"
+          onClick={toggleTheme}
+          aria-label={
+            theme === "light" ? "Switch to dark mode" : "Switch to light mode"
+          }
+        >
+          {theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
+        </button>
         {hasData ? (
           <>
             <button type="button" className="ghost" onClick={onRefresh}>
@@ -61,7 +79,10 @@ export function DashboardHeader({
         <button type="button" className="ghost" onClick={onLogout}>
           <LogOut size={16} /> Log out
         </button>
-        <UserAvatar initials={userInitials({ email: userEmail })} title={userEmail ?? undefined} />
+        <UserAvatar
+          initials={userInitials({ email: userEmail })}
+          title={userEmail ?? undefined}
+        />
       </div>
     </header>
   );

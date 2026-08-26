@@ -22,12 +22,12 @@ export function AmountBandPanel({
     <SpotlightCard className="panel band-panel">
       <header className="panel-head">
         <div className="category-label-row">
-          <span className="category-kicker">Cigarettes</span>
-          <span className="live-dot" aria-hidden />
+          <span className="category-kicker">Habits</span>
         </div>
-        <h2 className="ui-header">Tiny spends · {band.label}</h2>
+        <h2 className="ui-header">Potential cigarette-pattern spending</h2>
         <p className="meta">
-          Debits between ₹{band.min} and ₹{band.max} — habit heat map
+          Tiny spends · {band.label} (₹{band.min}–₹{band.max}). This is a
+          heuristic based on amount bands — not a confirmed label.
         </p>
       </header>
 
@@ -60,7 +60,7 @@ export function AmountBandPanel({
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
+          transition={{ delay: 0.1 }}
         >
           <ActivityHeatmap
             days={band.days}
