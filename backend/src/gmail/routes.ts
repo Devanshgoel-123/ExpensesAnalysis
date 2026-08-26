@@ -20,8 +20,7 @@ import {
   renewWatch,
 } from "./client.js";
 import {
-  currentMonth,
-  monthBounds,
+  poolingDateWindow,
   runAllPoolingPolls,
   runPoolingPoll,
   runPoolingSync,
@@ -58,6 +57,10 @@ gmailRouter.get("/status", requireAuth, async (req, res) => {
   const accounts = await store.listAccounts(req.user!.id);
   const primary =
     accounts.find((a) => a.poolingEnabled) ?? accounts[0] ?? null;
+  const latestRun = await store.getLatestPoolingRun(req.user!.id);
+  const recentRuns = await store.listPoolingRuns(req.user!.id, 8);
+  const running = await store.hasRunningPoolingRun(req.user!.id);
+
   res.json({
     configured: gmailConfigured(),
     connected: Boolean(connection),
@@ -68,6 +71,47 @@ gmailRouter.get("/status", requireAuth, async (req, res) => {
     poolingStartedAt: primary?.poolingStartedAt ?? null,
     bank: primary?.bank ?? null,
     statementSenderEmails: primary?.statementSenderEmails ?? [],
+    dispatcher: {
+      interval: "hourly",
+      health:
+        !primary?.poolingEnabled
+          ? "idle"
+          : running
+            ? "running"
+            : latestRun?.status === "failed"
+              ? "degraded"
+              : connection?.lastSyncAt
+                ? "ok"
+                : "pending",
+    },
+    latestRun: latestRun
+      ? {
+          id: latestRun.id,
+          trigger: latestRun.trigger,
+          status: latestRun.status,
+          mode: latestRun.mode,
+          month: latestRun.month,
+          scanned: latestRun.scanned,
+          imported: latestRun.imported,
+          skipped: latestRun.skipped,
+          errorMessage: latestRun.errorMessage,
+          startedAt: latestRun.startedAt,
+          finishedAt: latestRun.finishedAt,
+        }
+      : null,
+    recentRuns: recentRuns.map((run) => ({
+      id: run.id,
+      trigger: run.trigger,
+      status: run.status,
+      mode: run.mode,
+      month: run.month,
+      scanned: run.scanned,
+      imported: run.imported,
+      skipped: run.skipped,
+      errorMessage: run.errorMessage,
+      startedAt: run.startedAt,
+      finishedAt: run.finishedAt,
+    })),
     notice:
       "gmail.readonly is required for message list, but search is limited to your bank statement sender allowlist. We only store statement PDFs/transactions — never arbitrary mail.",
   });
@@ -265,7 +309,7 @@ gmailRouter.post(
     };
     const account = await resolveAccountForPooling(req.user!.id);
     const ready = await ensureHistoryId(connection);
-    const month = body.month ?? currentMonth();
+    const month = body.month; // omit → from POOLING_EARLIEST_DATE onward
     const sync = await runPoolingSync({
       userId: req.user!.id,
       connection: ready,
@@ -273,15 +317,16 @@ gmailRouter.post(
       password: body.password ?? "",
       maxMessages: body.maxMessages ?? 25,
       month,
+      trigger: "backfill",
     });
     await store.audit(req.user!.id, "gmail.backfill", {
-      month,
+      month: month ?? "from-cutoff",
       statements: sync.statements,
       alerts: sync.alerts,
     });
     res.json({
-      month,
-      bounds: monthBounds(month),
+      month: month ?? null,
+      window: poolingDateWindow(month),
       statements: sync.statements,
       alerts: sync.alerts,
     });
@@ -311,7 +356,7 @@ gmailRouter.post(
       maxMessages?: number;
       accountId?: string;
     };
-    const month = body.month ?? currentMonth();
+    const month = body.month; // omit → from cutoff onward
     const account = await resolveAccountForPooling(
       req.user!.id,
       body.accountId,
@@ -329,19 +374,20 @@ gmailRouter.post(
       password: body.password ?? "",
       maxMessages: body.maxMessages ?? 25,
       month,
+      trigger: "enable",
     });
-    gmailLog.enabled(req.user!.id, month);
+    gmailLog.enabled(req.user!.id, month ?? "from-cutoff");
     await store.audit(req.user!.id, "gmail.pooling_enabled", {
       accountId: account.id,
       bank: account.bank,
-      month,
+      month: month ?? "from-cutoff",
       statements: sync.statements,
       alerts: sync.alerts,
     });
     res.json({
       account: updated,
-      month,
-      bounds: monthBounds(month),
+      month: month ?? null,
+      window: poolingDateWindow(month),
       statements: sync.statements,
       alerts: sync.alerts,
       backfill: {
@@ -377,9 +423,22 @@ gmailRouter.post("/sync", requireAuth, async (req, res) => {
     throw AppError.badRequest("Connect Gmail first");
   }
   const account = await resolveAccountForPooling(req.user!.id);
+  if (!account.poolingEnabled) {
+    throw AppError.badRequest("Enable pooling before running a manual sync");
+  }
   const ready = await ensureHistoryId(connection);
-  await runPoolingPoll(account, ready);
-  res.json({ ok: true, lastSyncAt: new Date().toISOString() });
+  const result = await runPoolingPoll(account, ready, "manual_sync");
+  await store.audit(req.user!.id, "gmail.manual_sync", {
+    runId: result.runId,
+    scanned: result.scanned,
+    imported: result.imported,
+    skipped: result.skipped,
+  });
+  res.json({
+    ok: true,
+    lastSyncAt: new Date().toISOString(),
+    run: result,
+  });
 });
 
 /** Pub/Sub push endpoint for Gmail watch notifications. */
@@ -404,10 +463,14 @@ gmailRouter.post("/push", async (req, res) => {
       const accounts = await store.listPoolingAccounts();
       const account = accounts.find((a) => a.userId === connection.userId);
       if (account) {
-        await runPoolingPoll(account, {
-          ...connection,
-          historyId: connection.historyId ?? decoded.historyId ?? null,
-        });
+        await runPoolingPoll(
+          account,
+          {
+            ...connection,
+            historyId: connection.historyId ?? decoded.historyId ?? null,
+          },
+          "push",
+        );
       }
     }
     res.status(204).end();

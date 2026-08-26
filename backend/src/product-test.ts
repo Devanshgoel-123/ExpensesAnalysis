@@ -172,7 +172,15 @@ async function main() {
     throw new Error("HDFC adapter failed");
   }
 
-  const swiggyMatch = detectFromProviders("UPI-SWIGGY-swiggy@ybl", providers);
+  const swiggyMatch = detectFromProviders(
+    {
+      description: "UPI-SWIGGY-swiggy@ybl",
+      upiId: "swiggy@ybl",
+      merchant: null,
+      payee: null,
+    },
+    providers,
+  );
   if (swiggyMatch.merchant !== "Swiggy") {
     throw new Error("detectFromProviders regression");
   }

@@ -11,6 +11,25 @@ export interface ClassifiedFields {
   classificationSource: string;
 }
 
+export function escapeRegex(input: string): string {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Map plain user text to rule match fields (UPI handle vs narration contains). */
+export function buildMatchFieldsFromText(text: string): {
+  matchNarrationRe: string | null;
+  matchUpiId: string | null;
+} {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return { matchNarrationRe: null, matchUpiId: null };
+  }
+  if (trimmed.includes("@")) {
+    return { matchNarrationRe: null, matchUpiId: trimmed.toLowerCase() };
+  }
+  return { matchNarrationRe: escapeRegex(trimmed), matchUpiId: null };
+}
+
 export function matchRule(
   rule: UserRuleRow,
   tx: Pick<
@@ -33,7 +52,8 @@ export function matchRule(
   if (rule.matchNarrationRe) {
     try {
       const re = new RegExp(rule.matchNarrationRe, "i");
-      if (!re.test(tx.description)) return false;
+      const hay = `${tx.description} ${tx.upiId ?? ""} ${tx.merchant ?? ""} ${tx.payee ?? ""}`;
+      if (!re.test(hay)) return false;
     } catch {
       return false;
     }
@@ -114,16 +134,24 @@ export function applyRules(
 }
 
 export function detectFromProviders(
-  description: string,
+  tx: Pick<TransactionRow, "description" | "upiId" | "merchant" | "payee">,
   providers: ProviderRow[],
 ): { merchant: string | null; providerId: string | null; categorySlug: string | null } {
-  const normalized = description.replace(/\s+/g, " ");
+  const haystacks = [
+    tx.description,
+    tx.upiId ?? "",
+    tx.merchant ?? "",
+    tx.payee ?? "",
+  ]
+    .map((value) => value.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
   for (const provider of providers) {
     const needles = [provider.canonicalName, ...provider.aliases];
     for (const needle of needles) {
       if (!needle) continue;
       const re = new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-      if (re.test(normalized)) {
+      if (haystacks.some((haystack) => re.test(haystack))) {
         return {
           merchant: provider.canonicalName,
           providerId: provider.id,
@@ -132,7 +160,12 @@ export function detectFromProviders(
       }
     }
     for (const handle of provider.upiHandles) {
-      if (handle && normalized.toLowerCase().includes(handle.toLowerCase())) {
+      if (
+        handle &&
+        haystacks.some((haystack) =>
+          haystack.toLowerCase().includes(handle.toLowerCase()),
+        )
+      ) {
         return {
           merchant: provider.canonicalName,
           providerId: provider.id,

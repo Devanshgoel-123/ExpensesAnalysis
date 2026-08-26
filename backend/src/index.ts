@@ -8,7 +8,18 @@ const app = createApp();
 
 async function boot() {
   await getStore();
-  startGmailJobs();
+
+  const disableInlineJobs =
+    process.env.DISABLE_INLINE_GMAIL_JOBS === "1" ||
+    process.env.POOLING_WORKER_SEPARATE === "1";
+
+  if (disableInlineJobs) {
+    logger.info(
+      "inline Gmail jobs disabled — use the pooling worker on :5473",
+    );
+  } else {
+    startGmailJobs();
+  }
 
   const server = app.listen(config.port, () => {
     logger.info(
@@ -33,7 +44,6 @@ async function boot() {
         process.exit(1);
       }
     });
-    // Force exit if connections hang
     setTimeout(() => process.exit(1), 10_000).unref();
   };
 

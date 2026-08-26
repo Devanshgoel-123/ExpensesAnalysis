@@ -12,6 +12,10 @@ import type {
   ListTransactionsOptions,
   MailMessageRow,
   NewTransactionInput,
+  PoolingRunMode,
+  PoolingRunRow,
+  PoolingRunStatus,
+  PoolingRunTrigger,
   ProviderRow,
   Store,
   TransactionOverrideRow,
@@ -188,13 +192,32 @@ function mapMailMessage(row: Record<string, unknown>): MailMessageRow {
     receivedAt: row.received_at
       ? new Date(String(row.received_at)).toISOString()
       : null,
-    snippet: String(row.snippet ?? ""),
-    bodyExcerpt: String(row.body_excerpt ?? ""),
     amount: row.amount == null ? null : Number(row.amount),
     txType: (row.tx_type as MailMessageRow["txType"]) ?? null,
     currency: String(row.currency ?? "INR"),
     fingerprint: String(row.fingerprint),
     createdAt: new Date(String(row.created_at)).toISOString(),
+  };
+}
+
+function mapPoolingRun(row: Record<string, unknown>): PoolingRunRow {
+  return {
+    id: String(row.id),
+    userId: String(row.user_id),
+    accountId: (row.account_id as string | null) ?? null,
+    trigger: String(row.trigger) as PoolingRunTrigger,
+    status: String(row.status) as PoolingRunStatus,
+    mode: String(row.mode) as PoolingRunMode,
+    month: (row.month as string | null) ?? null,
+    scanned: Number(row.scanned ?? 0),
+    imported: Number(row.imported ?? 0),
+    skipped: Number(row.skipped ?? 0),
+    errorMessage: (row.error_message as string | null) ?? null,
+    startedAt: new Date(String(row.started_at)).toISOString(),
+    finishedAt: row.finished_at
+      ? new Date(String(row.finished_at)).toISOString()
+      : null,
+    meta: (row.meta as Record<string, unknown>) ?? {},
   };
 }
 
@@ -1012,16 +1035,14 @@ export class PostgresStore implements Store {
     const result = await this.pool.query(
       `INSERT INTO mail_messages (
          id, user_id, account_id, gmail_message_id, from_address, subject,
-         received_at, snippet, body_excerpt, amount, tx_type, currency, fingerprint
+         received_at, amount, tx_type, currency, fingerprint
        ) VALUES (
-         COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+         COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
        )
        ON CONFLICT (user_id, gmail_message_id) DO UPDATE SET
          from_address = EXCLUDED.from_address,
          subject = EXCLUDED.subject,
          received_at = COALESCE(EXCLUDED.received_at, mail_messages.received_at),
-         snippet = EXCLUDED.snippet,
-         body_excerpt = EXCLUDED.body_excerpt,
          amount = COALESCE(EXCLUDED.amount, mail_messages.amount),
          tx_type = COALESCE(EXCLUDED.tx_type, mail_messages.tx_type),
          currency = EXCLUDED.currency,
@@ -1035,8 +1056,6 @@ export class PostgresStore implements Store {
         input.fromAddress,
         input.subject,
         input.receivedAt,
-        input.snippet,
-        input.bodyExcerpt,
         input.amount,
         input.txType,
         input.currency,
@@ -1055,6 +1074,114 @@ export class PostgresStore implements Store {
       [userId, gmailMessageId],
     );
     return result.rows[0] ? mapMailMessage(result.rows[0]) : null;
+  }
+
+  async createPoolingRun(
+    input: Omit<PoolingRunRow, "id" | "startedAt" | "finishedAt" | "status"> & {
+      id?: string;
+      status?: PoolingRunStatus;
+    },
+  ): Promise<PoolingRunRow> {
+    const result = await this.pool.query(
+      `INSERT INTO pooling_runs (
+         id, user_id, account_id, trigger, status, mode, month,
+         scanned, imported, skipped, error_message, meta
+       ) VALUES (
+         COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7,
+         $8, $9, $10, $11, $12::jsonb
+       )
+       RETURNING *`,
+      [
+        input.id ?? null,
+        input.userId,
+        input.accountId,
+        input.trigger,
+        input.status ?? "running",
+        input.mode,
+        input.month,
+        input.scanned,
+        input.imported,
+        input.skipped,
+        input.errorMessage,
+        JSON.stringify(input.meta ?? {}),
+      ],
+    );
+    return mapPoolingRun(result.rows[0]);
+  }
+
+  async updatePoolingRun(
+    id: string,
+    patch: Partial<
+      Pick<
+        PoolingRunRow,
+        | "status"
+        | "scanned"
+        | "imported"
+        | "skipped"
+        | "errorMessage"
+        | "finishedAt"
+        | "meta"
+      >
+    >,
+  ): Promise<PoolingRunRow | null> {
+    const result = await this.pool.query(
+      `UPDATE pooling_runs SET
+         status = COALESCE($2, status),
+         scanned = COALESCE($3, scanned),
+         imported = COALESCE($4, imported),
+         skipped = COALESCE($5, skipped),
+         error_message = COALESCE($6, error_message),
+         finished_at = COALESCE($7::timestamptz, finished_at),
+         meta = CASE WHEN $8::jsonb IS NULL THEN meta ELSE $8::jsonb END
+       WHERE id = $1
+       RETURNING *`,
+      [
+        id,
+        patch.status ?? null,
+        patch.scanned ?? null,
+        patch.imported ?? null,
+        patch.skipped ?? null,
+        patch.errorMessage ?? null,
+        patch.finishedAt ?? null,
+        patch.meta == null ? null : JSON.stringify(patch.meta),
+      ],
+    );
+    return result.rows[0] ? mapPoolingRun(result.rows[0]) : null;
+  }
+
+  async getLatestPoolingRun(userId: string): Promise<PoolingRunRow | null> {
+    const result = await this.pool.query(
+      `SELECT * FROM pooling_runs
+       WHERE user_id = $1
+       ORDER BY started_at DESC
+       LIMIT 1`,
+      [userId],
+    );
+    return result.rows[0] ? mapPoolingRun(result.rows[0]) : null;
+  }
+
+  async listPoolingRuns(
+    userId: string,
+    limit = 10,
+  ): Promise<PoolingRunRow[]> {
+    const result = await this.pool.query(
+      `SELECT * FROM pooling_runs
+       WHERE user_id = $1
+       ORDER BY started_at DESC
+       LIMIT $2`,
+      [userId, limit],
+    );
+    return result.rows.map(mapPoolingRun);
+  }
+
+  async hasRunningPoolingRun(userId: string): Promise<boolean> {
+    const result = await this.pool.query(
+      `SELECT 1 FROM pooling_runs
+       WHERE user_id = $1 AND status = 'running'
+       LIMIT 1`,
+      [userId],
+    );
+    return result.rows.length > 0;
   }
 
   async audit(
@@ -1078,6 +1205,7 @@ export class PostgresStore implements Store {
       await client.query(`DELETE FROM transactions WHERE user_id = $1`, [userId]);
       await client.query(`DELETE FROM imports WHERE user_id = $1`, [userId]);
       await client.query(`DELETE FROM user_rules WHERE user_id = $1`, [userId]);
+      await client.query(`DELETE FROM pooling_runs WHERE user_id = $1`, [userId]);
       await client.query(`DELETE FROM accounts WHERE user_id = $1`, [userId]);
       await client.query(
         `DELETE FROM providers WHERE user_id = $1 AND is_global = FALSE`,

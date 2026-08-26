@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "dev:worker": "POOLING_WORKER_PORT=5473 LOG_LEVEL=debug tsx watch src/worker/poolingServer.ts",
+    "worker": "POOLING_WORKER_PORT=5473 LOG_LEVEL=debug tsx src/worker/poolingServer.ts",
     "build": "tsc && npm run copy:assets",
     "copy:assets": "mkdir -p dist/db/migrations && cp src/db/migrations/*.sql dist/db/migrations/",
     "start": "node dist/index.js",
-    "test": "NODE_ENV=test tsx --test src/analytics/dailyInsights.test.ts src/analytics/fromStore.test.ts src/providers/registry.test.ts src/gmail/alertParser.test.ts && NODE_ENV=test tsx src/smoke-test.ts && NODE_ENV=test tsx src/product-test.ts",
+    "test": "NODE_ENV=test tsx --test src/analytics/dailyInsights.test.ts src/analytics/fromStore.test.ts src/providers/registry.test.ts src/gmail/alertParser.test.ts src/rules/engine.test.ts && NODE_ENV=test tsx src/smoke-test.ts && NODE_ENV=test tsx src/product-test.ts",
     "migrate": "tsx src/db/migrate-cli.ts",
     "migrate:down": "tsx src/db/migrate-cli.ts --down",
     "seed": "tsx src/db/seeds/demo.ts"

@@ -2,10 +2,41 @@ import { bankAdapters, runAdapters } from "../adapters/index.js";
 import { buildAnalyticsFromRows } from "../analytics/fromStore.js";
 import { sha256Hex, transactionFingerprint } from "../crypto/secrets.js";
 import { getStore } from "../db/index.js";
-import type { NewTransactionInput } from "../db/types.js";
+import type {
+  CategoryRow,
+  NewTransactionInput,
+  ProviderRow,
+  TransactionRow,
+  UserRuleRow,
+} from "../db/types.js";
+import { AppError } from "../errors/AppError.js";
 import { extractTextFromPdf } from "../parser.js";
-import { applyRules, detectFromProviders } from "../rules/engine.js";
+import { buildMatchFieldsFromText, matchRule } from "../rules/engine.js";
 import type { ParseResult } from "../types.js";
+import {
+  classifyTransaction,
+  type ClassificationContext,
+} from "./classification.js";
+import {
+  buildTrackedPayees,
+  loadClassificationContext,
+} from "./context.js";
+
+async function loadAnalyticsResult(input: {
+  userId: string;
+  rows: TransactionRow[];
+  providers: ProviderRow[];
+  categories: CategoryRow[];
+  rules: UserRuleRow[];
+}): Promise<ParseResult> {
+  return analyticsForUser(
+    input.userId,
+    input.rows,
+    input.providers,
+    buildTrackedPayees(input.rules),
+    input.categories,
+  );
+}
 
 async function analyticsForUser(
   userId: string,
@@ -28,6 +59,8 @@ export async function processPdfImport(input: {
   password?: string;
   source?: "upload" | "gmail";
   gmailMessageId?: string | null;
+  /** When set, drop parsed rows with date strictly before this YYYY-MM-DD. */
+  earliestDate?: string;
 }): Promise<{
   importId: string;
   result: ParseResult;
@@ -43,25 +76,17 @@ export async function processPdfImport(input: {
   );
   if (existingByHash?.status === "completed") {
     const rows = await store.listTransactions(input.userId);
-    const providers = await store.listProviders(input.userId);
-    const categories = await store.listCategories(input.userId);
-    const rules = await store.listRules(input.userId);
-    const trackedPayees = [
-      ...new Set(
-        rules
-          .map((r) => r.setPayeeName)
-          .filter((n): n is string => Boolean(n)),
-      ),
-    ];
+    const { providers, categories, rules } =
+      await loadClassificationContext(input.userId);
     return {
       importId: existingByHash.id,
-      result: await analyticsForUser(
-        input.userId,
+      result: await loadAnalyticsResult({
+        userId: input.userId,
         rows,
         providers,
-        trackedPayees,
         categories,
-      ),
+        rules,
+      }),
       inserted: 0,
       skipped: rows.length,
     };
@@ -74,17 +99,17 @@ export async function processPdfImport(input: {
     );
     if (existingMsg?.status === "completed") {
       const rows = await store.listTransactions(input.userId);
-      const providers = await store.listProviders(input.userId);
-      const categories = await store.listCategories(input.userId);
+      const { providers, categories, rules } =
+        await loadClassificationContext(input.userId);
       return {
         importId: existingMsg.id,
-        result: await analyticsForUser(
-          input.userId,
+        result: await loadAnalyticsResult({
+          userId: input.userId,
           rows,
           providers,
-          [],
           categories,
-        ),
+          rules,
+        }),
         inserted: 0,
         skipped: rows.length,
       };
@@ -114,60 +139,49 @@ export async function processPdfImport(input: {
     }
 
     const { adapter, transactions } = runAdapters(text, bankAdapters);
-    const providers = await store.listProviders(input.userId);
-    const categories = await store.listCategories(input.userId);
-    const rules = await store.listRules(input.userId);
+    const context = await loadClassificationContext(input.userId);
 
-    const toInsert: NewTransactionInput[] = transactions.map((t) => {
-      const fromProviders = detectFromProviders(t.description, providers);
-      const classified = applyRules(
-        {
-          description: t.description,
-          upiId: t.upiId,
-          merchant: fromProviders.merchant ?? t.merchant,
-          amount: t.amount,
-          type: t.type,
-          payee: t.payee,
-        },
-        rules,
-        providers,
-        {
-          merchant: fromProviders.merchant ?? t.merchant,
-          payee: t.payee,
-          providerId: fromProviders.providerId,
-          categorySlug: fromProviders.categorySlug,
-          classificationSource: "parser",
-          confidence: fromProviders.merchant ? 0.8 : 0.5,
-        },
-        categories,
-      );
+    const toInsert: NewTransactionInput[] = transactions
+      .filter((t) => !input.earliestDate || t.date >= input.earliestDate)
+      .map((t) => {
+        const classified = classifyTransaction(
+          {
+            description: t.description,
+            upiId: t.upiId,
+            merchant: t.merchant,
+            amount: t.amount,
+            type: t.type,
+            payee: t.payee,
+          },
+          context,
+        );
 
-      return {
-        importId: importRow.id,
-        accountId: account.id,
-        date: t.date,
-        time: t.time,
-        description: t.description,
-        amount: t.amount,
-        type: t.type,
-        upiId: t.upiId,
-        merchant: classified.merchant,
-        payee: classified.payee,
-        providerId: classified.providerId,
-        categorySlug: classified.categorySlug,
-        counterparty: classified.counterparty,
-        confidence: classified.confidence,
-        classificationSource: classified.classificationSource,
-        fingerprint: transactionFingerprint({
+        return {
+          importId: importRow.id,
+          accountId: account.id,
           date: t.date,
+          time: t.time,
+          description: t.description,
           amount: t.amount,
           type: t.type,
-          description: t.description,
           upiId: t.upiId,
-        }),
-        raw: t.raw,
-      };
-    });
+          merchant: classified.merchant,
+          payee: classified.payee,
+          providerId: classified.providerId,
+          categorySlug: classified.categorySlug,
+          counterparty: classified.counterparty,
+          confidence: classified.confidence,
+          classificationSource: classified.classificationSource,
+          fingerprint: transactionFingerprint({
+            date: t.date,
+            amount: t.amount,
+            type: t.type,
+            description: t.description,
+            upiId: t.upiId,
+          }),
+          raw: t.raw,
+        };
+      });
 
     const { inserted, skipped } = await store.insertTransactions(
       input.userId,
@@ -187,20 +201,13 @@ export async function processPdfImport(input: {
     });
 
     const rows = await store.listTransactions(input.userId);
-    const trackedPayees = [
-      ...new Set(
-        rules
-          .map((r) => r.setPayeeName)
-          .filter((n): n is string => Boolean(n)),
-      ),
-    ];
-    const result = await analyticsForUser(
-      input.userId,
+    const result = await loadAnalyticsResult({
+      userId: input.userId,
       rows,
-      providers,
-      trackedPayees,
-      categories,
-    );
+      providers: context.providers,
+      categories: context.categories,
+      rules: context.rules,
+    });
     result.meta.pagesTextChars = text.length;
     result.meta.parsedCount = transactions.length;
 
@@ -229,13 +236,95 @@ export async function getDashboardForUser(
     from: options?.from,
     to: options?.to,
   });
-  const providers = await store.listProviders(userId);
-  const categories = await store.listCategories(userId);
-  const rules = await store.listRules(userId);
-  const trackedPayees = [
-    ...new Set(
-      rules.map((r) => r.setPayeeName).filter((n): n is string => Boolean(n)),
-    ),
-  ];
-  return analyticsForUser(userId, rows, providers, trackedPayees, categories);
+  const { providers, categories, rules } = await loadClassificationContext(userId);
+  return loadAnalyticsResult({ userId, rows, providers, categories, rules });
+}
+
+export async function listImportsForUser(userId: string) {
+  const store = await getStore();
+  return store.listImports(userId);
+}
+
+export async function correctTransactionForUser(input: {
+  userId: string;
+  transactionId: string;
+  payee?: string;
+  merchant?: string;
+  categorySlug?: string;
+  providerId?: string | null;
+  applyFuture?: boolean;
+}): Promise<{
+  transaction: TransactionRow | null;
+  reclassified: number;
+}> {
+  const store = await getStore();
+  const tx = await store.getTransaction(input.userId, input.transactionId);
+  if (!tx) {
+    throw AppError.notFound("Transaction not found");
+  }
+
+  const updated = await store.updateTransaction(input.userId, tx.id, {
+    payee: input.payee,
+    merchant: input.merchant,
+    categorySlug: input.categorySlug,
+    providerId: input.providerId ?? undefined,
+    classificationSource: "user_override",
+    confidence: 1,
+  });
+
+  await store.upsertOverride({
+    userId: input.userId,
+    transactionId: tx.id,
+    payee: input.payee ?? null,
+    merchant: input.merchant ?? null,
+    categorySlug: input.categorySlug ?? null,
+    providerId: input.providerId ?? null,
+    applyFuture: Boolean(input.applyFuture),
+  });
+
+  let reclassified = 0;
+  if (input.applyFuture) {
+    const matchFields = tx.upiId
+      ? { matchNarrationRe: null, matchUpiId: tx.upiId }
+      : buildMatchFieldsFromText(tx.description.slice(0, 40));
+    const rule = await store.createRule({
+      userId: input.userId,
+      name: `Correction for ${input.payee || input.merchant || input.categorySlug || tx.id}`,
+      priority: 10,
+      enabled: true,
+      matchNarrationRe: matchFields.matchNarrationRe,
+      matchUpiId: matchFields.matchUpiId,
+      matchMerchantAlias: null,
+      matchAmountMin: null,
+      matchAmountMax: null,
+      matchType: null,
+      setProviderId: input.providerId ?? null,
+      setPayeeName: input.payee ?? null,
+      setCategorySlug: input.categorySlug ?? null,
+      setTags: [],
+    });
+
+    reclassified = await store.reclassifyByRule(
+      input.userId,
+      (candidate) => matchRule(rule, candidate) && candidate.id !== tx.id,
+      {
+        payee: input.payee,
+        merchant: input.merchant,
+        categorySlug: input.categorySlug,
+        providerId: input.providerId ?? undefined,
+        classificationSource: `rule:${rule.id}`,
+      },
+    );
+  }
+
+  await store.audit(input.userId, "transaction.corrected", {
+    transactionId: tx.id,
+    applyFuture: Boolean(input.applyFuture),
+    reclassified,
+  });
+
+  return {
+    transaction: updated,
+    reclassified,
+  };
 }

@@ -160,13 +160,37 @@ export interface MailMessageRow {
   fromAddress: string;
   subject: string;
   receivedAt: string | null;
-  snippet: string;
-  bodyExcerpt: string;
   amount: number | null;
   txType: TxType | null;
   currency: string;
   fingerprint: string;
   createdAt: string;
+}
+
+export type PoolingRunStatus = "running" | "completed" | "failed";
+export type PoolingRunTrigger =
+  | "enable"
+  | "backfill"
+  | "manual_sync"
+  | "dispatcher"
+  | "push";
+export type PoolingRunMode = "poll" | "backfill";
+
+export interface PoolingRunRow {
+  id: string;
+  userId: string;
+  accountId: string | null;
+  trigger: PoolingRunTrigger;
+  status: PoolingRunStatus;
+  mode: PoolingRunMode;
+  month: string | null;
+  scanned: number;
+  imported: number;
+  skipped: number;
+  errorMessage: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  meta: Record<string, unknown>;
 }
 
 export interface NewTransactionInput {
@@ -355,6 +379,31 @@ export interface Store {
     userId: string,
     gmailMessageId: string,
   ): Promise<MailMessageRow | null>;
+
+  createPoolingRun(
+    input: Omit<PoolingRunRow, "id" | "startedAt" | "finishedAt" | "status"> & {
+      id?: string;
+      status?: PoolingRunStatus;
+    },
+  ): Promise<PoolingRunRow>;
+  updatePoolingRun(
+    id: string,
+    patch: Partial<
+      Pick<
+        PoolingRunRow,
+        | "status"
+        | "scanned"
+        | "imported"
+        | "skipped"
+        | "errorMessage"
+        | "finishedAt"
+        | "meta"
+      >
+    >,
+  ): Promise<PoolingRunRow | null>;
+  getLatestPoolingRun(userId: string): Promise<PoolingRunRow | null>;
+  listPoolingRuns(userId: string, limit?: number): Promise<PoolingRunRow[]>;
+  hasRunningPoolingRun(userId: string): Promise<boolean>;
 
   audit(userId: string | null, action: string, meta?: Record<string, unknown>): Promise<void>;
   deleteUserData(userId: string): Promise<void>;

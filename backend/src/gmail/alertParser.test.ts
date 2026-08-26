@@ -11,6 +11,7 @@ describe("parseBankAlertEmail", () => {
     assert.equal(result.type, "debit");
     assert.equal(result.amount, 1250);
     assert.equal(result.currency, "INR");
+    assert.equal(result.date, "2026-08-27");
   });
 
   it("parses credit alert", () => {
@@ -20,5 +21,6 @@ describe("parseBankAlertEmail", () => {
     );
     assert.equal(result.type, "credit");
     assert.equal(result.amount, 500);
+    assert.equal(result.date, null);
   });
 });

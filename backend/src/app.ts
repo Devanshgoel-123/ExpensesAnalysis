@@ -5,10 +5,12 @@ import { authRouter } from "./auth/routes.js";
 import { requireAuth } from "./auth/service.js";
 import { config } from "./config.js";
 import { errorHandler, notFoundHandler } from "./errors/errorHandler.js";
-import { AppError } from "./errors/AppError.js";
 import { gmailRouter, handleGmailOAuthCallback } from "./gmail/routes.js";
+import {
+  parseEphemeralController,
+  uploadImportController,
+} from "./imports/controller.js";
 import { importRouter } from "./imports/routes.js";
-import { processPdfImport } from "./imports/service.js";
 import {
   authRateLimiter,
   globalRateLimiter,
@@ -18,7 +20,6 @@ import { requestContext } from "./middleware/requestContext.js";
 import { requestLogger } from "./middleware/requestLogger.js";
 import { corsMiddleware, securityHeaders } from "./middleware/security.js";
 import { validate } from "./middleware/validate.js";
-import { parsePdf } from "./parser.js";
 import { providersRouter } from "./providers/routes.js";
 import { accountsRouter } from "./accounts/routes.js";
 import { categoriesRouter } from "./categories/routes.js";
@@ -31,21 +32,6 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024 },
 });
-
-function mapParseError(error: unknown): never {
-  const message = error instanceof Error ? error.message : "Failed to parse PDF";
-  if (/password/i.test(message)) {
-    throw AppError.unauthorized("Incorrect PDF password");
-  }
-  if (
-    /no transactions|could not extract|empty|unsupported|please upload|too large/i.test(
-      message,
-    )
-  ) {
-    throw AppError.badRequest(message);
-  }
-  throw AppError.internal(`Failed to parse PDF: ${message}`, error);
-}
 
 /**
  * Build the Express application (middleware + routes).
@@ -86,29 +72,7 @@ export function createApp(): express.Application {
     uploadRateLimiter,
     upload.single("file"),
     validate(parsePasswordBodySchema),
-    async (req, res) => {
-      if (!req.file) {
-        throw AppError.badRequest("Please upload a PDF file");
-      }
-      if (!req.file.originalname.toLowerCase().endsWith(".pdf")) {
-        throw AppError.badRequest("Please upload a PDF file");
-      }
-      try {
-        const password =
-          typeof req.body?.password === "string" ? req.body.password : "";
-        const { importId, result, inserted, skipped } = await processPdfImport({
-          userId: req.user!.id,
-          buffer: req.file.buffer,
-          filename: req.file.originalname,
-          password,
-          source: "upload",
-        });
-        res.json({ importId, inserted, skipped, ...result });
-      } catch (error) {
-        if (error instanceof AppError) throw error;
-        mapParseError(error);
-      }
-    },
+    uploadImportController,
   );
 
   /**
@@ -119,23 +83,8 @@ export function createApp(): express.Application {
     "/api/parse-ephemeral",
     uploadRateLimiter,
     upload.single("file"),
-    async (req, res) => {
-      if (!config.allowAnonParse) {
-        throw AppError.unauthorized("Authentication required");
-      }
-      if (!req.file) {
-        throw AppError.badRequest("Please upload a PDF file");
-      }
-      try {
-        const password =
-          typeof req.body?.password === "string" ? req.body.password : "";
-        const result = await parsePdf(req.file.buffer, password);
-        res.json(result);
-      } catch (error) {
-        if (error instanceof AppError) throw error;
-        mapParseError(error);
-      }
-    },
+    validate(parsePasswordBodySchema),
+    parseEphemeralController,
   );
 
   app.use(notFoundHandler);

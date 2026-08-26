@@ -8,6 +8,8 @@ import type {
   ListTransactionsOptions,
   MailMessageRow,
   NewTransactionInput,
+  PoolingRunRow,
+  PoolingRunStatus,
   ProviderRow,
   Store,
   TransactionOverrideRow,
@@ -33,6 +35,7 @@ export class MemoryStore implements Store {
   overrides: TransactionOverrideRow[] = [];
   gmail: GmailConnectionRow[] = [];
   mailMessages: MailMessageRow[] = [];
+  poolingRuns: PoolingRunRow[] = [];
   audits: Array<{ userId: string | null; action: string; meta: Record<string, unknown> }> =
     [];
 
@@ -532,6 +535,67 @@ export class MemoryStore implements Store {
     );
   }
 
+  async createPoolingRun(
+    input: Omit<PoolingRunRow, "id" | "startedAt" | "finishedAt" | "status"> & {
+      id?: string;
+      status?: PoolingRunStatus;
+    },
+  ): Promise<PoolingRunRow> {
+    const row: PoolingRunRow = {
+      id: input.id ?? randomUUID(),
+      userId: input.userId,
+      accountId: input.accountId,
+      trigger: input.trigger,
+      status: input.status ?? "running",
+      mode: input.mode,
+      month: input.month,
+      scanned: input.scanned,
+      imported: input.imported,
+      skipped: input.skipped,
+      errorMessage: input.errorMessage,
+      startedAt: nowIso(),
+      finishedAt: null,
+      meta: input.meta ?? {},
+    };
+    this.poolingRuns.unshift(row);
+    return row;
+  }
+
+  async updatePoolingRun(
+    id: string,
+    patch: Partial<
+      Pick<
+        PoolingRunRow,
+        | "status"
+        | "scanned"
+        | "imported"
+        | "skipped"
+        | "errorMessage"
+        | "finishedAt"
+        | "meta"
+      >
+    >,
+  ): Promise<PoolingRunRow | null> {
+    const row = this.poolingRuns.find((r) => r.id === id);
+    if (!row) return null;
+    Object.assign(row, patch);
+    return row;
+  }
+
+  async getLatestPoolingRun(userId: string): Promise<PoolingRunRow | null> {
+    return this.poolingRuns.find((r) => r.userId === userId) ?? null;
+  }
+
+  async listPoolingRuns(userId: string, limit = 10): Promise<PoolingRunRow[]> {
+    return this.poolingRuns.filter((r) => r.userId === userId).slice(0, limit);
+  }
+
+  async hasRunningPoolingRun(userId: string): Promise<boolean> {
+    return this.poolingRuns.some(
+      (r) => r.userId === userId && r.status === "running",
+    );
+  }
+
   async audit(
     userId: string | null,
     action: string,
@@ -550,6 +614,7 @@ export class MemoryStore implements Store {
     this.categories = this.categories.filter((c) => c.userId !== userId);
     this.gmail = this.gmail.filter((g) => g.userId !== userId);
     this.mailMessages = this.mailMessages.filter((m) => m.userId !== userId);
+    this.poolingRuns = this.poolingRuns.filter((r) => r.userId !== userId);
     await this.softDeleteUser(userId);
   }
 }

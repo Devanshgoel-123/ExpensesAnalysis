@@ -4,6 +4,7 @@ import { getStore } from "../db/index.js";
 import { validate } from "../middleware/validate.js";
 import { uuidParamSchema } from "../validators/common.js";
 import { createRuleBodySchema } from "../validators/rules.js";
+import { matchRule } from "./engine.js";
 
 export const rulesRouter = Router();
 rulesRouter.use(requireAuth);
@@ -47,8 +48,24 @@ rulesRouter.post("/", validate(createRuleBodySchema), async (req, res) => {
     setCategorySlug: body.setCategorySlug ?? null,
     setTags: body.setTags,
   });
-  await store.audit(req.user!.id, "rule.created", { ruleId: rule.id });
-  res.status(201).json({ rule });
+
+  const reclassified = await store.reclassifyByRule(
+    req.user!.id,
+    (candidate) => matchRule(rule, candidate),
+    {
+      payee: rule.setPayeeName ?? undefined,
+      merchant: undefined,
+      categorySlug: rule.setCategorySlug ?? undefined,
+      providerId: rule.setProviderId ?? undefined,
+      classificationSource: `rule:${rule.id}`,
+    },
+  );
+
+  await store.audit(req.user!.id, "rule.created", {
+    ruleId: rule.id,
+    reclassified,
+  });
+  res.status(201).json({ rule, reclassified });
 });
 
 rulesRouter.get("/suggestions", async (req, res) => {

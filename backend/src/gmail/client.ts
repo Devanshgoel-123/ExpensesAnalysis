@@ -113,20 +113,19 @@ export function buildStatementQuery(
     cleaned.length === 1
       ? `from:${cleaned[0]}`
       : `from:(${cleaned.join(" OR ")})`;
+  // Hard floor: never query mail before pooling earliest date.
+  const after =
+    options?.after && options.after > "2025-08-01"
+      ? options.after
+      : "2025-08-01";
   const parts = [
     `(${fromClause}`,
     `subject:(statement OR "account statement" OR e-statement)`,
     `has:attachment filename:pdf)`,
+    `after:${after.replace(/-/g, "/")}`,
   ];
-  if (options?.after) {
-    // Gmail after: uses YYYY/MM/DD
-    parts.push(`after:${options.after.replace(/-/g, "/")}`);
-  }
-  if (options?.before) {
+  if (options?.before && options.before > after) {
     parts.push(`before:${options.before.replace(/-/g, "/")}`);
-  }
-  if (!options?.after && !options?.before) {
-    parts.push("newer_than:365d");
   }
   return parts.join(" ");
 }
@@ -147,18 +146,18 @@ export function buildAlertQuery(
     cleaned.length === 1
       ? `from:${cleaned[0]}`
       : `from:(${cleaned.join(" OR ")})`;
+  const after =
+    options?.after && options.after > "2025-08-01"
+      ? options.after
+      : "2025-08-01";
   const parts = [
     fromClause,
-    `(debited OR credited OR "has been debited" OR "has been credited" OR UPI OR "Rs.")`,
+    // HDFC InstaAlerts often use "UPI txn" / "Account update" subjects.
+    `(debited OR credited OR "has been debited" OR "has been credited" OR UPI OR "UPI txn" OR "Account update" OR InstaAlerts OR "Rs." OR INR)`,
+    `after:${after.replace(/-/g, "/")}`,
   ];
-  if (options?.after) {
-    parts.push(`after:${options.after.replace(/-/g, "/")}`);
-  }
-  if (options?.before) {
+  if (options?.before && options.before > after) {
     parts.push(`before:${options.before.replace(/-/g, "/")}`);
-  }
-  if (!options?.after && !options?.before) {
-    parts.push("newer_than:90d");
   }
   return parts.join(" ");
 }
@@ -174,17 +173,20 @@ export async function listStatementMessageIds(
   connection: GmailConnectionRow,
   pageToken?: string,
   query?: string,
-): Promise<{ ids: string[]; nextPageToken?: string | null }> {
+): Promise<{ ids: string[]; nextPageToken?: string | null; resultSizeEstimate?: number | null }> {
   const gmail = await getAuthedGmail(connection);
+  const q = query ?? STATEMENT_QUERY;
   const res = await gmail.users.messages.list({
     userId: "me",
-    q: query ?? STATEMENT_QUERY,
+    q,
     maxResults: 25,
     pageToken,
   });
+  const ids = (res.data.messages ?? []).map((m) => m.id!).filter(Boolean);
   return {
-    ids: (res.data.messages ?? []).map((m) => m.id!).filter(Boolean),
+    ids,
     nextPageToken: res.data.nextPageToken,
+    resultSizeEstimate: res.data.resultSizeEstimate ?? null,
   };
 }
 
