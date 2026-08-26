@@ -3,25 +3,29 @@ import { GlowBackdrop } from "@/components/GlowBackdrop";
 
 const NODES = [
   {
-    title: "Next.js frontend",
-    detail: "Upload UI, dark dashboard, charts, tracked segments",
-  },
-  {
-    title: "Express API",
-    detail: "POST /api/parse — multipart PDF + password",
-  },
-  {
-    title: "PDF unlock + extract",
-    detail: "pdfjs-dist decrypts the statement and rebuilds table rows",
-  },
-  {
-    title: "HDFC row parser",
-    detail: "Date · Narration · Ref · Value Dt · Withdrawal / Deposit · Balance",
-  },
-  {
-    title: "Analytics layer",
+    title: "Bank setup",
     detail:
-      "Daily spend · UPI rollups · Apps · Deepan · ₹25–60 band",
+      "Pick bank + statement sender emails. Only those From: addresses enter Gmail search.",
+  },
+  {
+    title: "Enable pooling",
+    detail:
+      "gmail.readonly OAuth → allowlisted query → statement PDFs for the chosen month (default Aug 2026).",
+  },
+  {
+    title: "Import pipeline",
+    detail:
+      "HDFC adapter parses rows → fingerprint dedupe → Postgres transactions.",
+  },
+  {
+    title: "Category ⊃ provider",
+    detail:
+      "Food · Shopping · Travel · Outing (Rapido) · Investments — UPI handles map to providers.",
+  },
+  {
+    title: "Dashboard",
+    detail:
+      "Month filter, lifestyle split, top UPI handles, rules for people you track.",
   },
 ];
 
@@ -35,9 +39,9 @@ export default function ArchitecturePage() {
         <p className="brand compact">Ledgerline</p>
         <h1>System architecture</h1>
         <p className="lede">
-          Password-protected bank PDFs flow through a TypeScript backend into a
-          Next.js dashboard that segments spend by day, UPI ID, apps, people,
-          and amount bands.
+          Bank-mail pooling and PDF uploads land in Postgres, get classified under
+          lifestyle categories, and surface as month-scoped spends and top UPI
+          handles. Full schema and pooling design live in the repo docs.
         </p>
       </header>
 
@@ -56,48 +60,53 @@ export default function ArchitecturePage() {
       <section className="panel arch-diagram">
         <header className="panel-head">
           <h2>Data path</h2>
-          <p>End-to-end request flow</p>
+          <p>Pooling + upload → store → dashboard</p>
         </header>
-        <pre className="arch-pre">{`Browser (Next.js :3000)
-   │  FormData(file, password)
+        <pre className="arch-pre">{`Browser (Next.js)
+   │  Bank senders · Enable Pooling · month=2026-08
    ▼
-Express API (:4000)  POST /api/parse
-   │
-   ├─ pdfjs-dist  → unlock PDF
-   ├─ stitch wrapped narration lines
-   ├─ parse HDFC columns
-   └─ build analytics JSON
-        ├─ summary + daily series
-        ├─ upiRanking
-        ├─ merchantSpend (Swiggy, Bistro, MakeMyTrip…)
-        ├─ payeeSpend (Deepan)
-        └─ amountBand25to60 (count + days)
+Express API
+   ├─ /api/accounts     bank + statement_sender_emails
+   ├─ /api/gmail        OAuth · pooling/enable · allowlisted q=
+   ├─ /api/imports      PDF parse · dashboard?from&to
+   └─ /api/providers    category_slug ⊃ upi_handles
    │
    ▼
-Dashboard panels`}</pre>
+PostgreSQL
+   accounts · imports · transactions · providers · gmail_connections
+   │
+   ▼
+Dashboard
+   Top UPI handles · lifestyle split · daily chart`}</pre>
       </section>
 
       <section className="grid-main arch-grid">
         <article className="panel">
           <header className="panel-head">
-            <h2>frontend/</h2>
-            <p>Next.js App Router · TypeScript</p>
+            <h2>Docs</h2>
+            <p>Canonical write-up</p>
           </header>
           <ul className="arch-file-list">
-            <li>src/app — routes + dark theme</li>
-            <li>src/components — dashboard panels</li>
-            <li>src/lib — API client + shared types</li>
+            <li>
+              <code>docs/ARCHITECTURE.md</code> — schema ERD, pooling sequence,
+              category model, setup checklist
+            </li>
+            <li>
+              <code>backend/src/db/migrations/</code> — 001 initial · 002 bank
+              mail + pooling
+            </li>
           </ul>
         </article>
         <article className="panel">
           <header className="panel-head">
             <h2>backend/</h2>
-            <p>Express · TypeScript · pdfjs-dist</p>
+            <p>Express · Postgres · Gmail</p>
           </header>
           <ul className="arch-file-list">
-            <li>src/index.ts — HTTP server</li>
-            <li>src/parser.ts — PDF + analytics</li>
-            <li>src/types.ts — shared contracts</li>
+            <li>accounts/ — bank presets + mail allowlist</li>
+            <li>gmail/ — query builder + pooling enable</li>
+            <li>providers/ — categories ⊃ providers</li>
+            <li>imports/ — PDF pipeline + month dashboard</li>
           </ul>
         </article>
       </section>

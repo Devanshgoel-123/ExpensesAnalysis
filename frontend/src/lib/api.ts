@@ -19,32 +19,8 @@ function authHeaders(token: string): HeadersInit {
   return { Authorization: `Bearer ${token}` };
 }
 
-export async function register(input: {
-  email: string;
-  password: string;
-  inviteCode: string;
-  displayName?: string;
-}): Promise<{ token: string; user: AuthUser }> {
-  const res = await fetch(`${API_BASE}/api/auth/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
-}
-
-export async function login(
-  email: string,
-  password: string,
-): Promise<{ token: string; user: AuthUser }> {
-  const res = await fetch(`${API_BASE}/api/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
+export function googleLoginUrl(): string {
+  return `${API_BASE}/api/auth/google`;
 }
 
 export async function fetchMe(token: string): Promise<AuthUser> {
@@ -82,12 +58,93 @@ export async function parseStatement(
   return res.json();
 }
 
-export async function fetchDashboard(token: string): Promise<ParseResult> {
-  const res = await fetch(`${API_BASE}/api/imports/dashboard`, {
+export async function fetchDashboard(
+  token: string,
+  range?: { from?: string; to?: string },
+): Promise<ParseResult> {
+  const params = new URLSearchParams();
+  if (range?.from) params.set("from", range.from);
+  if (range?.to) params.set("to", range.to);
+  const qs = params.toString();
+  const res = await fetch(
+    `${API_BASE}/api/imports/dashboard${qs ? `?${qs}` : ""}`,
+    { headers: authHeaders(token) },
+  );
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export interface BankPreset {
+  id: string;
+  label: string;
+  adapterId: string | null;
+  pdfAdapterReady: boolean;
+  defaultSenderEmails: string[];
+  description: string;
+}
+
+export interface AccountSummary {
+  id: string;
+  userId: string;
+  bank: string;
+  label: string;
+  statementSenderEmails: string[];
+  poolingEnabled: boolean;
+  poolingStartedAt: string | null;
+}
+
+export async function fetchBankPresets(token: string) {
+  const res = await fetch(`${API_BASE}/api/accounts/bank-presets`, {
     headers: authHeaders(token),
   });
   if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
+  return res.json() as Promise<{ presets: BankPreset[]; notice: string }>;
+}
+
+export async function fetchAccounts(token: string) {
+  const res = await fetch(`${API_BASE}/api/accounts`, {
+    headers: authHeaders(token),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{ accounts: AccountSummary[] }>;
+}
+
+export async function patchAccount(
+  token: string,
+  body: {
+    bank?: string;
+    label?: string;
+    statementSenderEmails?: string[];
+    createIfMissing?: boolean;
+  },
+) {
+  const res = await fetch(`${API_BASE}/api/accounts`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{
+    account: AccountSummary;
+    readyForPooling: boolean;
+  }>;
+}
+
+export async function enablePooling(
+  token: string,
+  body: { month?: string; password?: string; maxMessages?: number } = {},
+) {
+  const res = await fetch(`${API_BASE}/api/gmail/pooling/enable`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{
+    month: string;
+    backfill: { imported: number; skipped: number; scanned: number };
+    notice: string;
+  }>;
 }
 
 export async function listRules(token: string) {
@@ -159,6 +216,41 @@ export async function listProviders(token: string) {
   }>;
 }
 
+export async function fetchPreferences(token: string) {
+  const res = await fetch(`${API_BASE}/api/preferences`, {
+    headers: authHeaders(token),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{ dailySpendLimit: number | null }>;
+}
+
+export async function updatePreferences(
+  token: string,
+  body: { dailySpendLimit: number | null },
+) {
+  const res = await fetch(`${API_BASE}/api/preferences`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{ dailySpendLimit: number | null }>;
+}
+
+export async function adminUpdateProviderLogo(
+  token: string,
+  providerId: string,
+  logoUrl: string | null,
+) {
+  const res = await fetch(`${API_BASE}/api/admin/providers/${providerId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ logoUrl }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
 export async function gmailStatus(token: string) {
   const res = await fetch(`${API_BASE}/api/gmail/status`, {
     headers: authHeaders(token),
@@ -170,6 +262,10 @@ export async function gmailStatus(token: string) {
     email: string | null;
     lastSyncAt: string | null;
     notice: string;
+    poolingEnabled: boolean;
+    poolingStartedAt: string | null;
+    bank: string | null;
+    statementSenderEmails: string[];
   }>;
 }
 

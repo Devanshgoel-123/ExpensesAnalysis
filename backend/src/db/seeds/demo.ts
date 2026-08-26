@@ -1,11 +1,10 @@
 /**
- * Optional seed helpers for local/demo environments.
- * Invoked by `npm run seed` — never run automatically in production.
+ * Optional seed verification for local/demo environments.
+ * Reference catalog data lives in migration 003_reference_data.up.sql.
  */
 import { config } from "../../config.js";
 import { getStore } from "../index.js";
 import { logger } from "../../logger/index.js";
-import { seedGlobals } from "../../providers/registry.js";
 
 async function main() {
   if (config.isProduction) {
@@ -13,15 +12,19 @@ async function main() {
   }
 
   const store = await getStore();
-  await seedGlobals(store);
-
-  for (const code of config.inviteCodes) {
-    await store.seedInvite(code, 1000);
-  }
+  const [categories, providers, presets] = await Promise.all([
+    store.listCategories("00000000-0000-0000-0000-000000000001"),
+    store.listProviders("00000000-0000-0000-0000-000000000001"),
+    store.listBankPresets(),
+  ]);
 
   logger.info(
-    { invites: config.inviteCodes.length },
-    "Seed complete (global providers + invite codes)",
+    {
+      categories: categories.length,
+      providers: providers.length,
+      bankPresets: presets.length,
+    },
+    "Reference data is loaded from database migrations",
   );
 }
 

@@ -1,17 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { fetchDashboard, parseStatement } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import type { ParseResult } from "@/lib/types";
+import type { AmountBand, ParseResult } from "@/lib/types";
 import { GlowBackdrop } from "@/components/GlowBackdrop";
 import { SiteNav } from "@/components/SiteNav";
 import { UploadPanel } from "@/components/UploadPanel";
 import { StatsRow } from "@/components/StatsRow";
 import { DailyChart } from "@/components/DailyChart";
+import { DailyInsightsPanel } from "@/components/DailyInsightsPanel";
 import { UpiRankingList } from "@/components/UpiRankingList";
 import { MerchantSpendPanel } from "@/components/MerchantSpendPanel";
 import { CategoryBreakdown } from "@/components/CategoryBreakdown";
@@ -19,17 +20,31 @@ import { PayeeSpendPanel } from "@/components/PayeeSpendPanel";
 import { AmountBandPanel } from "@/components/AmountBandPanel";
 import { TransactionTable } from "@/components/TransactionTable";
 import { SettingsPanel } from "@/components/SettingsPanel";
+import { BankPoolingPanel } from "@/components/BankPoolingPanel";
 import { AuthGate } from "@/components/AuthGate";
 
-const EMPTY_BAND = {
-  label: "₹25 – ₹60",
-  min: 25,
-  max: 60,
+const EMPTY_BAND: AmountBand = {
+  label: "",
+  min: 0,
+  max: 0,
   count: 0,
   total: 0,
-  days: [] as string[],
-  dayCounts: {} as Record<string, number>,
+  days: [],
+  dayCounts: {},
 };
+
+function currentMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthBounds(month: string): { from: string; to: string } {
+  const [y, m] = month.split("-").map(Number);
+  const from = `${month}-01`;
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const to = `${month}-${String(lastDay).padStart(2, "0")}`;
+  return { from, to };
+}
 
 function DashboardInner() {
   const { token, logout } = useAuth();
@@ -37,15 +52,17 @@ function DashboardInner() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [month, setMonth] = useState(currentMonth);
 
   const bump = useCallback(() => setRefreshKey((k) => k + 1), []);
+  const range = useMemo(() => monthBounds(month), [month]);
 
   useEffect(() => {
     let cancelled = false;
     void Promise.resolve().then(async () => {
       if (!token || cancelled) return;
       try {
-        const result = await fetchDashboard(token);
+        const result = await fetchDashboard(token, range);
         if (cancelled) return;
         if (result.transactions.length > 0) setData(result);
         else setData(null);
@@ -56,7 +73,7 @@ function DashboardInner() {
     return () => {
       cancelled = true;
     };
-  }, [token, refreshKey]);
+  }, [token, refreshKey, range]);
 
   async function handleParse(file: File, password: string) {
     if (!token) return;
@@ -65,6 +82,7 @@ function DashboardInner() {
     try {
       const result = await parseStatement(file, password, token);
       setData(result);
+      bump();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -72,6 +90,16 @@ function DashboardInner() {
     }
   }
 
+  const monthControl = (
+    <label className="field" style={{ minWidth: 140, margin: 0 }}>
+      <span className="meta">Month</span>
+      <input
+        type="month"
+        value={month}
+        onChange={(e) => setMonth(e.target.value || currentMonth())}
+      />
+    </label>
+  );
   if (!data) {
     return (
       <main className="shell landing">
@@ -79,17 +107,21 @@ function DashboardInner() {
         <div className="landing-content">
           <SiteNav />
           <div className="badge-pill">
-            <Sparkles size={13} /> Invite-only multi-user beta
+            <Sparkles size={13} /> Personal bank-mail pooling
           </div>
           <header className="brand-block">
             <p className="brand">Ledgerline</p>
             <h1 className="ui-header">Your spends. Sorted. Understood.</h1>
             <p className="lede">
-              Upload a password-protected bank PDF, track people with your own
-              rules, and optionally connect Gmail for statement backfill.
+              Molten backdrop. Counted spends. Set your bank senders, pool August,
+              and watch top UPI handles add up where the money went.
             </p>
           </header>
+          <div style={{ marginBottom: "1rem", maxWidth: 200 }}>{monthControl}</div>
           <UploadPanel onParsed={handleParse} loading={loading} error={error} />
+          <div style={{ marginTop: "1.5rem" }}>
+            <BankPoolingPanel onChanged={bump} defaultMonth={month} />
+          </div>
           <div style={{ marginTop: "1.5rem" }}>
             <SettingsPanel onChanged={bump} />
           </div>
@@ -102,10 +134,12 @@ function DashboardInner() {
     );
   }
 
-  const range =
+  const periodLabel =
     data.summary.dateFrom && data.summary.dateTo
       ? `${data.summary.dateFrom} → ${data.summary.dateTo}`
-      : "Statement period";
+      : `Month ${month}`;
+  const categories = data.categories ?? [];
+  const amountBand = data.amountBand25to60 ?? EMPTY_BAND;
 
   return (
     <main className="shell dashboard">
@@ -121,9 +155,10 @@ function DashboardInner() {
           <div>
             <p className="brand compact">Ledgerline</p>
             <h1 className="ui-header">Expense dashboard</h1>
-            <p className="meta">{range}</p>
+            <p className="meta">{periodLabel}</p>
           </div>
           <div className="sort-bar">
+            {monthControl}
             <button
               type="button"
               className="ghost"
@@ -148,8 +183,16 @@ function DashboardInner() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.08, duration: 0.35 }}
         >
-          <DailyChart data={data.daily} />
-          <UpiRankingList items={data.upiRanking} />
+          <DailyChart data={data.daily} insights={data.dailyInsights} />
+          <UpiRankingList items={data.upiRanking} month={month} />
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1, duration: 0.35 }}
+        >
+          <DailyInsightsPanel insights={data.dailyInsights} />
         </motion.div>
 
         <motion.div
@@ -159,7 +202,8 @@ function DashboardInner() {
         >
           <CategoryBreakdown
             merchants={data.merchantSpend ?? []}
-            cigaretteBand={data.amountBand25to60 ?? EMPTY_BAND}
+            cigaretteBand={amountBand}
+            categories={categories}
           />
         </motion.div>
 
@@ -168,7 +212,10 @@ function DashboardInner() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.16, duration: 0.35 }}
         >
-          <MerchantSpendPanel items={data.merchantSpend ?? []} />
+          <MerchantSpendPanel
+            items={data.merchantSpend ?? []}
+            categories={categories}
+          />
         </motion.div>
 
         <motion.div
@@ -179,7 +226,7 @@ function DashboardInner() {
         >
           <PayeeSpendPanel items={data.payeeSpend ?? []} />
           <AmountBandPanel
-            band={data.amountBand25to60 ?? EMPTY_BAND}
+            band={amountBand}
             dateFrom={data.summary.dateFrom}
             dateTo={data.summary.dateTo}
           />
@@ -190,6 +237,14 @@ function DashboardInner() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.22, duration: 0.35 }}
         >
+          <BankPoolingPanel onChanged={bump} defaultMonth={month} />
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.23, duration: 0.35 }}
+        >
           <SettingsPanel onChanged={bump} />
         </motion.div>
 
@@ -198,7 +253,10 @@ function DashboardInner() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.24, duration: 0.35 }}
         >
-          <TransactionTable items={data.transactions} />
+          <TransactionTable
+            items={data.transactions}
+            categories={categories}
+          />
         </motion.div>
       </div>
     </main>

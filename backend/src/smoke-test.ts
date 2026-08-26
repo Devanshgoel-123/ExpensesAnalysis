@@ -1,7 +1,5 @@
 import {
   buildAnalytics,
-  detectMerchant,
-  detectPayee,
   parseTransactions,
   stitchStatementLines,
 } from "./parser.js";
@@ -20,13 +18,6 @@ TIB0AXLUPI-125668500802-UPI
 04/07/26 CASH DEPOSIT-XXXXXXXXXXX2641-RANDER ROAD 0000000000008512 04/07/26 5,000.00 36,758.00
 `;
 
-if (detectMerchant("UPI-MAKE MY TRIP-MAKEMYTRIP2ONLINE@AXL") !== "MakeMyTrip") {
-  throw new Error("MakeMyTrip multi-word narration not detected");
-}
-if (detectPayee("UPI-DEEPAN-someone") !== "Deepan") {
-  throw new Error("Deepan payee not detected");
-}
-
 const stitched = stitchStatementLines(wrappedMmt.trim().split("\n"));
 const mmtLine = stitched.find((l) => /makemytrip/i.test(l));
 if (!mmtLine || !/19,475\.00/.test(mmtLine)) {
@@ -34,9 +25,11 @@ if (!mmtLine || !/19,475\.00/.test(mmtLine)) {
 }
 
 const txns = parseTransactions(wrappedMmt);
-const analytics = buildAnalytics(txns);
+const analytics = buildAnalytics(txns, {
+  amountBand: { label: "₹25 – ₹60", min: 25, max: 60 },
+});
 
-const mmt = txns.find((t) => t.merchant === "MakeMyTrip");
+const mmt = txns.find((t) => /makemytrip/i.test(t.description));
 if (!mmt || mmt.amount !== 19475 || mmt.type !== "debit") {
   throw new Error(`Expected MakeMyTrip debit 19475, got ${JSON.stringify(mmt)}`);
 }
@@ -56,11 +49,6 @@ if (!deposit || deposit.type !== "credit") {
 const timed = txns.find((t) => t.amount === 500);
 if (!timed?.time || timed.time !== "14:32:10") {
   throw new Error(`Expected time 14:32:10 on Deepan txn, got ${timed?.time}`);
-}
-
-const deepan = analytics.payeeSpend.find((p) => p.name === "Deepan");
-if (!deepan || deepan.count !== 2 || deepan.total !== 750) {
-  throw new Error(`Deepan mismatch: ${JSON.stringify(deepan)}`);
 }
 
 const band = analytics.amountBand25to60;

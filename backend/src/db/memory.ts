@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type {
   AccountRow,
+  BankPresetRow,
   CategoryRow,
   GmailConnectionRow,
   ImportRow,
@@ -22,6 +23,7 @@ export class MemoryStore implements Store {
   users = new Map<string, UserRow>();
   invites = new Map<string, { code: string; maxUses: number; usedCount: number }>();
   categories: CategoryRow[] = [];
+  bankPresets: BankPresetRow[] = [];
   providers: ProviderRow[] = [];
   rules: UserRuleRow[] = [];
   accounts: AccountRow[] = [];
@@ -33,7 +35,8 @@ export class MemoryStore implements Store {
     [];
 
   async migrate(): Promise<void> {
-    // no-op — schema is implicit in the in-memory collections
+    const { seedMemoryReferenceData } = await import("./referenceSeed.js");
+    await seedMemoryReferenceData(this);
   }
 
   async healthCheck(): Promise<boolean> {
@@ -58,6 +61,7 @@ export class MemoryStore implements Store {
       email,
       passwordHash: input.passwordHash,
       displayName: input.displayName ?? null,
+      dailySpendLimit: null,
       createdAt: nowIso(),
       deletedAt: null,
     };
@@ -76,6 +80,18 @@ export class MemoryStore implements Store {
   async findUserById(id: string): Promise<UserRow | null> {
     const user = this.users.get(id);
     if (!user || user.deletedAt) return null;
+    return user;
+  }
+
+  async updateUserPreferences(
+    userId: string,
+    patch: Partial<{ dailySpendLimit: number | null }>,
+  ): Promise<UserRow | null> {
+    const user = await this.findUserById(userId);
+    if (!user) return null;
+    if ("dailySpendLimit" in patch) {
+      user.dailySpendLimit = patch.dailySpendLimit ?? null;
+    }
     return user;
   }
 
@@ -99,7 +115,9 @@ export class MemoryStore implements Store {
   }
 
   async listCategories(userId: string): Promise<CategoryRow[]> {
-    return this.categories.filter((c) => c.isGlobal || c.userId === userId);
+    return this.categories
+      .filter((c) => c.isGlobal || c.userId === userId)
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label));
   }
 
   async upsertCategory(
@@ -114,9 +132,44 @@ export class MemoryStore implements Store {
       Object.assign(existing, input, { id: existing.id });
       return existing;
     }
-    const row: CategoryRow = { ...input, id: input.id ?? randomUUID() };
+    const row: CategoryRow = {
+      ...input,
+      sortOrder: input.sortOrder ?? 100,
+      meta: input.meta ?? {},
+      id: input.id ?? randomUUID(),
+    };
     this.categories.push(row);
     return row;
+  }
+
+  async listBankPresets(): Promise<BankPresetRow[]> {
+    return [...this.bankPresets].sort(
+      (a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label),
+    );
+  }
+
+  async getBankPreset(id: string): Promise<BankPresetRow | null> {
+    return (
+      this.bankPresets.find((b) => b.id.toLowerCase() === id.toLowerCase()) ??
+      null
+    );
+  }
+
+  async getDefaultBankPreset(): Promise<BankPresetRow | null> {
+    const presets = await this.listBankPresets();
+    return (
+      presets.find((preset) => preset.pdfAdapterReady) ?? presets[0] ?? null
+    );
+  }
+
+  async upsertBankPreset(input: BankPresetRow): Promise<BankPresetRow> {
+    const existing = this.bankPresets.find((b) => b.id === input.id);
+    if (existing) {
+      Object.assign(existing, input);
+      return existing;
+    }
+    this.bankPresets.push({ ...input });
+    return input;
   }
 
   async listProviders(userId: string): Promise<ProviderRow[]> {
@@ -126,6 +179,13 @@ export class MemoryStore implements Store {
   async upsertProvider(
     input: Omit<ProviderRow, "id"> & { id?: string },
   ): Promise<ProviderRow> {
+    if (input.id) {
+      const byId = this.providers.find((p) => p.id === input.id);
+      if (byId) {
+        Object.assign(byId, input, { id: byId.id });
+        return byId;
+      }
+    }
     const existing = this.providers.find(
       (p) =>
         p.canonicalName.toLowerCase() === input.canonicalName.toLowerCase() &&
@@ -154,6 +214,10 @@ export class MemoryStore implements Store {
     );
   }
 
+  async getProviderById(id: string): Promise<ProviderRow | null> {
+    return this.providers.find((p) => p.id === id) ?? null;
+  }
+
   async listRules(userId: string): Promise<UserRuleRow[]> {
     return this.rules
       .filter((r) => r.userId === userId && r.enabled)
@@ -174,17 +238,23 @@ export class MemoryStore implements Store {
     );
   }
 
-  async getOrCreateAccount(userId: string, bank = "HDFC"): Promise<AccountRow> {
+  async getOrCreateAccount(
+    userId: string,
+    bank?: string | null,
+  ): Promise<AccountRow> {
+    const resolved =
+      bank ?? (await this.getDefaultBankPreset())?.id ?? "UNKNOWN";
     const existing = this.accounts.find(
-      (a) => a.userId === userId && a.bank === bank,
+      (a) => a.userId === userId && a.bank === resolved,
     );
     if (existing) return existing;
+    const preset = await this.getBankPreset(resolved);
     const row: AccountRow = {
       id: randomUUID(),
       userId,
-      bank,
-      label: "Primary",
-      statementSenderEmails: [],
+      bank: resolved,
+      label: preset?.label ?? "Primary",
+      statementSenderEmails: preset ? [...preset.defaultSenderEmails] : [],
       poolingEnabled: false,
       poolingStartedAt: null,
     };

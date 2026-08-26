@@ -12,8 +12,19 @@ export interface UserRow {
   email: string;
   passwordHash: string;
   displayName: string | null;
+  dailySpendLimit: number | null;
   createdAt: string;
   deletedAt: string | null;
+}
+
+export interface UserPreferences {
+  dailySpendLimit: number | null;
+}
+
+export interface CategoryMeta {
+  amountBandMin?: number;
+  amountBandMax?: number;
+  amountBandLabel?: string;
 }
 
 export interface CategoryRow {
@@ -23,7 +34,19 @@ export interface CategoryRow {
   label: string;
   blurb: string;
   accent: string;
+  sortOrder: number;
+  meta: CategoryMeta;
   isGlobal: boolean;
+}
+
+export interface BankPresetRow {
+  id: string;
+  label: string;
+  adapterId: string | null;
+  pdfAdapterReady: boolean;
+  defaultSenderEmails: string[];
+  description: string;
+  sortOrder: number;
 }
 
 export interface ProviderRow {
@@ -171,12 +194,21 @@ export interface Store {
   }): Promise<UserRow>;
   findUserByEmail(email: string): Promise<UserRow | null>;
   findUserById(id: string): Promise<UserRow | null>;
+  updateUserPreferences(
+    userId: string,
+    patch: Partial<UserPreferences>,
+  ): Promise<UserRow | null>;
   softDeleteUser(userId: string): Promise<void>;
   consumeInvite(code: string): Promise<boolean>;
   seedInvite(code: string, maxUses?: number): Promise<void>;
 
   listCategories(userId: string): Promise<CategoryRow[]>;
   upsertCategory(input: Omit<CategoryRow, "id"> & { id?: string }): Promise<CategoryRow>;
+
+  listBankPresets(): Promise<BankPresetRow[]>;
+  getBankPreset(id: string): Promise<BankPresetRow | null>;
+  getDefaultBankPreset(): Promise<BankPresetRow | null>;
+  upsertBankPreset(input: BankPresetRow): Promise<BankPresetRow>;
 
   listProviders(userId: string): Promise<ProviderRow[]>;
   upsertProvider(
@@ -186,6 +218,7 @@ export interface Store {
     userId: string,
     name: string,
   ): Promise<ProviderRow | null>;
+  getProviderById(id: string): Promise<ProviderRow | null>;
 
   listRules(userId: string): Promise<UserRuleRow[]>;
   createRule(
@@ -193,7 +226,7 @@ export interface Store {
   ): Promise<UserRuleRow>;
   deleteRule(userId: string, ruleId: string): Promise<void>;
 
-  getOrCreateAccount(userId: string, bank?: string): Promise<AccountRow>;
+  getOrCreateAccount(userId: string, bank?: string | null): Promise<AccountRow>;
   listAccounts(userId: string): Promise<AccountRow[]>;
   updateAccountMailSources(
     userId: string,

@@ -3,20 +3,25 @@
 import { motion } from "framer-motion";
 import type { UpiRanking } from "@/lib/types";
 import { formatInr } from "@/lib/api";
+import { LiveCounter } from "@/components/LiveCounter";
 import { SpotlightCard } from "@/components/SpotlightCard";
 
 interface UpiRankingListProps {
   items: UpiRanking[];
+  month?: string;
 }
 
-export function UpiRankingList({ items }: UpiRankingListProps) {
+export function UpiRankingList({ items, month }: UpiRankingListProps) {
   const max = items[0]?.total ?? 1;
 
   return (
     <SpotlightCard className="panel upi-panel">
       <header className="panel-head">
-        <h2 className="ui-header">Spend by UPI ID</h2>
-        <p className="meta">Same payee, aggregated</p>
+        <h2 className="ui-header">Top UPI handles</h2>
+        <p className="meta">
+          Most common transfer targets
+          {month ? ` · ${month}` : ""} — by spend
+        </p>
       </header>
 
       {items.length === 0 ? (
@@ -37,11 +42,16 @@ export function UpiRankingList({ items }: UpiRankingListProps) {
                 <div className="upi-meta">
                   <strong className="mono">{item.upiId}</strong>
                   <span className="meta">
-                    {item.count} txn · last {item.lastDate}
+                    <LiveCounter value={item.count} durationMs={900} /> txn · last{" "}
+                    {item.lastDate}
                   </span>
                 </div>
                 <span className="upi-amount display-num sm">
-                  {formatInr(item.total)}
+                  <LiveCounter
+                    value={item.total}
+                    format={(n) => formatInr(n)}
+                    durationMs={1100 + index * 40}
+                  />
                 </span>
               </div>
               <div className="progress-track">

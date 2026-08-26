@@ -1,9 +1,14 @@
 import bcrypt from "bcryptjs";
+import { randomBytes } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { config } from "../config.js";
 import { getStore } from "../db/index.js";
 import { AppError } from "../errors/AppError.js";
+
+/** Session JWTs last 7 days, then they are rejected and the client drops them. */
+export const SESSION_TTL = "7d" as const;
+export const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 export interface AuthUser {
   id: string;
@@ -20,8 +25,13 @@ declare global {
 
 export function signToken(user: AuthUser): string {
   return jwt.sign({ sub: user.id, email: user.email }, config.jwtSecret, {
-    expiresIn: "30d",
+    expiresIn: SESSION_TTL,
   });
+}
+
+export function isGoogleEmailAllowed(email: string): boolean {
+  if (config.google.allowedEmails.length === 0) return true;
+  return config.google.allowedEmails.includes(email.trim().toLowerCase());
 }
 
 export function requireAuth(req: Request, _res: Response, next: NextFunction): void {
@@ -85,6 +95,36 @@ export async function loginUser(input: {
     throw AppError.unauthorized("Invalid email or password");
   }
   await store.audit(user.id, "auth.login", {});
+  const authUser = { id: user.id, email: user.email };
+  return { token: signToken(authUser), user: authUser };
+}
+
+export async function loginOrRegisterWithGoogle(input: {
+  email: string;
+  displayName?: string | null;
+}): Promise<{ token: string; user: AuthUser }> {
+  const email = input.email.trim().toLowerCase();
+  if (!email) {
+    throw AppError.unauthorized("Google did not return an email");
+  }
+  if (!isGoogleEmailAllowed(email)) {
+    throw AppError.forbidden("This Google account is not allowed to sign in");
+  }
+
+  const store = await getStore();
+  let user = await store.findUserByEmail(email);
+  if (!user) {
+    const passwordHash = await bcrypt.hash(randomBytes(32).toString("hex"), 10);
+    user = await store.createUser({
+      email,
+      passwordHash,
+      displayName: input.displayName ?? null,
+    });
+    await store.audit(user.id, "auth.register.google", { email: user.email });
+  } else {
+    await store.audit(user.id, "auth.login.google", {});
+  }
+
   const authUser = { id: user.id, email: user.email };
   return { token: signToken(authUser), user: authUser };
 }

@@ -1,4 +1,5 @@
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { buildDailyInsights } from "./analytics/dailyInsights.js";
 import type {
   AmountBand,
   DailySpend,
@@ -14,43 +15,6 @@ import type {
  * HDFC-style statement columns:
  * Date | Narration | Chq./Ref.No. | Value Dt | Withdrawal Amt. | Deposit Amt. | Closing Balance
  */
-
-/** Tracked apps — order matters (Bistro before Swiggy). */
-const TRACKED_MERCHANTS: Array<{ name: string; pattern: RegExp }> = [
-  { name: "Bistro", pattern: /bistro/i },
-  { name: "Swiggy", pattern: /swiggy/i },
-  { name: "Ayodhya", pattern: /ayodhya/i },
-  {
-    name: "MakeMyTrip",
-    pattern: /makemytrip|make\s*my\s*trip|make\s*my|mmt\b|makemytrip\d*online/i,
-  },
-  { name: "Rapido", pattern: /rapido/i },
-  { name: "Zepto", pattern: /zepto/i },
-  { name: "District", pattern: /district/i },
-];
-
-const TRACKED_PAYEES: Array<{ name: string; pattern: RegExp }> = [
-  { name: "Deepan", pattern: /deepan/i },
-  { name: "Mehak", pattern: /mehak/i },
-  { name: "Tanisha", pattern: /tanisha/i },
-  { name: "Tapasya", pattern: /tapasya/i },
-];
-
-export function detectMerchant(text: string): string | null {
-  const normalized = text.replace(/\s+/g, " ");
-  for (const merchant of TRACKED_MERCHANTS) {
-    if (merchant.pattern.test(normalized)) return merchant.name;
-  }
-  return null;
-}
-
-export function detectPayee(text: string): string | null {
-  const normalized = text.replace(/\s+/g, " ");
-  for (const payee of TRACKED_PAYEES) {
-    if (payee.pattern.test(normalized)) return payee.name;
-  }
-  return null;
-}
 
 const HEADER_RE =
   /^(date|narration|chq\.?\/?ref\.?|value\s*dt|withdrawal|deposit|closing\s*balance)/i;
@@ -413,8 +377,8 @@ export function parseTransactions(text: string): Transaction[] {
       amount: parsed.amount,
       type: parsed.type,
       upiId: parsed.upiId,
-      merchant: detectMerchant(parsed.narration),
-      payee: detectPayee(parsed.narration),
+      merchant: null,
+      payee: null,
       raw: parsed.raw,
       closingBalance: parsed.closingBalance,
       order: internals.length,
@@ -439,7 +403,12 @@ export function parseTransactions(text: string): Transaction[] {
     );
 }
 
-export function buildAnalytics(transactions: Transaction[]): ParseResult {
+export function buildAnalytics(
+  transactions: Transaction[],
+  options?: {
+    amountBand?: { label: string; min: number; max: number } | null;
+  },
+): ParseResult {
   const debits = transactions.filter((t) => t.type === "debit");
   const credits = transactions.filter((t) => t.type === "credit");
 
@@ -476,26 +445,18 @@ export function buildAnalytics(transactions: Transaction[]): ParseResult {
   const upiRanking = [...upiMap.values()].sort((a, b) => b.total - a.total);
 
   const merchantMap = new Map<string, MerchantSpend>();
-  for (const name of [
-    "Swiggy",
-    "Bistro",
-    "Ayodhya",
-    "MakeMyTrip",
-    "Rapido",
-    "Zepto",
-    "District",
-  ]) {
-    merchantMap.set(name, {
-      merchant: name,
-      total: 0,
-      count: 0,
-      lastDate: "",
-    });
-  }
   for (const t of debits) {
     if (!t.merchant) continue;
-    const bucket = merchantMap.get(t.merchant);
-    if (!bucket) continue;
+    let bucket = merchantMap.get(t.merchant);
+    if (!bucket) {
+      bucket = {
+        merchant: t.merchant,
+        total: 0,
+        count: 0,
+        lastDate: "",
+      };
+      merchantMap.set(t.merchant, bucket);
+    }
     bucket.total = Math.round((bucket.total + t.amount) * 100) / 100;
     bucket.count += 1;
     if (!bucket.lastDate || t.date > bucket.lastDate) bucket.lastDate = t.date;
@@ -505,20 +466,19 @@ export function buildAnalytics(transactions: Transaction[]): ParseResult {
   );
 
   const payeeMap = new Map<string, PayeeSpend>();
-  for (const { name } of TRACKED_PAYEES) {
-    payeeMap.set(name, {
-      name,
-      total: 0,
-      count: 0,
-      lastDate: "",
-      days: [],
-    });
-  }
-  // People tracking includes both money sent (debit) and received (credit)
   for (const t of transactions) {
     if (!t.payee) continue;
-    const bucket = payeeMap.get(t.payee);
-    if (!bucket) continue;
+    let bucket = payeeMap.get(t.payee);
+    if (!bucket) {
+      bucket = {
+        name: t.payee,
+        total: 0,
+        count: 0,
+        lastDate: "",
+        days: [],
+      };
+      payeeMap.set(t.payee, bucket);
+    }
     bucket.total = Math.round((bucket.total + t.amount) * 100) / 100;
     bucket.count += 1;
     if (!bucket.days.includes(t.date)) bucket.days.push(t.date);
@@ -529,20 +489,26 @@ export function buildAnalytics(transactions: Transaction[]): ParseResult {
   }
   const payeeSpend = [...payeeMap.values()].sort((a, b) => b.total - a.total);
 
+  const bandConfig = options?.amountBand ?? null;
   const bandDayCounts: Record<string, number> = {};
   let bandCount = 0;
   let bandTotal = 0;
   for (const t of debits) {
-    if (t.amount >= 25 && t.amount <= 60) {
-      bandCount += 1;
-      bandTotal += t.amount;
-      bandDayCounts[t.date] = (bandDayCounts[t.date] ?? 0) + 1;
+    if (
+      !bandConfig ||
+      t.amount < bandConfig.min ||
+      t.amount > bandConfig.max
+    ) {
+      continue;
     }
+    bandCount += 1;
+    bandTotal += t.amount;
+    bandDayCounts[t.date] = (bandDayCounts[t.date] ?? 0) + 1;
   }
   const amountBand25to60: AmountBand = {
-    label: "₹25 – ₹60",
-    min: 25,
-    max: 60,
+    label: bandConfig?.label ?? "",
+    min: bandConfig?.min ?? 0,
+    max: bandConfig?.max ?? 0,
     count: bandCount,
     total: Math.round(bandTotal * 100) / 100,
     days: Object.keys(bandDayCounts).sort(),
@@ -554,6 +520,8 @@ export function buildAnalytics(transactions: Transaction[]): ParseResult {
   const totalReceived =
     Math.round(credits.reduce((sum, t) => sum + t.amount, 0) * 100) / 100;
   const days = daily.length || 1;
+
+  const dailyInsights = buildDailyInsights(daily, null);
 
   return {
     summary: {
@@ -567,6 +535,7 @@ export function buildAnalytics(transactions: Transaction[]): ParseResult {
       dateTo: daily[daily.length - 1]?.date ?? null,
     },
     daily,
+    dailyInsights,
     upiRanking,
     merchantSpend,
     payeeSpend,

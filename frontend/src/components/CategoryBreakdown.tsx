@@ -1,82 +1,80 @@
 "use client";
 
 import { motion } from "framer-motion";
-import type { AmountBand, MerchantSpend } from "@/lib/types";
+import type { AmountBand, CategorySummary, MerchantSpend } from "@/lib/types";
 import { formatInr } from "@/lib/api";
-import {
-  CATEGORY_META,
-  MERCHANT_CATEGORY,
-  type LifestyleCategory,
-} from "@/lib/categories";
 import { LiveCounter } from "@/components/LiveCounter";
 import { SpotlightCard } from "@/components/SpotlightCard";
 
 interface CategoryBreakdownProps {
   merchants: MerchantSpend[];
   cigaretteBand: AmountBand;
+  categories: CategorySummary[];
 }
 
 interface CategoryBucket {
-  id: LifestyleCategory;
+  id: string;
+  label: string;
+  blurb: string;
+  accent: string;
   total: number;
   count: number;
   members: string[];
 }
 
-const DISPLAY_ORDER: LifestyleCategory[] = [
-  "food",
-  "shopping",
-  "travel",
-  "outing",
-  "investments",
-  "cigarettes",
-  "other",
-];
-
 function buildBuckets(
   merchants: MerchantSpend[],
   cigaretteBand: AmountBand,
+  categories: CategorySummary[],
 ): CategoryBucket[] {
-  const byCategory = new Map<LifestyleCategory, MerchantSpend[]>();
+  const byCategory = new Map<string, MerchantSpend[]>();
   for (const row of merchants) {
-    const cat = MERCHANT_CATEGORY[row.merchant] ?? "other";
+    const cat = row.categorySlug ?? "other";
     const list = byCategory.get(cat) ?? [];
     list.push(row);
     byCategory.set(cat, list);
   }
 
-  return DISPLAY_ORDER.map((id) => {
-    if (id === "cigarettes") {
+  return [...categories]
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((category) => {
+      if (category.slug === "cigarettes") {
+        return {
+          id: category.slug,
+          label: category.label,
+          blurb: category.blurb,
+          accent: category.accent,
+          total: cigaretteBand.total,
+          count: cigaretteBand.count,
+          members: cigaretteBand.days.length
+            ? [`${cigaretteBand.days.length} days`]
+            : [category.meta.amountBandLabel ?? category.label],
+        };
+      }
+
+      const rows = byCategory.get(category.slug) ?? [];
+      const members = rows
+        .filter((r) => r.count > 0)
+        .map((r) => r.merchant);
+
       return {
-        id,
-        total: cigaretteBand.total,
-        count: cigaretteBand.count,
-        members: cigaretteBand.days.length
-          ? [`${cigaretteBand.days.length} days`]
-          : ["₹25–₹60"],
+        id: category.slug,
+        label: category.label,
+        blurb: category.blurb,
+        accent: category.accent,
+        total: Math.round(rows.reduce((s, m) => s + m.total, 0) * 100) / 100,
+        count: rows.reduce((s, m) => s + m.count, 0),
+        members: members.length ? members : [category.label],
       };
-    }
-    const rows = byCategory.get(id) ?? [];
-    const known = Object.entries(MERCHANT_CATEGORY)
-      .filter(([, c]) => c === id)
-      .map(([name]) => name);
-    const members = rows
-      .filter((r) => r.count > 0)
-      .map((r) => r.merchant);
-    return {
-      id,
-      total: Math.round(rows.reduce((s, m) => s + m.total, 0) * 100) / 100,
-      count: rows.reduce((s, m) => s + m.count, 0),
-      members: members.length ? members : known.length ? known : [CATEGORY_META[id].label],
-    };
-  });
+    });
 }
 
 export function CategoryBreakdown({
   merchants,
   cigaretteBand,
+  categories,
 }: CategoryBreakdownProps) {
-  const buckets = buildBuckets(merchants, cigaretteBand);
+  const buckets = buildBuckets(merchants, cigaretteBand, categories);
   const max = Math.max(...buckets.map((b) => b.total), 1);
 
   return (
@@ -88,7 +86,6 @@ export function CategoryBreakdown({
 
       <div className="category-grid">
         {buckets.map((bucket, index) => {
-          const meta = CATEGORY_META[bucket.id];
           const empty = bucket.count === 0;
           const width = empty ? 0 : (bucket.total / max) * 100;
 
@@ -103,7 +100,7 @@ export function CategoryBreakdown({
                 className={`category-card cat-${bucket.id} ${empty ? "empty" : ""}`}
               >
                 <div className="category-label-row">
-                  <span className="category-kicker">{meta.label}</span>
+                  <span className="category-kicker">{bucket.label}</span>
                   <span className="live-dot" aria-hidden />
                 </div>
                 <h3 className="display-num">
@@ -116,7 +113,7 @@ export function CategoryBreakdown({
                     />
                   )}
                 </h3>
-                <p className="meta">{meta.blurb}</p>
+                <p className="meta">{bucket.blurb}</p>
                 <p className="meta">
                   {empty ? (
                     "No hits yet"

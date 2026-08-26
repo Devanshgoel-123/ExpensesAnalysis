@@ -19,10 +19,12 @@ Designed as a production-shaped system that can grow toward **100,000+ users** �
 
 1. Invite-only accounts with JWT sessions and account wipe
 2. Authenticated PDF upload → parse (HDFC adapter) → fingerprint dedupe → persist
-3. Dashboard analytics from stored transactions
+3. Dashboard analytics from stored transactions (month filter, top UPI handles)
 4. User rules for people/merchant tracking + correction → future matching
-5. Provider registry with curated logos
-6. Optional Gmail `readonly` backfill (restricted Google scope)
+5. Provider registry under lifestyle categories (food, outing, travel, …)
+6. Optional Gmail `readonly` pooling scoped to **bank statement sender allowlist only**
+
+Deep dive: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — table schema, category→provider model, pooling sequence, personal-use checklist.
 
 ---
 
@@ -63,10 +65,11 @@ backend/src/
   index.ts             # Boot, graceful shutdown
   config.ts            # Zod-validated environment config (fail-fast)
   auth/                # Auth routes + JWT/bcrypt service
+  accounts/            # Bank presets + statement sender allowlist
   imports/             # Upload/dashboard/correction routes + import service
   rules/               # Rule CRUD + matching engine
   providers/           # Provider registry
-  gmail/               # OAuth, backfill, push jobs
+  gmail/               # OAuth, pooling, backfill, push jobs
   adapters/            # Bank PDF adapters (HDFC today)
   analytics/           # Aggregations from store
   parser/              # PDF text extraction + row parsing (parser.ts)
@@ -147,7 +150,7 @@ Modular monolith (domain folders + shared infrastructure) over microservices. At
 
 ## Database schema
 
-Core entities (UUIDs, FKs, indexes — see `backend/src/db/migrations/001_initial.up.sql`):
+Core entities (UUIDs, FKs, indexes — see migrations `001_initial` + `002_bank_mail_and_pooling`, and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)):
 
 ```mermaid
 erDiagram

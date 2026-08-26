@@ -30,14 +30,15 @@ const envSchema = z.object({
       /^[0-9a-fA-F]{64}$/,
       "ENCRYPTION_KEY must be 64 hex characters (32 bytes)",
     ),
-  INVITE_CODES: z.string().default("beta-ledgerline"),
   FRONTEND_URL: z.string().url().default("http://localhost:3000"),
   ALLOW_ANON_PARSE: z.enum(["0", "1"]).default("0"),
   GOOGLE_CLIENT_ID: z.string().optional().default(""),
   GOOGLE_CLIENT_SECRET: z.string().optional().default(""),
   GOOGLE_REDIRECT_URI: z
     .string()
-    .default("http://localhost:4000/api/gmail/callback"),
+    .default("http://localhost:4000/api/v1/auth/google/callback"),
+  GOOGLE_ALLOWED_EMAILS: z.string().optional().default(""),
+  ADMIN_EMAILS: z.string().optional().default(""),
   GMAIL_PUBSUB_TOPIC: z.string().optional().default(""),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(120),
@@ -59,7 +60,6 @@ export type AppConfig = {
   useMemoryStore: boolean;
   jwtSecret: string;
   encryptionKey: string;
-  inviteCodes: string[];
   frontendUrl: string;
   allowAnonParse: boolean;
   google: {
@@ -67,7 +67,9 @@ export type AppConfig = {
     clientSecret: string;
     redirectUri: string;
     pubsubTopic: string;
+    allowedEmails: string[];
   };
+  adminEmails: string[];
   rateLimit: {
     windowMs: number;
     max: number;
@@ -161,9 +163,6 @@ function loadConfig(): AppConfig {
     useMemoryStore: env.DATABASE_URL === "memory",
     jwtSecret: env.JWT_SECRET,
     encryptionKey: env.ENCRYPTION_KEY,
-    inviteCodes: env.INVITE_CODES.split(",")
-      .map((s) => s.trim())
-      .filter(Boolean),
     frontendUrl: env.FRONTEND_URL,
     allowAnonParse: env.ALLOW_ANON_PARSE === "1",
     google: {
@@ -171,7 +170,13 @@ function loadConfig(): AppConfig {
       clientSecret: env.GOOGLE_CLIENT_SECRET,
       redirectUri: env.GOOGLE_REDIRECT_URI,
       pubsubTopic: env.GMAIL_PUBSUB_TOPIC,
+      allowedEmails: env.GOOGLE_ALLOWED_EMAILS.split(",")
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean),
     },
+    adminEmails: env.ADMIN_EMAILS.split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
     rateLimit: {
       windowMs: env.RATE_LIMIT_WINDOW_MS,
       max: env.RATE_LIMIT_MAX,

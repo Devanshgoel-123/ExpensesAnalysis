@@ -1,4 +1,6 @@
-import type { ProviderRow, TransactionRow } from "../db/types.js";
+import type { CategoryRow, ProviderRow, TransactionRow } from "../db/types.js";
+import { resolveAmountBand } from "../categories/heuristics.js";
+import { buildDailyInsights } from "./dailyInsights.js";
 import type {
   AmountBand,
   DailySpend,
@@ -13,13 +15,17 @@ import type {
 export function rowToApiTransaction(
   row: TransactionRow,
   providers: ProviderRow[],
+  categories: CategoryRow[] = [],
 ): Transaction & {
   id: string;
   providerId: string | null;
   category: string | null;
+  categoryLabel: string | null;
   logoUrl: string | null;
 } {
   const provider = providers.find((p) => p.id === row.providerId) ?? null;
+  const category =
+    categories.find((c) => c.slug === row.categorySlug) ?? null;
   return {
     id: row.id,
     date: row.date,
@@ -33,7 +39,44 @@ export function rowToApiTransaction(
     raw: row.raw ?? row.description,
     providerId: row.providerId,
     category: row.categorySlug,
+    categoryLabel: category?.label ?? null,
     logoUrl: provider?.logoUrl ?? null,
+  };
+}
+
+export function buildAmountBand(
+  rows: TransactionRow[],
+  categories: CategoryRow[],
+): AmountBand | null {
+  const config = resolveAmountBand(categories);
+  if (!config) return null;
+
+  const debits = rows.filter((t) => t.type === "debit");
+  const bandDayCounts: Record<string, number> = {};
+  let bandCount = 0;
+  let bandTotal = 0;
+
+  for (const t of debits) {
+    const inBand =
+      t.categorySlug === config.slug ||
+      (t.amount >= config.min &&
+        t.amount <= config.max &&
+        !t.merchant &&
+        !t.payee);
+    if (!inBand) continue;
+    bandCount += 1;
+    bandTotal += t.amount;
+    bandDayCounts[t.date] = (bandDayCounts[t.date] ?? 0) + 1;
+  }
+
+  return {
+    label: config.label,
+    min: config.min,
+    max: config.max,
+    count: bandCount,
+    total: Math.round(bandTotal * 100) / 100,
+    days: Object.keys(bandDayCounts).sort(),
+    dayCounts: bandDayCounts,
   };
 }
 
@@ -41,6 +84,8 @@ export function buildAnalyticsFromRows(
   rows: TransactionRow[],
   providers: ProviderRow[],
   trackedPayees: string[] = [],
+  categories: CategoryRow[] = [],
+  options?: { dailySpendLimit?: number | null },
 ): ParseResult {
   const debits = rows.filter((t) => t.type === "debit");
   const credits = rows.filter((t) => t.type === "credit");
@@ -75,19 +120,21 @@ export function buildAnalyticsFromRows(
   }
   const upiRanking = [...upiMap.values()].sort((a, b) => b.total - a.total);
 
-  const merchantNames = providers
-    .filter((p) => p.categorySlug && p.categorySlug !== "cigarettes")
-    .map((p) => p.canonicalName);
-  const merchantMap = new Map<string, MerchantSpend & { logoUrl: string | null; providerId: string | null }>();
-  for (const name of merchantNames) {
-    const provider = providers.find((p) => p.canonicalName === name);
-    merchantMap.set(name, {
-      merchant: name,
+  const merchantMap = new Map<
+    string,
+    MerchantSpend & { logoUrl: string | null; providerId: string | null }
+  >();
+  for (const provider of providers.filter(
+    (p) => p.categorySlug && p.categorySlug !== "cigarettes",
+  )) {
+    merchantMap.set(provider.canonicalName, {
+      merchant: provider.canonicalName,
       total: 0,
       count: 0,
       lastDate: "",
-      logoUrl: provider?.logoUrl ?? null,
-      providerId: provider?.id ?? null,
+      categorySlug: provider.categorySlug,
+      logoUrl: provider.logoUrl,
+      providerId: provider.id,
     });
   }
   for (const t of debits) {
@@ -100,6 +147,7 @@ export function buildAnalyticsFromRows(
         total: 0,
         count: 0,
         lastDate: "",
+        categorySlug: t.categorySlug ?? provider?.categorySlug ?? null,
         logoUrl: provider?.logoUrl ?? null,
         providerId: provider?.id ?? t.providerId,
       };
@@ -139,25 +187,17 @@ export function buildAnalyticsFromRows(
   for (const bucket of payeeMap.values()) bucket.days.sort();
   const payeeSpend = [...payeeMap.values()].sort((a, b) => b.total - a.total);
 
-  const bandDayCounts: Record<string, number> = {};
-  let bandCount = 0;
-  let bandTotal = 0;
-  for (const t of debits) {
-    if (t.categorySlug === "cigarettes" || (t.amount >= 25 && t.amount <= 60 && !t.merchant && !t.payee)) {
-      bandCount += 1;
-      bandTotal += t.amount;
-      bandDayCounts[t.date] = (bandDayCounts[t.date] ?? 0) + 1;
-    }
-  }
-  const amountBand25to60: AmountBand = {
-    label: "₹25 – ₹60",
-    min: 25,
-    max: 60,
-    count: bandCount,
-    total: Math.round(bandTotal * 100) / 100,
-    days: Object.keys(bandDayCounts).sort(),
-    dayCounts: bandDayCounts,
-  };
+  const amountBand25to60 =
+    buildAmountBand(rows, categories) ??
+    ({
+      label: "",
+      min: 0,
+      max: 0,
+      count: 0,
+      total: 0,
+      days: [],
+      dayCounts: {},
+    } satisfies AmountBand);
 
   const totalSpent =
     Math.round(debits.reduce((sum, t) => sum + t.amount, 0) * 100) / 100;
@@ -176,17 +216,29 @@ export function buildAnalyticsFromRows(
     dateTo: daily[daily.length - 1]?.date ?? null,
   };
 
+  const dailyInsights = buildDailyInsights(daily, options?.dailySpendLimit);
+
   return {
     summary,
     daily,
+    dailyInsights,
     upiRanking,
     merchantSpend,
     payeeSpend,
     amountBand25to60,
+    categories: categories.map((category) => ({
+      id: category.id,
+      slug: category.slug,
+      label: category.label,
+      blurb: category.blurb,
+      accent: category.accent,
+      sortOrder: category.sortOrder,
+      meta: { ...category.meta } as Record<string, unknown>,
+    })),
     transactions: rows
       .slice()
       .sort((a, b) => b.date.localeCompare(a.date))
-      .map((r) => rowToApiTransaction(r, providers)),
+      .map((r) => rowToApiTransaction(r, providers, categories)),
     meta: {
       pagesTextChars: 0,
       parsedCount: rows.length,

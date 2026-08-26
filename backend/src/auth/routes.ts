@@ -1,35 +1,28 @@
 import { Router } from "express";
+import jwt from "jsonwebtoken";
+import { config } from "../config.js";
 import { getStore } from "../db/index.js";
 import { AppError } from "../errors/AppError.js";
-import { validate } from "../middleware/validate.js";
-import { loginBodySchema, registerBodySchema } from "../validators/auth.js";
-import { loginUser, registerUser, requireAuth } from "./service.js";
+import {
+  buildGoogleLoginAuthUrl,
+  gmailConfigured,
+} from "../gmail/client.js";
+import { requireAuth } from "./service.js";
 
 export const authRouter = Router();
 
-authRouter.post("/register", validate(registerBodySchema), async (req, res) => {
-  const body = req.body as {
-    email: string;
-    password: string;
-    inviteCode: string;
-    displayName?: string;
-  };
-  const result = await registerUser({
-    email: body.email,
-    password: body.password,
-    inviteCode: body.inviteCode,
-    displayName: body.displayName,
-  });
-  res.status(201).json(result);
-});
-
-authRouter.post("/login", validate(loginBodySchema), async (req, res) => {
-  const body = req.body as { email: string; password: string };
-  const result = await loginUser({
-    email: body.email,
-    password: body.password,
-  });
-  res.json(result);
+authRouter.get("/google", (_req, res) => {
+  if (!gmailConfigured()) {
+    throw AppError.serviceUnavailable(
+      "Google sign-in is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.",
+    );
+  }
+  const state = jwt.sign(
+    { purpose: "google_login" },
+    config.jwtSecret,
+    { expiresIn: "10m" },
+  );
+  res.redirect(buildGoogleLoginAuthUrl(state));
 });
 
 authRouter.get("/me", requireAuth, async (req, res) => {

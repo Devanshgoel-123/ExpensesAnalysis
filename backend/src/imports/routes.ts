@@ -23,7 +23,15 @@ export const importRouter = Router();
 importRouter.use(requireAuth);
 
 importRouter.get("/dashboard", async (req, res) => {
-  const result = await getDashboardForUser(req.user!.id);
+  const from =
+    typeof req.query.from === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.from)
+      ? req.query.from
+      : undefined;
+  const to =
+    typeof req.query.to === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.to)
+      ? req.query.to
+      : undefined;
+  const result = await getDashboardForUser(req.user!.id, { from, to });
   res.json(result);
 });
 

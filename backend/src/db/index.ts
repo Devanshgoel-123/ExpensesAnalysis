@@ -21,10 +21,6 @@ export async function getStore(): Promise<Store> {
     logger.info("Connected to Postgres and applied migrations");
   }
 
-  for (const code of config.inviteCodes) {
-    await store.seedInvite(code, 1000);
-  }
-
   return store;
 }
 

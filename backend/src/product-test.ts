@@ -8,7 +8,6 @@ async function main() {
   process.env.JWT_SECRET = "test-jwt-secret-16chars";
   process.env.ENCRYPTION_KEY =
     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-  process.env.INVITE_CODES = "test-invite";
 
   const { loginUser, registerUser } = await import("./auth/service.js");
   const {
@@ -18,13 +17,12 @@ async function main() {
   } = await import("./crypto/secrets.js");
   const { resetStoreForTests } = await import("./db/index.js");
   const { MemoryStore } = await import("./db/memory.js");
-  const { seedGlobals } = await import("./providers/registry.js");
-  const { applyRules, matchRule } = await import("./rules/engine.js");
+  const { applyRules, detectFromProviders, matchRule } = await import(
+    "./rules/engine.js"
+  );
   const { bankAdapters, runAdapters } = await import("./adapters/index.js");
   const {
     buildAnalytics,
-    detectMerchant,
-    detectPayee,
     parseTransactions,
     stitchStatementLines,
   } = await import("./parser.js");
@@ -33,7 +31,6 @@ async function main() {
   await store.migrate();
   await store.seedInvite("test-invite", 10);
   await store.seedInvite("iso-invite", 5);
-  await seedGlobals(store);
   resetStoreForTests(store);
 
   const secret = encryptSecret("refresh-token-xyz");
@@ -70,6 +67,7 @@ async function main() {
   }
 
   const providers = await store.listProviders(registered.user.id);
+  const categories = await store.listCategories(registered.user.id);
   if (providers.length < 5) throw new Error("providers not seeded");
   const swiggy = providers.find((p) => p.canonicalName === "Swiggy");
   if (!swiggy?.logoUrl) throw new Error("Swiggy logo missing");
@@ -102,6 +100,8 @@ async function main() {
     },
     [rule],
     providers,
+    {},
+    categories,
   );
   if (classified.payee !== "Deepan") {
     throw new Error(`Expected Deepan payee, got ${classified.payee}`);
@@ -172,12 +172,11 @@ async function main() {
     throw new Error("HDFC adapter failed");
   }
 
-  if (detectMerchant("UPI-SWIGGY") !== "Swiggy") {
-    throw new Error("detectMerchant regression");
+  const swiggyMatch = detectFromProviders("UPI-SWIGGY-swiggy@ybl", providers);
+  if (swiggyMatch.merchant !== "Swiggy") {
+    throw new Error("detectFromProviders regression");
   }
-  if (detectPayee("UPI-DEEPAN") !== "Deepan") {
-    throw new Error("detectPayee regression");
-  }
+
   const stitched = stitchStatementLines(sample.trim().split("\n"));
   const parsed = parseTransactions(stitched.join("\n"));
   const analytics = buildAnalytics(parsed);
@@ -196,6 +195,57 @@ async function main() {
     })
   ) {
     throw new Error("matchRule should hit narration");
+  }
+
+  const withLimit = await store.updateUserPreferences(registered.user.id, {
+    dailySpendLimit: 1000,
+  });
+  if (withLimit?.dailySpendLimit !== 1000) {
+    throw new Error("daily spend limit not saved");
+  }
+
+  const dashboardRows = [
+    {
+      importId: imp.id,
+      accountId: account.id,
+      date: "2026-08-10",
+      time: null,
+      description: "UPI-BIG",
+      amount: 1500,
+      type: "debit" as const,
+      upiId: "big@ybl",
+      merchant: null,
+      payee: null,
+      providerId: null,
+      categorySlug: "other",
+      counterparty: null,
+      confidence: 1,
+      classificationSource: "parser",
+      fingerprint: "fp-big",
+      raw: "UPI-BIG",
+    },
+  ];
+  await store.insertTransactions(registered.user.id, dashboardRows);
+  const { buildAnalyticsFromRows } = await import("./analytics/fromStore.js");
+  const limited = buildAnalyticsFromRows(
+    await store.listTransactions(registered.user.id),
+    providers,
+    [],
+    categories,
+    { dailySpendLimit: 1000 },
+  );
+  if (limited.dailyInsights.daysOverLimit.length < 1) {
+    throw new Error("daily insights should flag over-limit day");
+  }
+
+  const ayodhya = providers.find((p) => p.canonicalName === "Ayodhya");
+  if (!ayodhya) throw new Error("Ayodhya provider missing");
+  const updatedLogo = await store.upsertProvider({
+    ...ayodhya,
+    logoUrl: "/providers/ayodhya.svg",
+  });
+  if (updatedLogo.logoUrl !== "/providers/ayodhya.svg") {
+    throw new Error("admin provider logo update failed");
   }
 
   await store.deleteUserData(registered.user.id);

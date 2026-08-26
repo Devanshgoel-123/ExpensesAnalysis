@@ -1,4 +1,5 @@
-import type { ProviderRow, TransactionRow, UserRuleRow } from "../db/types.js";
+import type { CategoryRow, ProviderRow, TransactionRow, UserRuleRow } from "../db/types.js";
+import { resolveAmountBand } from "../categories/heuristics.js";
 
 export interface ClassifiedFields {
   merchant: string | null;
@@ -55,6 +56,7 @@ export function applyRules(
   rules: UserRuleRow[],
   providers: ProviderRow[],
   defaults: Partial<ClassifiedFields> = {},
+  categories: CategoryRow[] = [],
 ): ClassifiedFields {
   let result: ClassifiedFields = {
     merchant: defaults.merchant ?? tx.merchant ?? null,
@@ -89,16 +91,17 @@ export function applyRules(
     break;
   }
 
-  // Amount-band fallback for cigarettes-style tiny spends
+  const amountBand = resolveAmountBand(categories);
   if (
+    amountBand &&
     !result.categorySlug &&
     tx.type === "debit" &&
-    tx.amount >= 25 &&
-    tx.amount <= 60 &&
+    tx.amount >= amountBand.min &&
+    tx.amount <= amountBand.max &&
     !result.merchant &&
     !result.payee
   ) {
-    result.categorySlug = "cigarettes";
+    result.categorySlug = amountBand.slug;
     result.confidence = 0.6;
     result.classificationSource = "amount_band";
   }

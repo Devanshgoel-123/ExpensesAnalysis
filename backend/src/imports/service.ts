@@ -7,6 +7,20 @@ import { extractTextFromPdf } from "../parser.js";
 import { applyRules, detectFromProviders } from "../rules/engine.js";
 import type { ParseResult } from "../types.js";
 
+async function analyticsForUser(
+  userId: string,
+  rows: Parameters<typeof buildAnalyticsFromRows>[0],
+  providers: Parameters<typeof buildAnalyticsFromRows>[1],
+  trackedPayees: string[],
+  categories: Parameters<typeof buildAnalyticsFromRows>[3],
+): Promise<ParseResult> {
+  const store = await getStore();
+  const user = await store.findUserById(userId);
+  return buildAnalyticsFromRows(rows, providers, trackedPayees, categories, {
+    dailySpendLimit: user?.dailySpendLimit ?? null,
+  });
+}
+
 export async function processPdfImport(input: {
   userId: string;
   buffer: Buffer;
@@ -30,6 +44,7 @@ export async function processPdfImport(input: {
   if (existingByHash?.status === "completed") {
     const rows = await store.listTransactions(input.userId);
     const providers = await store.listProviders(input.userId);
+    const categories = await store.listCategories(input.userId);
     const rules = await store.listRules(input.userId);
     const trackedPayees = [
       ...new Set(
@@ -40,7 +55,13 @@ export async function processPdfImport(input: {
     ];
     return {
       importId: existingByHash.id,
-      result: buildAnalyticsFromRows(rows, providers, trackedPayees),
+      result: await analyticsForUser(
+        input.userId,
+        rows,
+        providers,
+        trackedPayees,
+        categories,
+      ),
       inserted: 0,
       skipped: rows.length,
     };
@@ -54,16 +75,23 @@ export async function processPdfImport(input: {
     if (existingMsg?.status === "completed") {
       const rows = await store.listTransactions(input.userId);
       const providers = await store.listProviders(input.userId);
+      const categories = await store.listCategories(input.userId);
       return {
         importId: existingMsg.id,
-        result: buildAnalyticsFromRows(rows, providers),
+        result: await analyticsForUser(
+          input.userId,
+          rows,
+          providers,
+          [],
+          categories,
+        ),
         inserted: 0,
         skipped: rows.length,
       };
     }
   }
 
-  const account = await store.getOrCreateAccount(input.userId, "HDFC");
+  const account = await store.getOrCreateAccount(input.userId);
   const importRow = await store.createImport({
     userId: input.userId,
     accountId: account.id,
@@ -87,6 +115,7 @@ export async function processPdfImport(input: {
 
     const { adapter, transactions } = runAdapters(text, bankAdapters);
     const providers = await store.listProviders(input.userId);
+    const categories = await store.listCategories(input.userId);
     const rules = await store.listRules(input.userId);
 
     const toInsert: NewTransactionInput[] = transactions.map((t) => {
@@ -110,6 +139,7 @@ export async function processPdfImport(input: {
           classificationSource: "parser",
           confidence: fromProviders.merchant ? 0.8 : 0.5,
         },
+        categories,
       );
 
       return {
@@ -164,7 +194,13 @@ export async function processPdfImport(input: {
           .filter((n): n is string => Boolean(n)),
       ),
     ];
-    const result = buildAnalyticsFromRows(rows, providers, trackedPayees);
+    const result = await analyticsForUser(
+      input.userId,
+      rows,
+      providers,
+      trackedPayees,
+      categories,
+    );
     result.meta.pagesTextChars = text.length;
     result.meta.parsedCount = transactions.length;
 
@@ -184,15 +220,22 @@ export async function processPdfImport(input: {
   }
 }
 
-export async function getDashboardForUser(userId: string): Promise<ParseResult> {
+export async function getDashboardForUser(
+  userId: string,
+  options?: { from?: string; to?: string },
+): Promise<ParseResult> {
   const store = await getStore();
-  const rows = await store.listTransactions(userId);
+  const rows = await store.listTransactions(userId, {
+    from: options?.from,
+    to: options?.to,
+  });
   const providers = await store.listProviders(userId);
+  const categories = await store.listCategories(userId);
   const rules = await store.listRules(userId);
   const trackedPayees = [
     ...new Set(
       rules.map((r) => r.setPayeeName).filter((n): n is string => Boolean(n)),
     ),
   ];
-  return buildAnalyticsFromRows(rows, providers, trackedPayees);
+  return analyticsForUser(userId, rows, providers, trackedPayees, categories);
 }

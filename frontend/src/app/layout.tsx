@@ -21,7 +21,7 @@ const jetbrains = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Ledgerline — UPI Expense Dashboard",
   description:
-    "Invite-only multi-user UPI expense product with saved imports, rules, and optional Gmail backfill.",
+    "Personal UPI expense dashboard with bank-mail pooling, lifestyle categories, and month-scoped analytics.",
 };
 
 export default function RootLayout({

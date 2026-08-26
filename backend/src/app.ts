@@ -6,7 +6,7 @@ import { requireAuth } from "./auth/service.js";
 import { config } from "./config.js";
 import { errorHandler, notFoundHandler } from "./errors/errorHandler.js";
 import { AppError } from "./errors/AppError.js";
-import { gmailRouter } from "./gmail/routes.js";
+import { gmailRouter, handleGmailOAuthCallback } from "./gmail/routes.js";
 import { importRouter } from "./imports/routes.js";
 import { processPdfImport } from "./imports/service.js";
 import {
@@ -20,8 +20,12 @@ import { corsMiddleware, securityHeaders } from "./middleware/security.js";
 import { validate } from "./middleware/validate.js";
 import { parsePdf } from "./parser.js";
 import { providersRouter } from "./providers/routes.js";
+import { accountsRouter } from "./accounts/routes.js";
+import { categoriesRouter } from "./categories/routes.js";
 import { rulesRouter } from "./rules/routes.js";
 import { parsePasswordBodySchema } from "./validators/imports.js";
+import { preferencesRouter } from "./preferences/routes.js";
+import { adminRouter } from "./admin/routes.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -66,9 +70,14 @@ export function createApp(): express.Application {
 
   app.use("/api/auth", authRateLimiter, authRouter);
   app.use("/api/imports", importRouter);
+  app.use("/api/accounts", accountsRouter);
+  app.use("/api/categories", categoriesRouter);
   app.use("/api/rules", rulesRouter);
   app.use("/api/providers", providersRouter);
+  app.use("/api/preferences", preferencesRouter);
+  app.use("/api/admin", adminRouter);
   app.use("/api/gmail", gmailRouter);
+  app.get("/api/v1/auth/google/callback", handleGmailOAuthCallback);
 
   /** Authenticated parse+persist (preferred). */
   app.post(

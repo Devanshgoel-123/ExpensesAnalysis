@@ -4,6 +4,8 @@ import { logger } from "../logger/index.js";
 import { migrateUp } from "./migrator.js";
 import type {
   AccountRow,
+  BankPresetRow,
+  CategoryMeta,
   CategoryRow,
   GmailConnectionRow,
   ImportRow,
@@ -18,11 +20,14 @@ import type {
 } from "./types.js";
 
 function mapUser(row: Record<string, unknown>): UserRow {
+  const dailyLimit = row.daily_spend_limit;
   return {
     id: String(row.id),
     email: String(row.email),
     passwordHash: String(row.password_hash),
     displayName: (row.display_name as string | null) ?? null,
+    dailySpendLimit:
+      dailyLimit == null ? null : Number(dailyLimit),
     createdAt: new Date(String(row.created_at)).toISOString(),
     deletedAt: row.deleted_at
       ? new Date(String(row.deleted_at)).toISOString()
@@ -31,6 +36,7 @@ function mapUser(row: Record<string, unknown>): UserRow {
 }
 
 function mapCategory(row: Record<string, unknown>): CategoryRow {
+  const meta = (row.meta as CategoryMeta | null) ?? {};
   return {
     id: String(row.id),
     userId: (row.user_id as string | null) ?? null,
@@ -38,7 +44,21 @@ function mapCategory(row: Record<string, unknown>): CategoryRow {
     label: String(row.label),
     blurb: String(row.blurb ?? ""),
     accent: String(row.accent ?? "#8b7cff"),
+    sortOrder: Number(row.sort_order ?? 100),
+    meta,
     isGlobal: Boolean(row.is_global),
+  };
+}
+
+function mapBankPreset(row: Record<string, unknown>): BankPresetRow {
+  return {
+    id: String(row.id),
+    label: String(row.label),
+    adapterId: (row.adapter_id as string | null) ?? null,
+    pdfAdapterReady: Boolean(row.pdf_adapter_ready),
+    defaultSenderEmails: (row.default_sender_emails as string[]) ?? [],
+    description: String(row.description ?? ""),
+    sortOrder: Number(row.sort_order ?? 100),
   };
 }
 
@@ -222,6 +242,20 @@ export class PostgresStore implements Store {
     return result.rows[0] ? mapUser(result.rows[0]) : null;
   }
 
+  async updateUserPreferences(
+    userId: string,
+    patch: Partial<{ dailySpendLimit: number | null }>,
+  ): Promise<UserRow | null> {
+    if (!("dailySpendLimit" in patch)) {
+      return this.findUserById(userId);
+    }
+    const result = await this.pool.query(
+      `UPDATE users SET daily_spend_limit = $2 WHERE id = $1 AND deleted_at IS NULL RETURNING *`,
+      [userId, patch.dailySpendLimit ?? null],
+    );
+    return result.rows[0] ? mapUser(result.rows[0]) : null;
+  }
+
   async softDeleteUser(userId: string): Promise<void> {
     await this.pool.query(
       `UPDATE users SET deleted_at = NOW() WHERE id = $1`,
@@ -253,7 +287,7 @@ export class PostgresStore implements Store {
     const result = await this.pool.query(
       `SELECT * FROM categories
        WHERE is_global = TRUE OR user_id = $1
-       ORDER BY label`,
+       ORDER BY sort_order, label`,
       [userId],
     );
     return result.rows.map(mapCategory);
@@ -271,16 +305,23 @@ export class PostgresStore implements Store {
     if (existing.rows[0]) {
       const updated = await this.pool.query(
         `UPDATE categories
-         SET label = $2, blurb = $3, accent = $4
+         SET label = $2, blurb = $3, accent = $4, sort_order = $5, meta = $6::jsonb
          WHERE id = $1
          RETURNING *`,
-        [existing.rows[0].id, input.label, input.blurb, input.accent],
+        [
+          existing.rows[0].id,
+          input.label,
+          input.blurb,
+          input.accent,
+          input.sortOrder,
+          JSON.stringify(input.meta ?? {}),
+        ],
       );
       return mapCategory(updated.rows[0]);
     }
     const result = await this.pool.query(
-      `INSERT INTO categories (id, user_id, slug, label, blurb, accent, is_global)
-       VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7)
+      `INSERT INTO categories (id, user_id, slug, label, blurb, accent, sort_order, meta, is_global)
+       VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
        RETURNING *`,
       [
         input.id ?? null,
@@ -289,10 +330,62 @@ export class PostgresStore implements Store {
         input.label,
         input.blurb,
         input.accent,
+        input.sortOrder,
+        JSON.stringify(input.meta ?? {}),
         input.isGlobal,
       ],
     );
     return mapCategory(result.rows[0]);
+  }
+
+  async listBankPresets(): Promise<BankPresetRow[]> {
+    const result = await this.pool.query(
+      `SELECT * FROM bank_presets ORDER BY sort_order, label`,
+    );
+    return result.rows.map(mapBankPreset);
+  }
+
+  async getBankPreset(id: string): Promise<BankPresetRow | null> {
+    const result = await this.pool.query(
+      `SELECT * FROM bank_presets WHERE lower(id) = lower($1) LIMIT 1`,
+      [id],
+    );
+    return result.rows[0] ? mapBankPreset(result.rows[0]) : null;
+  }
+
+  async getDefaultBankPreset(): Promise<BankPresetRow | null> {
+    const result = await this.pool.query(
+      `SELECT * FROM bank_presets
+       ORDER BY CASE WHEN pdf_adapter_ready THEN 0 ELSE 1 END, sort_order, label
+       LIMIT 1`,
+    );
+    return result.rows[0] ? mapBankPreset(result.rows[0]) : null;
+  }
+
+  async upsertBankPreset(input: BankPresetRow): Promise<BankPresetRow> {
+    const result = await this.pool.query(
+      `INSERT INTO bank_presets (
+         id, label, adapter_id, pdf_adapter_ready, default_sender_emails, description, sort_order
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (id) DO UPDATE SET
+         label = EXCLUDED.label,
+         adapter_id = EXCLUDED.adapter_id,
+         pdf_adapter_ready = EXCLUDED.pdf_adapter_ready,
+         default_sender_emails = EXCLUDED.default_sender_emails,
+         description = EXCLUDED.description,
+         sort_order = EXCLUDED.sort_order
+       RETURNING *`,
+      [
+        input.id,
+        input.label,
+        input.adapterId,
+        input.pdfAdapterReady,
+        input.defaultSenderEmails,
+        input.description,
+        input.sortOrder,
+      ],
+    );
+    return mapBankPreset(result.rows[0]);
   }
 
   async listProviders(userId: string): Promise<ProviderRow[]> {
@@ -405,6 +498,13 @@ export class PostgresStore implements Store {
     return result.rows[0] ? mapProvider(result.rows[0]) : null;
   }
 
+  async getProviderById(id: string): Promise<ProviderRow | null> {
+    const result = await this.pool.query(`SELECT * FROM providers WHERE id = $1`, [
+      id,
+    ]);
+    return result.rows[0] ? mapProvider(result.rows[0]) : null;
+  }
+
   async listRules(userId: string): Promise<UserRuleRow[]> {
     const result = await this.pool.query(
       `SELECT * FROM user_rules
@@ -455,17 +555,28 @@ export class PostgresStore implements Store {
     );
   }
 
-  async getOrCreateAccount(userId: string, bank = "HDFC"): Promise<AccountRow> {
+  async getOrCreateAccount(
+    userId: string,
+    bank?: string | null,
+  ): Promise<AccountRow> {
+    const resolved =
+      bank ?? (await this.getDefaultBankPreset())?.id ?? "UNKNOWN";
     const existing = await this.pool.query(
       `SELECT * FROM accounts WHERE user_id = $1 AND bank = $2 LIMIT 1`,
-      [userId, bank],
+      [userId, resolved],
     );
     if (existing.rows[0]) return mapAccount(existing.rows[0]);
+    const preset = await this.getBankPreset(resolved);
     const inserted = await this.pool.query(
-      `INSERT INTO accounts (user_id, bank, label)
-       VALUES ($1, $2, 'Primary')
+      `INSERT INTO accounts (user_id, bank, label, statement_sender_emails)
+       VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [userId, bank],
+      [
+        userId,
+        resolved,
+        preset?.label ?? "Primary",
+        preset?.defaultSenderEmails ?? [],
+      ],
     );
     return mapAccount(inserted.rows[0]);
   }

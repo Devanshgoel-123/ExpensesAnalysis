@@ -5,12 +5,14 @@ import { useAuth } from "@/lib/auth";
 import {
   createRule,
   deleteRule,
+  fetchPreferences,
   fetchSuggestions,
   gmailBackfill,
   gmailConnectUrl,
   gmailDisconnect,
   gmailStatus,
   listRules,
+  updatePreferences,
 } from "@/lib/api";
 import { SpotlightCard } from "@/components/SpotlightCard";
 
@@ -29,19 +31,24 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
   const [payeeName, setPayeeName] = useState("");
   const [matchText, setMatchText] = useState("");
   const [statementPassword, setStatementPassword] = useState("");
+  const [dailyLimit, setDailyLimit] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!token) return;
-    const [rulesRes, suggestionsRes, gmailRes] = await Promise.all([
+    const [rulesRes, suggestionsRes, gmailRes, prefsRes] = await Promise.all([
       listRules(token),
       fetchSuggestions(token).catch(() => ({ suggestions: [] })),
       gmailStatus(token).catch(() => null),
+      fetchPreferences(token).catch(() => ({ dailySpendLimit: null })),
     ]);
     setRules(rulesRes.rules);
     setSuggestions(suggestionsRes.suggestions);
     setGmail(gmailRes);
+    setDailyLimit(
+      prefsRes.dailySpendLimit != null ? String(prefsRes.dailySpendLimit) : "",
+    );
   }, [token]);
 
   useEffect(() => {
@@ -159,6 +166,58 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
       )}
 
       {gmail?.notice && <p className="meta" style={{ marginBottom: "1rem" }}>{gmail.notice}</p>}
+
+      <h3 className="ui-header" style={{ fontSize: "1rem" }}>Daily spend limit</h3>
+      <div className="upload-panel" style={{ maxWidth: "100%", marginTop: "0.75rem", marginBottom: "1rem" }}>
+        <label className="field">
+          <span>Max debit per day (₹)</span>
+          <input
+            type="number"
+            min={1}
+            step={100}
+            value={dailyLimit}
+            onChange={(e) => setDailyLimit(e.target.value)}
+            placeholder="e.g. 2000"
+          />
+        </label>
+        <div className="sort-bar">
+          <button
+            type="button"
+            className="cta"
+            onClick={async () => {
+              try {
+                setError(null);
+                const parsed = dailyLimit.trim() ? Number(dailyLimit) : null;
+                if (parsed != null && (!Number.isFinite(parsed) || parsed <= 0)) {
+                  setError("Enter a positive amount or clear the field");
+                  return;
+                }
+                await updatePreferences(token, { dailySpendLimit: parsed });
+                setMessage(parsed ? `Daily limit set to ₹${parsed}` : "Daily limit cleared");
+                onChanged?.();
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Could not save limit");
+              }
+            }}
+          >
+            Save daily limit
+          </button>
+          {dailyLimit ? (
+            <button
+              type="button"
+              className="ghost"
+              onClick={async () => {
+                setDailyLimit("");
+                await updatePreferences(token, { dailySpendLimit: null });
+                setMessage("Daily limit cleared");
+                onChanged?.();
+              }}
+            >
+              Clear
+            </button>
+          ) : null}
+        </div>
+      </div>
 
       <h3 className="ui-header" style={{ fontSize: "1rem" }}>Track a person</h3>
       <div className="upload-panel" style={{ maxWidth: "100%", marginTop: "0.75rem" }}>

@@ -18,6 +18,8 @@ export function createOAuthClient() {
   );
 }
 
+const LOGIN_SCOPES = ["openid", "email", "profile"];
+
 export function buildGmailAuthUrl(state: string): string {
   const client = createOAuthClient();
   return client.generateAuthUrl({
@@ -28,11 +30,22 @@ export function buildGmailAuthUrl(state: string): string {
   });
 }
 
+export function buildGoogleLoginAuthUrl(state: string): string {
+  const client = createOAuthClient();
+  return client.generateAuthUrl({
+    access_type: "online",
+    prompt: "select_account",
+    scope: LOGIN_SCOPES,
+    state,
+  });
+}
+
 export async function exchangeCode(code: string): Promise<{
   refreshToken: string;
   accessToken: string | null;
   expiry: string | null;
   email: string;
+  name: string | null;
 }> {
   const client = createOAuthClient();
   const { tokens } = await client.getToken(code);
@@ -51,6 +64,7 @@ export async function exchangeCode(code: string): Promise<{
       ? new Date(tokens.expiry_date).toISOString()
       : null,
     email,
+    name: me.data.name ?? null,
   };
 }
 
@@ -81,17 +95,57 @@ export async function getAuthedGmail(connection: GmailConnectionRow) {
 }
 
 /** Strict bank-statement search — never broad mailbox scrape. */
-export const STATEMENT_QUERY =
-  '(from:(hdfcbank.net OR hdfcbank.com OR alerts@hdfcbank) subject:(statement OR "account statement" OR e-statement) has:attachment filename:pdf) newer_than:365d';
+export function buildStatementQuery(
+  senders: string[],
+  options?: { after?: string; before?: string },
+): string {
+  const cleaned = senders
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => s.replace(/[()]/g, ""));
+  if (cleaned.length === 0) {
+    throw new Error(
+      "No bank statement sender emails configured. Select a bank and confirm sender handles first.",
+    );
+  }
+  const fromClause =
+    cleaned.length === 1
+      ? `from:${cleaned[0]}`
+      : `from:(${cleaned.join(" OR ")})`;
+  const parts = [
+    `(${fromClause}`,
+    `subject:(statement OR "account statement" OR e-statement)`,
+    `has:attachment filename:pdf)`,
+  ];
+  if (options?.after) {
+    // Gmail after: uses YYYY/MM/DD
+    parts.push(`after:${options.after.replace(/-/g, "/")}`);
+  }
+  if (options?.before) {
+    parts.push(`before:${options.before.replace(/-/g, "/")}`);
+  }
+  if (!options?.after && !options?.before) {
+    parts.push("newer_than:365d");
+  }
+  return parts.join(" ");
+}
+
+/** @deprecated Prefer buildStatementQuery with account senders. */
+export const STATEMENT_QUERY = buildStatementQuery([
+  "hdfcbank.net",
+  "hdfcbank.com",
+  "alerts@hdfcbank",
+]);
 
 export async function listStatementMessageIds(
   connection: GmailConnectionRow,
   pageToken?: string,
+  query?: string,
 ): Promise<{ ids: string[]; nextPageToken?: string | null }> {
   const gmail = await getAuthedGmail(connection);
   const res = await gmail.users.messages.list({
     userId: "me",
-    q: STATEMENT_QUERY,
+    q: query ?? STATEMENT_QUERY,
     maxResults: 25,
     pageToken,
   });

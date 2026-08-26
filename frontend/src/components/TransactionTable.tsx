@@ -2,14 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import type { Transaction } from "@/lib/types";
+import type { CategorySummary, Transaction } from "@/lib/types";
 import { formatInrExact, formatShortDate } from "@/lib/api";
-import { CATEGORY_META, MERCHANT_CATEGORY } from "@/lib/categories";
 import { BrandMark } from "@/components/BrandMark";
 import { SpotlightCard } from "@/components/SpotlightCard";
 
 interface TransactionTableProps {
   items: Transaction[];
+  categories: CategorySummary[];
 }
 
 type SortKey = "date" | "amount" | "provider" | "type";
@@ -19,25 +19,21 @@ function providerOf(txn: Transaction): string {
   return txn.payee ?? txn.merchant ?? txn.upiId ?? "Other";
 }
 
-function lifestyleOf(txn: Transaction): { label: string; className: string } | null {
-  if (txn.category && CATEGORY_META[txn.category as keyof typeof CATEGORY_META]) {
-    const key = txn.category as keyof typeof CATEGORY_META;
-    return { label: CATEGORY_META[key].label, className: key };
+function lifestyleOf(
+  txn: Transaction,
+  categories: CategorySummary[],
+): { label: string; className: string } | null {
+  if (txn.categoryLabel && txn.category) {
+    return { label: txn.categoryLabel, className: txn.category };
   }
-  const merchantCat = txn.merchant ? MERCHANT_CATEGORY[txn.merchant] : undefined;
-  if (merchantCat) {
-    return {
-      label: CATEGORY_META[merchantCat].label,
-      className: merchantCat,
-    };
-  }
-  if (txn.amount >= 25 && txn.amount <= 60 && txn.type === "debit") {
-    return { label: "Cigarettes", className: "cigarettes" };
+  const category = categories.find((c) => c.slug === txn.category);
+  if (category) {
+    return { label: category.label, className: category.slug };
   }
   return null;
 }
 
-export function TransactionTable({ items }: TransactionTableProps) {
+export function TransactionTable({ items, categories }: TransactionTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("amount");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
@@ -109,7 +105,7 @@ export function TransactionTable({ items }: TransactionTableProps) {
           </thead>
           <tbody>
             {sorted.map((txn, i) => {
-              const lifestyle = lifestyleOf(txn);
+              const lifestyle = lifestyleOf(txn, categories);
               const provider = providerOf(txn);
               const isOther = provider === "Other" || (!txn.merchant && !txn.payee);
 

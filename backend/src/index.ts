@@ -3,13 +3,11 @@ import { config } from "./config.js";
 import { closeStore, getStore } from "./db/index.js";
 import { startGmailJobs } from "./gmail/jobs.js";
 import { logger } from "./logger/index.js";
-import { seedGlobals } from "./providers/registry.js";
 
 const app = createApp();
 
 async function boot() {
-  const store = await getStore();
-  await seedGlobals(store);
+  await getStore();
   startGmailJobs();
 
   const server = app.listen(config.port, () => {

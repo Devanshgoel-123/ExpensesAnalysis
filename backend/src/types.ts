@@ -21,6 +21,7 @@ export interface MerchantSpend {
   total: number;
   count: number;
   lastDate: string;
+  categorySlug?: string | null;
   logoUrl?: string | null;
   providerId?: string | null;
 }
@@ -48,6 +49,22 @@ export interface DailySpend {
   amount: number;
 }
 
+export interface DailyLimitDay {
+  date: string;
+  amount: number;
+  overBy: number;
+}
+
+export interface DailyInsights {
+  limit: number | null;
+  enabled: boolean;
+  daysOverLimit: DailyLimitDay[];
+  daysUnderLimit: number;
+  totalDaysWithSpend: number;
+  worstDay: DailyLimitDay | null;
+  totalOverLimit: number;
+}
+
 export interface UpiRanking {
   upiId: string;
   total: number;
@@ -69,10 +86,20 @@ export interface Summary {
 export interface ParseResult {
   summary: Summary;
   daily: DailySpend[];
+  dailyInsights: DailyInsights;
   upiRanking: UpiRanking[];
   merchantSpend: MerchantSpend[];
   payeeSpend: PayeeSpend[];
   amountBand25to60: AmountBand;
+  categories?: Array<{
+    id: string;
+    slug: string;
+    label: string;
+    blurb: string;
+    accent: string;
+    sortOrder: number;
+    meta: Record<string, unknown>;
+  }>;
   transactions: Transaction[];
   meta: {
     pagesTextChars: number;
