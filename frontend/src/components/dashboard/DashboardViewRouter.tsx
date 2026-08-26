@@ -56,7 +56,16 @@ export function DashboardViewRouter({
     return <SettingsView onChanged={onChanged} />;
   }
 
-  if (!data) {
+  if (view === "insights") {
+    return (
+      <InsightsView
+        insights={dailyInsights}
+        avgDailySpend={data?.summary.avgDailySpend}
+      />
+    );
+  }
+
+  if (!data || data.transactions.length === 0) {
     return (
       <PageReveal>
         <HeroCard
@@ -84,13 +93,6 @@ export function DashboardViewRouter({
           dailyInsights={dailyInsights}
           month={month}
           onViewChange={onViewChange}
-        />
-      );
-    case "insights":
-      return (
-        <InsightsView
-          insights={dailyInsights}
-          avgDailySpend={data.summary.avgDailySpend}
         />
       );
     case "categories":

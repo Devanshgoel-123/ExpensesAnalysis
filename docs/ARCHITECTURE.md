@@ -1,289 +1,244 @@
-# Ledgerline architecture
+# Ledgerline Architecture
 
-Personal-use UPI expense product: bank statement PDFs (upload or Gmail pooling) → Postgres → category/provider classification → dashboard analytics (month-scoped, top UPI handles).
+Ledgerline is an incremental modular monolith for ingesting bank statements, classifying UPI spends, and serving dashboard analytics. The current design favors explicit boundaries, typed validation, and a single deployable backend over premature distributed systems.
 
-For ops/env/API tables see the root [README](../README.md). This document is the schema + pooling deep-dive.
-
----
-
-## System overview
-
-```mermaid
-flowchart TB
-  subgraph Client
-    UI[Next.js Dashboard]
-    BankSetup[Bank + sender allowlist]
-    PoolBtn[Enable Pooling]
-    Month[Month filter Aug default]
-  end
-
-  subgraph API[Express API]
-    Accounts[/api/accounts]
-    Gmail[/api/gmail]
-    Imports[/api/imports]
-    Providers[/api/providers]
-    Store[Store repository]
-  end
-
-  subgraph Data
-    PG[(PostgreSQL)]
-  end
-
-  subgraph Google
-    OAuth[gmail.readonly OAuth]
-    GmailAPI[Gmail messages.list]
-  end
-
-  UI --> BankSetup --> Accounts --> Store
-  PoolBtn --> Gmail --> OAuth
-  Gmail --> GmailAPI
-  GmailAPI -->|"q=from:bank senders only"| Imports
-  Imports --> Store --> PG
-  Month --> Imports
-  Providers --> Store
-```
-
-**Request path:** Client → helmet/CORS → request ID → rate limit → Zod → router → service → `Store` → Postgres.
-
----
-
-## Category → provider model
-
-Categories are lifestyle buckets. Providers (merchants/apps) are children via `providers.category_slug`.
-
-| Category | Role | Seeded providers |
-|----------|------|------------------|
-| `food` | Food delivery / quick commerce | Swiggy, Bistro, Zepto, Ayodhya |
-| `shopping` | Retail (extend as you add merchants) | — |
-| `travel` | Trips / bookings | MakeMyTrip |
-| `outing` | Local rides / outings | **Rapido**, District |
-| `investments` | Brokers / SIPs | — (ready for Groww etc.) |
-| `cigarettes` | Amount heuristic ₹25–60 | — |
-| `other` | Fallback | — |
-
-Classification order on import:
-
-1. Provider registry match (narration aliases + UPI handle substrings, e.g. handle containing `rapido` → Rapido → `outing`)
-2. User rules (people / overrides)
-3. Amount-band heuristic for cigarettes
-4. Otherwise uncategorized / other
-
-Users can `POST /api/providers` with `upiHandles` + `categorySlug` for personal merchants.
-
----
-
-## Table schema
-
-Migrations: `backend/src/db/migrations/001_initial.up.sql`, `002_bank_mail_and_pooling.up.sql`.
-
-```mermaid
-erDiagram
-  users ||--o{ accounts : owns
-  users ||--o{ imports : owns
-  users ||--o{ transactions : owns
-  users ||--o{ user_rules : owns
-  users ||--o{ providers : owns
-  users ||--o| gmail_connections : has
-  accounts ||--o{ imports : funds
-  imports ||--o{ transactions : contains
-  providers ||--o{ transactions : classifies
-  categories ||--o{ providers : "slug ref"
-  transactions ||--o| transaction_overrides : corrected_by
-
-  users {
-    uuid id PK
-    text email UK
-    text password_hash
-    timestamptz deleted_at
-  }
-
-  accounts {
-    uuid id PK
-    uuid user_id FK
-    text bank
-    text label
-    text_array statement_sender_emails
-    boolean pooling_enabled
-    timestamptz pooling_started_at
-  }
-
-  categories {
-    uuid id PK
-    uuid user_id FK
-    text slug
-    text label
-    boolean is_global
-  }
-
-  providers {
-    uuid id PK
-    uuid user_id FK
-    text canonical_name
-    text_array aliases
-    text_array upi_handles
-    text category_slug
-    boolean is_global
-  }
-
-  imports {
-    uuid id PK
-    uuid user_id FK
-    uuid account_id FK
-    text source
-    text status
-    text gmail_message_id
-    text attachment_hash
-  }
-
-  transactions {
-    uuid id PK
-    uuid user_id FK
-    date date
-    numeric amount
-    text type
-    text upi_id
-    uuid provider_id FK
-    text category_slug
-    text fingerprint UK
-  }
-
-  gmail_connections {
-    uuid id PK
-    uuid user_id UK
-    text google_email
-    text refresh_token_encrypted
-    text history_id
-    timestamptz last_sync_at
-  }
-
-  user_rules {
-    uuid id PK
-    uuid user_id FK
-    text match_upi_id
-    text set_payee_name
-    text set_category_slug
-  }
-```
-
-### Column notes
-
-| Table | Purpose |
-|-------|---------|
-| **accounts.statement_sender_emails** | Allowlisted bank From: domains/addresses used in Gmail `q=`. Never used to store non-bank mail. |
-| **accounts.pooling_enabled** | User opted into continuous bank-statement pooling. |
-| **imports.attachment_hash** | SHA-256 of PDF bytes — dedupe uploads/Gmail. |
-| **transactions.fingerprint** | Stable per-user unique key — skip duplicate rows on re-import. |
-| **providers.upi_handles** | Substring match against parsed `upi_id` (e.g. `rapido`). |
-
----
-
-## Pooling architecture
-
-### Privacy stance
-
-- OAuth scope is `gmail.readonly` (required by Google to list messages).
-- **Search query is built only from the user’s bank sender allowlist** (`buildStatementQuery`).
-- We persist statement **PDF attachments** and parsed **transactions**, not arbitrary mailbox content.
-- Disconnecting Gmail clears the connection and turns pooling off.
-
-### Enable pooling flow
-
-```mermaid
-sequenceDiagram
-  participant U as User
-  participant UI as Dashboard
-  participant Acc as /api/accounts
-  participant Gm as /api/gmail
-  participant G as Google
-  participant Imp as Import pipeline
-  participant PG as Postgres
-
-  U->>UI: Select bank + sender emails
-  UI->>Acc: PATCH accounts
-  Acc->>PG: statement_sender_emails
-  U->>UI: Enable Pooling (month=2026-08)
-  alt Gmail not connected
-    UI->>Gm: GET connect
-    Gm->>G: OAuth consent
-    G-->>UI: callback
-  end
-  UI->>Gm: POST pooling/enable
-  Gm->>PG: pooling_enabled=true
-  Gm->>G: messages.list(q=from:bank + statement + pdf + after/before)
-  G-->>Gm: message ids
-  Gm->>Imp: processPdfImport per PDF
-  Imp->>PG: imports + transactions
-  Note over Gm: Hourly history poll keeps watching
-```
-
-### Query shape
-
-```
-(from:(hdfcbank.net OR hdfcbank.com OR alerts@hdfcbank)
- subject:(statement OR "account statement" OR e-statement)
- has:attachment filename:pdf)
- after:2026/08/01 before:2026/09/01
-```
-
-Senders come from `accounts.statement_sender_emails` (defaults from bank presets). No senders → pooling APIs return 400.
-
-### Backfill vs poll
-
-| Mode | Trigger | Behavior |
-|------|---------|----------|
-| **Backfill** | Enable pooling / Run backfill | Bounded `messages.list` with allowlist query (+ optional month window) |
-| **History poll** | Hourly job (`gmail/jobs.ts`) | `users.history.list` for connected accounts |
-| **Push** | Pub/Sub (optional) | `/api/gmail/push` — token verification still beta debt |
-
-### Dedupe
-
-1. `UNIQUE (user_id, gmail_message_id)` on imports  
-2. `UNIQUE (user_id, attachment_hash)` on imports  
-3. `UNIQUE (user_id, fingerprint)` on transactions  
-
----
-
-## Dashboard month mapping
-
-- Default personal window: **August 2026** (`2026-08`).
-- `GET /api/imports/dashboard?from=2026-08-01&to=2026-08-31` filters stored rows.
-- **Top UPI handles** panel ranks debit targets by spend/count for that month.
-
----
-
-## Personal-use setup checklist
-
-1. `docker compose up -d postgres` (or full stack) — `DATABASE_URL=postgres://ledgerline:ledgerline@localhost:5432/ledgerline`
-2. Backend: set `JWT_SECRET`, `ENCRYPTION_KEY`, optional `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / redirect URI
-3. Run migrations on boot (`npm run migrate` or API start)
-4. Register with invite code → open dashboard
-5. **Bank mail & pooling**: pick bank (HDFC for PDF parse) → confirm sender emails → **Enable pooling** for `2026-08`
-6. Or upload August statement PDF manually
-7. Review Top UPI handles + lifestyle categories (Rapido under Outing)
-
----
-
-## Key API surfaces
-
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/api/accounts/bank-presets` | Curated banks + default senders |
-| GET/PATCH | `/api/accounts` | List / set bank + sender allowlist |
-| POST | `/api/gmail/pooling/enable` | Flag + month-scoped bank-mail backfill |
-| POST | `/api/gmail/pooling/disable` | Stop pooling flag |
-| GET | `/api/imports/dashboard?from&to` | Month-filtered analytics |
-| GET/POST | `/api/providers` | Provider registry under categories |
-
----
-
-## Folder map (backend)
-
-```
+## Project Structure
+```text
 backend/src/
-  accounts/     # Bank presets + account mail sources
-  gmail/        # OAuth, query builder, pooling, jobs
-  providers/    # Category ⊃ provider registry
-  imports/      # PDF pipeline + dashboard
-  adapters/     # Bank PDF parsers (HDFC today)
-  db/           # Store, migrations, postgres/memory
+  api/                  # Health endpoints
+  accounts/             # Bank preset and sender-allowlist HTTP surface
+  adapters/             # Bank-specific PDF parsers
+  analytics/            # Dashboard aggregations from persisted rows
+  auth/                 # JWT, Google login bootstrap, auth routes
+  categories/           # Category APIs and amount-band metadata
+  crypto/               # Fingerprints and encrypted secret helpers
+  db/                   # Store contract, Postgres implementation, migrations, seeds
+  errors/               # AppError and global error translation
+  gmail/                # Gmail integration, pooling services, controllers, jobs
+  imports/              # Import controllers, import services, classification orchestration
+  logger/               # Structured logging setup
+  middleware/           # Request context, logging, security, validation, rate limits
+  providers/            # Provider registry APIs
+  preferences/          # User preferences APIs
+  rules/                # User rules APIs and rule engine
+  validators/           # Zod request schemas
+  worker/               # Standalone pooling worker process
+
+frontend/src/
+  app/                  # Next.js app router entrypoints
+  components/           # UI composition, views, panels, and layout primitives
+  lib/                  # Auth, typed API client, shared formatting and date helpers
+  test/                 # Frontend test setup
 ```
+
+## Directory Responsibilities
+- `backend/src/app.ts` wires middleware and routes, but should not own business logic.
+- `backend/src/*/routes.ts` should stay thin and delegate into controllers or services.
+- `backend/src/*/service.ts` owns application orchestration and business rules.
+- `backend/src/gmail/client.ts` is the Gmail integration boundary. It owns OAuth and Gmail SDK details.
+- `backend/src/db/postgres.ts` is the current SQL boundary. It remains too large and is the next major extraction candidate.
+- `backend/src/adapters/` owns bank-specific parsing, not persistence or classification policy.
+- `frontend/src/components/dashboard/` renders feature views; `frontend/src/lib/api.ts` is the typed boundary to backend APIs.
+
+## Dependency Rules
+Backend dependency direction:
+
+1. Routes
+2. Controllers
+3. Services
+4. Persistence boundary (`Store` today, repositories by domain over time)
+5. Database
+
+External dependency direction:
+
+1. Services
+2. Integrations
+3. External APIs
+
+Rules:
+- Domain logic must not depend on Express request/response objects.
+- Gmail-specific code must stay behind the Gmail integration boundary.
+- Persistence details must not leak into route handlers.
+- Validators stay in `validators/` and are consumed through `middleware/validate.ts`.
+- New abstractions must be concrete and domain-owned, not generic wrappers.
+
+## Request Lifecycle
+Typical backend request flow:
+
+1. Request enters Express.
+2. `requestContext` assigns or propagates `requestId`.
+3. Security middleware applies CORS and security headers.
+4. Request logging and rate limiting run.
+5. Zod validation parses request body, params, or query.
+6. Route delegates to controller/service code.
+7. Service loads domain data through the store boundary.
+8. Response is mapped to JSON.
+9. Errors are translated by the global error handler into an app-level envelope.
+
+## Auth Flow
+Ledgerline currently supports JWT bearer auth with Google-first onboarding.
+
+1. Frontend starts sign-in through `/api/auth/google`.
+2. Backend redirects to Google OAuth.
+3. OAuth callback exchanges the code, validates the returned email, and creates or logs in the user.
+4. Backend signs a short-lived session JWT and redirects back to the frontend with the token.
+5. Frontend stores the token and uses it for authenticated API calls.
+
+Notes:
+- Google login currently also captures Gmail consent so a later Gmail connect can reuse the identity context.
+- Tokens and secrets are validated at boot through typed config.
+- For a future security pass, httpOnly cookies remain the likely upgrade path.
+
+## Gmail Flow
+Gmail is treated as an external integration with application decisions kept in services.
+
+Integration responsibilities:
+- OAuth client creation
+- auth URL generation
+- token exchange
+- Gmail API calls
+- history sync
+- attachment fetch
+- watch renewal
+
+Application responsibilities:
+- sender allowlist enforcement
+- month window selection
+- dedupe
+- classification
+- import orchestration
+- persistence
+- audit logging
+
+Pooling modes:
+- `backfill`: query-based bounded scan for alert mail and statement PDFs
+- `poll`: incremental Gmail history sync
+- `push`: optional Pub/Sub-triggered poll path
+
+Important constraints:
+- Only configured bank sender domains or emails are searched.
+- OAuth scope is `gmail.readonly`.
+- Message bodies are processed in memory for parsing/classification and are not persisted as arbitrary mailbox content.
+- The push endpoint is still a private-beta path and needs stronger verification before any public exposure.
+
+## PDF And Import Flow
+Import pipeline shape:
+
+1. Raw PDF upload or Gmail attachment bytes
+2. PDF text extraction
+3. Bank adapter parsing
+4. Transaction normalization
+5. Dedupe by attachment hash, Gmail message id, and transaction fingerprint
+6. Classification
+7. Persistence
+8. Dashboard analytics assembly
+
+This pipeline is intentionally adapter-based so more banks can be added without rewriting import orchestration.
+
+## Classification Flow
+Classification is deterministic and independently testable through `backend/src/imports/classification.ts`.
+
+Precedence:
+1. Provider registry
+2. User rules
+3. Amount-band heuristic
+4. `other`
+
+Details:
+- Provider registry matches narration aliases and UPI handle substrings.
+- User rules can assign payee, provider, or category.
+- Amount-band heuristics currently support the cigarettes bucket through category metadata.
+- Gmail alert ingestion and PDF import ingestion now use the same classification boundary.
+
+## Database Architecture
+Current persistence boundary:
+- `backend/src/db/types.ts` defines the `Store` contract.
+- `backend/src/db/index.ts` selects `MemoryStore` for tests or `PostgresStore` for real persistence.
+- `backend/src/db/migrations/` contains ordered SQL migrations.
+
+Key entities:
+- `users`
+- `accounts`
+- `imports`
+- `transactions`
+- `providers`
+- `categories`
+- `user_rules`
+- `gmail_connections`
+- `mail_messages`
+- `pooling_runs`
+
+Important uniqueness constraints:
+- `imports(user_id, gmail_message_id)`
+- `imports(user_id, attachment_hash)`
+- `transactions(user_id, fingerprint)`
+
+Current trade-off:
+- The `Store` interface already keeps application services unaware of connection details.
+- `PostgresStore` still groups too many unrelated queries and should be split by domain ownership over time.
+
+## Frontend Architecture
+The frontend is a Next.js app-router client with feature-oriented view composition.
+
+Current structure:
+- `Dashboard.tsx` owns dashboard-level server-state orchestration.
+- `DashboardViewRouter.tsx` switches between high-level feature views.
+- `BankPoolingPanel.tsx` and `SettingsPanel.tsx` handle Gmail and user configuration workflows.
+- `lib/api.ts` is the typed backend boundary.
+- `lib/month.ts` and other helpers hold shared UI-safe utilities.
+
+Guidelines:
+- Keep business-specific panels separate from reusable layout primitives.
+- Prefer typed API helpers over inline `fetch` calls.
+- Keep server state in feature owners; avoid introducing global state libraries without a concrete need.
+
+## Testing Strategy
+Backend priorities:
+- classification precedence
+- PDF parsing and line stitching
+- rule matching
+- analytics aggregation
+- Gmail alert parsing
+- repository behavior as domain-specific query modules are extracted
+
+Frontend priorities:
+- dashboard calculations and rendering
+- typed API integration assumptions
+- settings and pooling interactions where UI state and API contracts meet
+
+Testing rules:
+- Favor fast unit tests for business logic.
+- Mock or fake external integrations such as Gmail.
+- Use the memory store for most backend unit tests.
+- Add Postgres-backed integration tests when extracting repository modules from `PostgresStore`.
+
+## How To Add A Bank Parser
+1. Create a concrete adapter in `backend/src/adapters/`.
+2. Keep the adapter responsible only for parsing and normalization of that bank’s statement format.
+3. Export the adapter from `backend/src/adapters/index.ts`.
+4. Add focused parser fixtures or tests for edge cases.
+5. Add or update a bank preset and sender allowlist defaults if appropriate.
+6. Do not move persistence, classification, or Gmail logic into the adapter.
+
+## How To Add An External Integration
+1. Create or extend a dedicated integration module under a domain folder such as `gmail/`.
+2. Keep SDK, auth, and raw API details inside that module.
+3. Expose application-safe methods that return normalized data.
+4. Call the integration only from services.
+5. Translate infrastructure failures into `AppError` or domain-safe failures before they reach the client.
+6. Add mocks or fakes for test coverage.
+
+## How To Add A New API Endpoint
+1. Define request schemas in `backend/src/validators/`.
+2. Add or extend a route in the relevant domain folder.
+3. Keep the route thin and validate through `validate(...)`.
+4. Put orchestration in a controller or service, not inline in the route.
+5. Reuse the store boundary instead of reaching for raw SQL outside `db/`.
+6. Add backend tests for the business logic and frontend typed API changes if the endpoint is consumed by UI.
+
+## Known Architectural Debt
+- `PostgresStore` is still oversized and should be split by domain query ownership.
+- Some domain folders still have direct route-to-store coupling and should move toward the same controller/service pattern used in imports and Gmail.
+- Gmail push still needs stronger verification before public exposure.
+- The standalone pooling worker now binds to localhost by default, but if it is ever exposed off-host it will need authentication or network isolation.
+- Frontend auth transport is still JWT in browser storage.

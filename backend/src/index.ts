@@ -8,14 +8,10 @@ const app = createApp();
 
 async function boot() {
   await getStore();
-
-  const disableInlineJobs =
-    process.env.DISABLE_INLINE_GMAIL_JOBS === "1" ||
-    process.env.POOLING_WORKER_SEPARATE === "1";
-
-  if (disableInlineJobs) {
+  if (!config.google.inlineJobsEnabled) {
     logger.info(
-      "inline Gmail jobs disabled — use the pooling worker on :5473",
+      { workerPort: config.poolingWorker.port },
+      "inline Gmail jobs disabled — use the separate pooling worker",
     );
   } else {
     startGmailJobs();

@@ -21,6 +21,7 @@ const envSchema = z.object({
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),
+  LOG_PRETTY: z.enum(["0", "1"]).default("1"),
   CORS_ORIGINS: z.string().default("http://localhost:3000"),
   DATABASE_URL: z.string().min(1).default("memory"),
   JWT_SECRET: z.string().min(16, "JWT_SECRET must be at least 16 characters"),
@@ -40,6 +41,11 @@ const envSchema = z.object({
   GOOGLE_ALLOWED_EMAILS: z.string().optional().default(""),
   ADMIN_EMAILS: z.string().optional().default(""),
   GMAIL_PUBSUB_TOPIC: z.string().optional().default(""),
+  DISABLE_INLINE_GMAIL_JOBS: z.enum(["0", "1"]).default("0"),
+  POOLING_WORKER_SEPARATE: z.enum(["0", "1"]).default("0"),
+  POOLING_WORKER_HOST: z.string().min(1).default("127.0.0.1"),
+  POOLING_WORKER_PORT: z.coerce.number().int().min(1).max(65535).default(5473),
+  POOLING_WORKER_INTERVAL_MS: z.coerce.number().int().positive().default(120_000),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(120),
   RATE_LIMIT_AUTH_MAX: z.coerce.number().int().positive().default(20),
@@ -55,6 +61,7 @@ export type AppConfig = {
   isTest: boolean;
   port: number;
   logLevel: z.infer<typeof envSchema>["LOG_LEVEL"];
+  logPretty: boolean;
   corsOrigins: string[];
   databaseUrl: string;
   useMemoryStore: boolean;
@@ -68,6 +75,13 @@ export type AppConfig = {
     redirectUri: string;
     pubsubTopic: string;
     allowedEmails: string[];
+    inlineJobsEnabled: boolean;
+  };
+  poolingWorker: {
+    separateProcess: boolean;
+    host: string;
+    port: number;
+    intervalMs: number;
   };
   adminEmails: string[];
   rateLimit: {
@@ -158,6 +172,7 @@ function loadConfig(): AppConfig {
     isTest: env.NODE_ENV === "test",
     port: env.PORT,
     logLevel: env.LOG_LEVEL,
+    logPretty: env.LOG_PRETTY === "1",
     corsOrigins,
     databaseUrl: env.DATABASE_URL,
     useMemoryStore: env.DATABASE_URL === "memory",
@@ -173,6 +188,15 @@ function loadConfig(): AppConfig {
       allowedEmails: env.GOOGLE_ALLOWED_EMAILS.split(",")
         .map((s) => s.trim().toLowerCase())
         .filter(Boolean),
+      inlineJobsEnabled:
+        env.DISABLE_INLINE_GMAIL_JOBS !== "1" &&
+        env.POOLING_WORKER_SEPARATE !== "1",
+    },
+    poolingWorker: {
+      separateProcess: env.POOLING_WORKER_SEPARATE === "1",
+      host: env.POOLING_WORKER_HOST,
+      port: env.POOLING_WORKER_PORT,
+      intervalMs: env.POOLING_WORKER_INTERVAL_MS,
     },
     adminEmails: env.ADMIN_EMAILS.split(",")
       .map((s) => s.trim().toLowerCase())

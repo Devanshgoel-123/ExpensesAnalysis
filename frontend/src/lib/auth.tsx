@@ -142,8 +142,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!token) return;
     const until = sessionValidUntil(token);
     if (!until) {
-      logout();
-      return;
+      const id = window.setTimeout(() => logout(), 0);
+      return () => window.clearTimeout(id);
     }
     const id = window.setTimeout(() => logout(), until - Date.now());
     return () => window.clearTimeout(id);

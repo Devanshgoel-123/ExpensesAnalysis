@@ -309,25 +309,56 @@ textarea {
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
-  background:
-    linear-gradient(180deg, var(--bg) 0%, var(--bg-muted) 100%),
-    repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 23px,
-      var(--ledger-line) 23px,
-      var(--ledger-line) 24px
-    );
-  opacity: 1;
+  isolation: isolate;
+  background: linear-gradient(180deg, #04110a 0%, #071811 45%, #0d2218 100%);
 }
 
-.glow-backdrop::before {
-  content: "";
+.glow-backdrop__tunnel,
+.glow-backdrop__wash,
+.glow-backdrop__grid,
+.glow-backdrop__vignette {
   position: absolute;
   inset: 0;
+}
+
+.glow-backdrop__tunnel {
+  inset: -12%;
+  opacity: 0.96;
+  transform: scale(1.08);
+  filter: saturate(1.15) brightness(1.08);
+}
+
+.glow-backdrop__wash {
   background:
-    radial-gradient(ellipse 55% 40% at 8% 0%, var(--primary-soft), transparent 60%),
-    radial-gradient(ellipse 40% 35% at 100% 100%, rgba(15, 95, 115, 0.06), transparent 55%);
+    radial-gradient(circle at 50% 44%, rgba(209, 250, 229, 0.08), transparent 16%),
+    radial-gradient(circle at 15% 20%, rgba(61, 186, 116, 0.18), transparent 32%),
+    radial-gradient(circle at 82% 78%, rgba(93, 184, 204, 0.14), transparent 28%);
+}
+
+.glow-backdrop__grid {
+  opacity: 0.22;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.04) 0,
+      rgba(255, 255, 255, 0.04) 1px,
+      transparent 1px,
+      transparent 28px
+    ),
+    linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.03) 0,
+      rgba(255, 255, 255, 0.03) 1px,
+      transparent 1px,
+      transparent 28px
+    );
+  mask-image: radial-gradient(circle at center, rgba(0, 0, 0, 1), transparent 78%);
+}
+
+.glow-backdrop__vignette {
+  background:
+    radial-gradient(circle at center, transparent 0%, transparent 30%, rgba(4, 17, 10, 0.28) 66%, rgba(4, 17, 10, 0.84) 100%),
+    linear-gradient(180deg, rgba(4, 17, 10, 0.16) 0%, rgba(4, 17, 10, 0.08) 24%, rgba(4, 17, 10, 0.52) 100%);
 }
 
 .molten-stage,
@@ -360,7 +391,42 @@ textarea {
   position: relative;
   min-height: 100vh;
   z-index: 1;
-  background: var(--bg);
+  background: transparent;
+  --header-bg: rgba(12, 20, 15, 0.72);
+  --overlay: rgba(4, 17, 10, 0.68);
+}
+
+[data-theme="light"] .app-shell {
+  --surface: rgba(255, 252, 255, 0.84);
+  --surface-elevated: rgba(255, 255, 255, 0.92);
+  --bg-muted: rgba(239, 236, 228, 0.76);
+  --sidebar-bg: rgba(241, 238, 230, 0.82);
+}
+
+[data-theme="dark"] .app-shell {
+  --surface: rgba(26, 33, 29, 0.78);
+  --surface-elevated: rgba(34, 42, 37, 0.88);
+  --bg-muted: rgba(24, 29, 26, 0.76);
+  --sidebar-bg: rgba(22, 28, 24, 0.86);
+}
+
+.app-shell .app-header,
+.app-shell .app-sidebar,
+.app-shell .panel,
+.app-shell .stat,
+.app-shell .merchant-card,
+.app-shell .category-card,
+.app-shell .payee-card,
+.app-shell .metric-hero,
+.app-shell .health-metric,
+.app-shell .band-stats,
+.app-shell .settings-section,
+.app-shell .import-path-card,
+.app-shell .merchant-row,
+.app-shell .txn-card,
+.app-shell .dropzone,
+.app-shell .chart-tooltip {
+  backdrop-filter: blur(18px);
 }
 
 .app-main {

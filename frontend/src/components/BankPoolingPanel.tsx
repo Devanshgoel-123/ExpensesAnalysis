@@ -3,20 +3,36 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import {
+  disablePooling,
   enablePooling,
   fetchBankPresets,
   fetchAccounts,
   gmailConnectUrl,
   gmailStatus,
+  gmailSyncNow,
   patchAccount,
   type BankPreset,
   type AccountSummary,
+  type GmailStatus,
 } from "@/lib/api";
+import { currentMonth, formatTimestamp } from "@/lib/month";
 import { SpotlightCard } from "@/components/SpotlightCard";
 
-function currentMonth(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+function healthLabel(health: string | undefined): string {
+  switch (health) {
+    case "ok":
+      return "Healthy";
+    case "running":
+      return "Sync in progress";
+    case "degraded":
+      return "Last run failed";
+    case "pending":
+      return "Waiting for first sync";
+    case "idle":
+      return "Pooling off";
+    default:
+      return health ?? "Unknown";
+  }
 }
 
 export function BankPoolingPanel({
@@ -33,16 +49,7 @@ export function BankPoolingPanel({
   const [sendersText, setSendersText] = useState("");
   const [password, setPassword] = useState("");
   const [month, setMonth] = useState(defaultMonth);
-  const [gmail, setGmail] = useState<{
-    configured: boolean;
-    connected: boolean;
-    email: string | null;
-    poolingEnabled: boolean;
-    bank: string | null;
-    statementSenderEmails: string[];
-    lastSyncAt: string | null;
-    notice: string;
-  } | null>(null);
+  const [gmail, setGmail] = useState<GmailStatus | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -82,9 +89,20 @@ export function BankPoolingPanel({
     };
   }, [token, refresh]);
 
+  // Poll status while a run is active so the monitor stays live.
+  useEffect(() => {
+    if (!token || gmail?.latestRun?.status !== "running") return;
+    const id = window.setInterval(() => {
+      void refresh();
+    }, 4000);
+    return () => window.clearInterval(id);
+  }, [token, gmail?.latestRun?.status, refresh]);
+
   if (!token) return null;
 
   const selectedPreset = presets.find((p) => p.id === bank);
+  const latest = gmail?.latestRun ?? null;
+  const recent = gmail?.recentRuns ?? [];
 
   async function saveBankSetup() {
     setBusy(true);
@@ -141,7 +159,7 @@ export function BankPoolingPanel({
         password,
       });
       setMessage(
-        `Pooling active for ${month} — alerts +${result.alerts.imported}, PDF +${result.statements.imported} (${result.backfill.skipped} skipped). Hourly sync stays on.`,
+        `Pooling active for ${month} — alerts +${result.alerts.imported}, PDF +${result.statements.imported} (${result.backfill.skipped} skipped). Hourly dispatcher stays on.`,
       );
       await refresh();
       onChanged?.();
@@ -152,15 +170,177 @@ export function BankPoolingPanel({
     }
   }
 
+  async function handleSyncNow() {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await gmailSyncNow(token!);
+      setMessage(
+        `Manual sync finished — scanned ${result.run.scanned}, imported ${result.run.imported}, skipped ${result.run.skipped}.`,
+      );
+      await refresh();
+      onChanged?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sync failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDisablePooling() {
+    if (!confirm("Turn off Gmail pooling? Existing imports stay.")) return;
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await disablePooling(token!);
+      setMessage("Pooling disabled. Hourly dispatcher will skip this account.");
+      await refresh();
+      onChanged?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not disable pooling");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <SpotlightCard className="panel">
       <header className="panel-head">
         <h2 className="ui-header">Bank mail & pooling</h2>
         <p className="meta">
-          Pick your bank sender handles. Alert emails (debit/credit) are synced
-          first; PDF statements are only used as a secondary backfill.
+          Pick your bank sender handles. Alert emails sync first; PDF statements
+          are a secondary backfill. An hourly dispatcher keeps pooling alive.
         </p>
       </header>
+
+      <section
+        className="settings-section"
+        style={{ marginBottom: "1rem" }}
+        aria-label="Pooling monitor"
+      >
+        <h3 className="ui-header">Pooling monitor</h3>
+        <p className="meta">
+          Live status of the dispatcher job and recent mail processing runs.
+        </p>
+
+        <div className="band-stats" style={{ marginBottom: "0.85rem" }}>
+          <div>
+            <p className="meta">Dispatcher</p>
+            <strong>{healthLabel(gmail?.dispatcher?.health)}</strong>
+            <p className="meta">{gmail?.dispatcher?.interval ?? "hourly"}</p>
+          </div>
+          <div>
+            <p className="meta">Pooling</p>
+            <strong
+              style={
+                gmail?.poolingEnabled ? { color: "var(--credit)" } : undefined
+              }
+            >
+              {gmail?.poolingEnabled ? "Active" : "Off"}
+            </strong>
+          </div>
+          <div>
+            <p className="meta">Last sync</p>
+            <strong>{formatTimestamp(gmail?.lastSyncAt)}</strong>
+          </div>
+          <div>
+            <p className="meta">Latest run</p>
+            <strong>
+              {latest
+                ? `${latest.status} · ${latest.scanned} mail`
+                : "No runs yet"}
+            </strong>
+          </div>
+        </div>
+
+        {latest ? (
+          <div className="band-stats health" style={{ marginBottom: "0.85rem" }}>
+            <div>
+              <p className="meta">Scanned</p>
+              <strong>{latest.scanned}</strong>
+            </div>
+            <div>
+              <p className="meta">Imported</p>
+              <strong>{latest.imported}</strong>
+            </div>
+            <div>
+              <p className="meta">Skipped</p>
+              <strong>{latest.skipped}</strong>
+            </div>
+            <div>
+              <p className="meta">Trigger</p>
+              <strong>{latest.trigger}</strong>
+            </div>
+          </div>
+        ) : null}
+
+        {latest?.errorMessage ? (
+          <p className="form-error" style={{ marginBottom: "0.75rem" }}>
+            {latest.errorMessage}
+          </p>
+        ) : null}
+
+        {recent.length > 0 ? (
+          <ul className="upi-list" style={{ maxHeight: 180, marginBottom: "0.85rem" }}>
+            {recent.map((run) => (
+              <li key={run.id} className="upi-row">
+                <span className="upi-rank">{run.status.slice(0, 3)}</span>
+                <div className="upi-meta">
+                  <strong>
+                    {run.trigger} · {run.mode}
+                    {run.month ? ` · ${run.month}` : ""}
+                  </strong>
+                  <span className="meta">
+                    {formatTimestamp(run.startedAt)}
+                    {run.finishedAt
+                      ? ` → ${formatTimestamp(run.finishedAt)}`
+                      : " · running"}
+                  </span>
+                </div>
+                <span className="upi-amount mono">
+                  {run.scanned}/{run.imported}/{run.skipped}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="meta" style={{ marginBottom: "0.85rem" }}>
+            Run history appears after enable, backfill, manual sync, or the
+            hourly dispatcher.
+          </p>
+        )}
+
+        <div className="sort-bar">
+          <button
+            type="button"
+            className="ghost"
+            disabled={busy || !gmail?.poolingEnabled}
+            onClick={() => void handleSyncNow()}
+          >
+            Sync now
+          </button>
+          <button
+            type="button"
+            className="ghost"
+            disabled={busy}
+            onClick={() => void refresh()}
+          >
+            Refresh status
+          </button>
+          {gmail?.poolingEnabled ? (
+            <button
+              type="button"
+              className="ghost"
+              disabled={busy}
+              onClick={() => void handleDisablePooling()}
+            >
+              Disable pooling
+            </button>
+          ) : null}
+        </div>
+      </section>
 
       <div className="band-stats" style={{ marginBottom: "1rem" }}>
         <div>
@@ -174,20 +354,12 @@ export function BankPoolingPanel({
           </strong>
         </div>
         <div>
-          <p className="meta">Pooling</p>
-          <strong style={gmail?.poolingEnabled ? { color: "var(--credit)" } : undefined}>
-            {gmail?.poolingEnabled ? "Active" : "Off"}
-          </strong>
-        </div>
-        {gmail?.lastSyncAt && (
-          <div>
-            <p className="meta">Last sync</p>
-            <strong>{new Date(gmail.lastSyncAt).toLocaleString()}</strong>
-          </div>
-        )}
-        <div>
           <p className="meta">Accounts</p>
           <strong>{accounts.length}</strong>
+        </div>
+        <div>
+          <p className="meta">Started</p>
+            <strong>{formatTimestamp(gmail?.poolingStartedAt)}</strong>
         </div>
       </div>
 

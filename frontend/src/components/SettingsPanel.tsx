@@ -14,7 +14,30 @@ import {
   gmailStatus,
   listRules,
   updatePreferences,
+  type GmailStatus,
 } from "@/lib/api";
+import { formatTimestamp } from "@/lib/month";
+
+function buildRuleMatchFields(matchText: string): {
+  matchNarrationRe?: string;
+  matchUpiId?: string;
+} {
+  const trimmed = matchText.trim();
+  if (!trimmed) return {};
+  if (trimmed.includes("@")) {
+    return { matchUpiId: trimmed.toLowerCase() };
+  }
+  return {
+    matchNarrationRe: trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+  };
+}
+
+function ruleMatchLabel(rule: Record<string, unknown>): string {
+  if (rule.matchUpiId) return `UPI: ${String(rule.matchUpiId)}`;
+  if (rule.matchNarrationRe) return `contains: ${String(rule.matchNarrationRe)}`;
+  if (rule.matchMerchantAlias) return `merchant: ${String(rule.matchMerchantAlias)}`;
+  return "custom match";
+}
 
 export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
   const { token, logout, destroyAccount, user } = useAuth();
@@ -22,12 +45,7 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
   const [suggestions, setSuggestions] = useState<
     Array<{ label: string; count: number; sample: string }>
   >([]);
-  const [gmail, setGmail] = useState<{
-    configured: boolean;
-    connected: boolean;
-    email: string | null;
-    notice: string;
-  } | null>(null);
+  const [gmail, setGmail] = useState<GmailStatus | null>(null);
   const [payeeName, setPayeeName] = useState("");
   const [matchText, setMatchText] = useState("");
   const [statementPassword, setStatementPassword] = useState("");
@@ -38,18 +56,22 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
 
   const refresh = useCallback(async () => {
     if (!token) return;
-    const [rulesRes, suggestionsRes, gmailRes, prefsRes] = await Promise.all([
-      listRules(token),
-      fetchSuggestions(token).catch(() => ({ suggestions: [] })),
-      gmailStatus(token).catch(() => null),
-      fetchPreferences(token).catch(() => ({ dailySpendLimit: null })),
-    ]);
-    setRules(rulesRes.rules);
-    setSuggestions(suggestionsRes.suggestions);
-    setGmail(gmailRes);
-    setDailyLimit(
-      prefsRes.dailySpendLimit != null ? String(prefsRes.dailySpendLimit) : "",
-    );
+    try {
+      const [rulesRes, suggestionsRes, gmailRes, prefsRes] = await Promise.all([
+        listRules(token),
+        fetchSuggestions(token).catch(() => ({ suggestions: [] })),
+        gmailStatus(token).catch(() => null),
+        fetchPreferences(token),
+      ]);
+      setRules(rulesRes.rules);
+      setSuggestions(suggestionsRes.suggestions);
+      setGmail(gmailRes);
+      setDailyLimit(
+        prefsRes.dailySpendLimit != null ? String(prefsRes.dailySpendLimit) : "",
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load settings");
+    }
   }, [token]);
 
   useEffect(() => {
@@ -197,8 +219,14 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
                 onClick={async () => {
                   try {
                     const result = await gmailBackfill(token, statementPassword);
+                    const imported =
+                      result.alerts.imported + result.statements.imported;
+                    const skipped =
+                      result.alerts.skipped + result.statements.skipped;
                     setMessage(
-                      `Backfill: imported ${result.imported}, skipped ${result.skipped}`,
+                      `Backfill: imported ${imported}, skipped ${skipped}${
+                        result.month ? ` for ${result.month}` : ""
+                      }`,
                     );
                     onChanged?.();
                   } catch (err) {
@@ -239,6 +267,11 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
             {gmail.notice}
           </p>
         ) : null}
+        {gmail?.connected && gmail.email ? (
+          <p className="meta" style={{ marginTop: "0.4rem" }}>
+            Connected account last synced {formatTimestamp(gmail.lastSyncAt)}
+          </p>
+        ) : null}
         <p className="meta" style={{ marginTop: "0.75rem" }}>
           Manage bank sender allowlist on the Import screen.
         </p>
@@ -273,17 +306,33 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
             onClick={async () => {
               try {
                 setError(null);
-                await createRule(token, {
-                  name: `Track ${payeeName}`,
+                const name = payeeName.trim();
+                const match = matchText.trim();
+                if (!name) {
+                  setError("Enter a name to track");
+                  return;
+                }
+                if (!match) {
+                  setError("Enter narration or UPI text to match");
+                  return;
+                }
+                const result = await createRule(token, {
+                  name: `Track ${name}`,
                   priority: 20,
-                  matchNarrationRe: matchText,
-                  setPayeeName: payeeName,
+                  ...buildRuleMatchFields(match),
+                  setPayeeName: name,
                 });
                 setPayeeName("");
                 setMatchText("");
                 await refresh();
                 onChanged?.();
-                setMessage("Rule saved");
+                const count =
+                  typeof result.reclassified === "number" ? result.reclassified : 0;
+                setMessage(
+                  count > 0
+                    ? `Rule saved — matched ${count} existing transaction${count === 1 ? "" : "s"}`
+                    : "Rule saved",
+                );
               } catch (err) {
                 setError(
                   err instanceof Error ? err.message : "Could not save rule",
@@ -323,7 +372,8 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
               <div className="upi-meta">
                 <strong>{String(rule.name)}</strong>
                 <span className="meta">
-                  {String(rule.setPayeeName || rule.setCategorySlug || "custom")}
+                  {String(rule.setPayeeName || rule.setCategorySlug || "custom")} ·{" "}
+                  {ruleMatchLabel(rule)}
                 </span>
               </div>
               <button

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchDashboard, parseStatement } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { currentMonth, monthBounds, monthFromDate } from "@/lib/month";
 import type { AmountBand, DailyInsights, ParseResult } from "@/lib/types";
 import type { DashboardView } from "@/lib/dashboardViews";
 import { AuthGate } from "@/components/AuthGate";
@@ -29,19 +30,6 @@ const EMPTY_INSIGHTS: DailyInsights = {
   totalOverLimit: 0,
 };
 
-function currentMonth(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function monthBounds(month: string): { from: string; to: string } {
-  const [y, m] = month.split("-").map(Number);
-  const from = `${month}-01`;
-  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
-  const to = `${month}-${String(lastDay).padStart(2, "0")}`;
-  return { from, to };
-}
-
 function DashboardInner() {
   const { token, user, logout } = useAuth();
   const [data, setData] = useState<ParseResult | null>(null);
@@ -61,8 +49,25 @@ function DashboardInner() {
       try {
         const result = await fetchDashboard(token, range);
         if (cancelled) return;
-        if (result.transactions.length > 0) setData(result);
-        else setData(null);
+
+        if (result.transactions.length === 0) {
+          const all = await fetchDashboard(token);
+          if (cancelled) return;
+          const latestMonth = monthFromDate(all.summary.dateTo);
+          if (
+            all.transactions.length > 0 &&
+            latestMonth &&
+            latestMonth !== month &&
+            month === currentMonth()
+          ) {
+            setMonth(latestMonth);
+            return;
+          }
+          setData(all.transactions.length > 0 ? all : result);
+          return;
+        }
+
+        setData(result);
       } catch {
         // Keep current view if dashboard reload fails.
       }
@@ -70,7 +75,7 @@ function DashboardInner() {
     return () => {
       cancelled = true;
     };
-  }, [token, refreshKey, range]);
+  }, [token, refreshKey, range, month]);
 
   async function handleParse(file: File, password: string) {
     if (!token) return;
@@ -78,9 +83,10 @@ function DashboardInner() {
     setError(null);
     try {
       const result = await parseStatement(file, password, token);
+      const parsedMonth = monthFromDate(result.summary.dateTo);
+      if (parsedMonth) setMonth(parsedMonth);
       setData(result);
       setView("overview");
-      bump();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -105,10 +111,7 @@ function DashboardInner() {
       : `Month ${month}`;
 
   const amountBand = data?.amountBand25to60 ?? EMPTY_BAND;
-  const dailyInsights = data?.dailyInsights ?? {
-    ...EMPTY_INSIGHTS,
-    totalDaysWithSpend: data?.daily.length ?? 0,
-  };
+  const dailyInsights = data?.dailyInsights ?? EMPTY_INSIGHTS;
 
   return (
     <AppShell
@@ -116,7 +119,7 @@ function DashboardInner() {
       onViewChange={setView}
       periodLabel={periodLabel}
       monthControl={monthControl}
-      hasData={Boolean(data)}
+      hasData={Boolean(data && data.transactions.length > 0)}
       userEmail={user?.email}
       onImportAnother={() => {
         setData(null);

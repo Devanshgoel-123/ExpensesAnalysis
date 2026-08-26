@@ -18,3 +18,6 @@ export const gmailBackfillBodySchema = z.object({
     .regex(/^\d{4}-\d{2}$/)
     .optional(),
 });
+
+export type EnablePoolingBody = z.infer<typeof enablePoolingBodySchema>;
+export type GmailBackfillBody = z.infer<typeof gmailBackfillBodySchema>;

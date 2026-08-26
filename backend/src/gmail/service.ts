@@ -262,28 +262,27 @@ export async function syncGmailForUser(userId: string) {
 
 export async function persistGoogleConnection(input: {
   userId: string;
-  code: string;
+  tokens: Awaited<ReturnType<typeof exchangeCode>>;
 }) {
-  const tokens = await exchangeCode(input.code);
   const store = await getStore();
   const existing = await store.getGmailConnection(input.userId);
   const connection = await store.upsertGmailConnection({
     userId: input.userId,
-    googleEmail: tokens.email,
-    refreshTokenEncrypted: tokens.refreshToken
-      ? encryptSecret(tokens.refreshToken)
+    googleEmail: input.tokens.email,
+    refreshTokenEncrypted: input.tokens.refreshToken
+      ? encryptSecret(input.tokens.refreshToken)
       : existing?.refreshTokenEncrypted ?? "",
-    accessTokenEncrypted: tokens.accessToken
-      ? encryptSecret(tokens.accessToken)
+    accessTokenEncrypted: input.tokens.accessToken
+      ? encryptSecret(input.tokens.accessToken)
       : existing?.accessTokenEncrypted ?? null,
-    tokenExpiry: tokens.expiry ?? existing?.tokenExpiry ?? null,
+    tokenExpiry: input.tokens.expiry ?? existing?.tokenExpiry ?? null,
     historyId: existing?.historyId ?? null,
     watchExpiration: existing?.watchExpiration ?? null,
     lastSyncAt: existing?.lastSyncAt ?? null,
     disconnectedAt: null,
   });
   await ensureHistoryId(connection);
-  await store.audit(input.userId, "gmail.connected", { email: tokens.email });
+  await store.audit(input.userId, "gmail.connected", { email: input.tokens.email });
   try {
     await renewWatch(connection);
   } catch {

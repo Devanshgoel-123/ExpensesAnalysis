@@ -1,6 +1,7 @@
 import type { ParseResult } from "./types";
+import { appConfig } from "./config";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+const API_BASE = appConfig.apiBaseUrl;
 
 export interface AuthUser {
   id: string;
@@ -19,24 +20,47 @@ function authHeaders(token: string): HeadersInit {
   return { Authorization: `Bearer ${token}` };
 }
 
+async function requestJson<T>(
+  path: string,
+  options: RequestInit & { token?: string } = {},
+): Promise<T> {
+  const { token, headers, ...init } = options;
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: {
+      ...(token ? authHeaders(token) : {}),
+      ...headers,
+    },
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<T>;
+}
+
+async function requestVoid(
+  path: string,
+  options: RequestInit & { token?: string } = {},
+): Promise<void> {
+  const { token, headers, ...init } = options;
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: {
+      ...(token ? authHeaders(token) : {}),
+      ...headers,
+    },
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+}
+
 export function googleLoginUrl(): string {
   return `${API_BASE}/api/auth/google`;
 }
 
 export async function fetchMe(token: string): Promise<AuthUser> {
-  const res = await fetch(`${API_BASE}/api/auth/me`, {
-    headers: authHeaders(token),
-  });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
+  return requestJson<AuthUser>("/api/auth/me", { token });
 }
 
 export async function deleteAccount(token: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/auth/me`, {
-    method: "DELETE",
-    headers: authHeaders(token),
-  });
-  if (!res.ok) throw new Error(await parseError(res));
+  return requestVoid("/api/auth/me", { method: "DELETE", token });
 }
 
 export async function parseStatement(
@@ -66,12 +90,9 @@ export async function fetchDashboard(
   if (range?.from) params.set("from", range.from);
   if (range?.to) params.set("to", range.to);
   const qs = params.toString();
-  const res = await fetch(
-    `${API_BASE}/api/imports/dashboard${qs ? `?${qs}` : ""}`,
-    { headers: authHeaders(token) },
-  );
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
+  return requestJson<ParseResult>(`/api/imports/dashboard${qs ? `?${qs}` : ""}`, {
+    token,
+  });
 }
 
 export interface BankPreset {
@@ -94,19 +115,14 @@ export interface AccountSummary {
 }
 
 export async function fetchBankPresets(token: string) {
-  const res = await fetch(`${API_BASE}/api/accounts/bank-presets`, {
-    headers: authHeaders(token),
-  });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json() as Promise<{ presets: BankPreset[]; notice: string }>;
+  return requestJson<{ presets: BankPreset[]; notice: string }>(
+    "/api/accounts/bank-presets",
+    { token },
+  );
 }
 
 export async function fetchAccounts(token: string) {
-  const res = await fetch(`${API_BASE}/api/accounts`, {
-    headers: authHeaders(token),
-  });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json() as Promise<{ accounts: AccountSummary[] }>;
+  return requestJson<{ accounts: AccountSummary[] }>("/api/accounts", { token });
 }
 
 export async function patchAccount(
@@ -118,74 +134,116 @@ export async function patchAccount(
     createIfMissing?: boolean;
   },
 ) {
-  const res = await fetch(`${API_BASE}/api/accounts`, {
-    method: "PATCH",
-    headers: { ...authHeaders(token), "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json() as Promise<{
+  return requestJson<{
     account: AccountSummary;
     readyForPooling: boolean;
-  }>;
+  }>("/api/accounts", {
+    method: "PATCH",
+    token,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }
 
 export async function enablePooling(
   token: string,
   body: { month?: string; password?: string; maxMessages?: number } = {},
 ) {
-  const res = await fetch(`${API_BASE}/api/gmail/pooling/enable`, {
-    method: "POST",
-    headers: { ...authHeaders(token), "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json() as Promise<{
-    month: string;
+  return requestJson<{
+    month: string | null;
     statements: { scanned: number; imported: number; skipped: number };
     alerts: { scanned: number; imported: number; skipped: number };
     backfill: { imported: number; skipped: number; scanned: number };
     notice: string;
-  }>;
+  }>("/api/gmail/pooling/enable", {
+    method: "POST",
+    token,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }
 
-export async function listRules(token: string) {
-  const res = await fetch(`${API_BASE}/api/rules`, {
-    headers: authHeaders(token),
+export async function disablePooling(token: string) {
+  return requestJson<{ ok: boolean }>("/api/gmail/pooling/disable", {
+    method: "POST",
+    token,
   });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json() as Promise<{ rules: Array<Record<string, unknown>> }>;
+}
+
+export async function gmailSyncNow(token: string) {
+  return requestJson<{
+    ok: boolean;
+    lastSyncAt: string;
+    run: {
+      scanned: number;
+      imported: number;
+      skipped: number;
+      runId: string;
+    };
+  }>("/api/gmail/sync", {
+    method: "POST",
+    token,
+  });
+}
+
+export type PoolingRunSummary = {
+  id: string;
+  trigger: string;
+  status: "running" | "completed" | "failed" | string;
+  mode: string;
+  month: string | null;
+  scanned: number;
+  imported: number;
+  skipped: number;
+  errorMessage: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+};
+
+export type GmailStatus = {
+  configured: boolean;
+  connected: boolean;
+  email: string | null;
+  lastSyncAt: string | null;
+  notice: string;
+  poolingEnabled: boolean;
+  poolingStartedAt: string | null;
+  bank: string | null;
+  statementSenderEmails: string[];
+  dispatcher?: {
+    interval: string;
+    health: "idle" | "running" | "ok" | "degraded" | "pending" | string;
+  };
+  latestRun?: PoolingRunSummary | null;
+  recentRuns?: PoolingRunSummary[];
+};
+
+export async function listRules(token: string) {
+  return requestJson<{ rules: Array<Record<string, unknown>> }>("/api/rules", {
+    token,
+  });
 }
 
 export async function createRule(
   token: string,
   body: Record<string, unknown>,
 ) {
-  const res = await fetch(`${API_BASE}/api/rules`, {
+  return requestJson<Record<string, unknown>>("/api/rules", {
     method: "POST",
-    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    token,
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
 }
 
 export async function deleteRule(token: string, id: string) {
-  const res = await fetch(`${API_BASE}/api/rules/${id}`, {
-    method: "DELETE",
-    headers: authHeaders(token),
-  });
-  if (!res.ok) throw new Error(await parseError(res));
+  return requestVoid(`/api/rules/${id}`, { method: "DELETE", token });
 }
 
 export async function fetchSuggestions(token: string) {
-  const res = await fetch(`${API_BASE}/api/rules/suggestions`, {
-    headers: authHeaders(token),
-  });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json() as Promise<{
+  return requestJson<{
     suggestions: Array<{ label: string; count: number; sample: string }>;
-  }>;
+  }>("/api/rules/suggestions", { token });
 }
 
 export async function correctTransaction(
@@ -193,21 +251,16 @@ export async function correctTransaction(
   id: string,
   body: Record<string, unknown>,
 ) {
-  const res = await fetch(`${API_BASE}/api/imports/transactions/${id}`, {
+  return requestJson<Record<string, unknown>>(`/api/imports/transactions/${id}`, {
     method: "PATCH",
-    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    token,
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
 }
 
 export async function listProviders(token: string) {
-  const res = await fetch(`${API_BASE}/api/providers`, {
-    headers: authHeaders(token),
-  });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json() as Promise<{
+  return requestJson<{
     providers: Array<{
       id: string;
       canonicalName: string;
@@ -215,28 +268,25 @@ export async function listProviders(token: string) {
       websiteDomain: string | null;
       categorySlug: string | null;
     }>;
-  }>;
+  }>("/api/providers", { token });
 }
 
 export async function fetchPreferences(token: string) {
-  const res = await fetch(`${API_BASE}/api/preferences`, {
-    headers: authHeaders(token),
+  return requestJson<{ dailySpendLimit: number | null }>("/api/preferences", {
+    token,
   });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json() as Promise<{ dailySpendLimit: number | null }>;
 }
 
 export async function updatePreferences(
   token: string,
   body: { dailySpendLimit: number | null },
 ) {
-  const res = await fetch(`${API_BASE}/api/preferences`, {
+  return requestJson<{ dailySpendLimit: number | null }>("/api/preferences", {
     method: "PATCH",
-    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    token,
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json() as Promise<{ dailySpendLimit: number | null }>;
 }
 
 export async function adminUpdateProviderLogo(
@@ -244,57 +294,38 @@ export async function adminUpdateProviderLogo(
   providerId: string,
   logoUrl: string | null,
 ) {
-  const res = await fetch(`${API_BASE}/api/admin/providers/${providerId}`, {
+  return requestJson<Record<string, unknown>>(`/api/admin/providers/${providerId}`, {
     method: "PATCH",
-    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    token,
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ logoUrl }),
   });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
 }
 
 export async function gmailStatus(token: string) {
-  const res = await fetch(`${API_BASE}/api/gmail/status`, {
-    headers: authHeaders(token),
-  });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json() as Promise<{
-    configured: boolean;
-    connected: boolean;
-    email: string | null;
-    lastSyncAt: string | null;
-    notice: string;
-    poolingEnabled: boolean;
-    poolingStartedAt: string | null;
-    bank: string | null;
-    statementSenderEmails: string[];
-  }>;
+  return requestJson<GmailStatus>("/api/gmail/status", { token });
 }
 
 export async function gmailConnectUrl(token: string) {
-  const res = await fetch(`${API_BASE}/api/gmail/connect`, {
-    headers: authHeaders(token),
-  });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json() as Promise<{ url: string }>;
+  return requestJson<{ url: string }>("/api/gmail/connect", { token });
 }
 
 export async function gmailDisconnect(token: string) {
-  const res = await fetch(`${API_BASE}/api/gmail/disconnect`, {
-    method: "POST",
-    headers: authHeaders(token),
-  });
-  if (!res.ok) throw new Error(await parseError(res));
+  return requestVoid("/api/gmail/disconnect", { method: "POST", token });
 }
 
 export async function gmailBackfill(token: string, password = "") {
-  const res = await fetch(`${API_BASE}/api/gmail/backfill`, {
+  return requestJson<{
+    month: string | null;
+    window: { after: string; before?: string };
+    statements: { scanned: number; imported: number; skipped: number };
+    alerts: { scanned: number; imported: number; skipped: number };
+  }>("/api/gmail/backfill", {
     method: "POST",
-    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    token,
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ password, maxMessages: 10 }),
   });
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
 }
 
 export function formatInr(amount: number): string {

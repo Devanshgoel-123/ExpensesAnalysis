@@ -11,10 +11,9 @@ import { childLogger } from "../logger/index.js";
 
 const log = childLogger({ service: "ledgerline-pooling-worker", module: "worker" });
 
-const PORT = Number(process.env.POOLING_WORKER_PORT ?? 5473);
-const INTERVAL_MS = Number(
-  process.env.POOLING_WORKER_INTERVAL_MS ?? 2 * 60 * 1000,
-);
+const HOST = config.poolingWorker.host;
+const PORT = config.poolingWorker.port;
+const INTERVAL_MS = config.poolingWorker.intervalMs;
 
 let pollInFlight = false;
 let lastTickAt: string | null = null;
@@ -239,6 +238,7 @@ async function handleStatus(): Promise<Record<string, unknown>> {
 
   return {
     service: "ledgerline-pooling-worker",
+    host: HOST,
     port: PORT,
     intervalMs: INTERVAL_MS,
     gmailConfigured: gmailConfigured(),
@@ -279,6 +279,7 @@ async function handleStatus(): Promise<Record<string, unknown>> {
 async function boot(): Promise<void> {
   log.info(
     {
+      host: HOST,
       port: PORT,
       intervalMs: INTERVAL_MS,
       database: config.useMemoryStore ? "memory" : "postgres",
@@ -293,7 +294,7 @@ async function boot(): Promise<void> {
 
   const server = http.createServer((req, res) => {
     void (async () => {
-      const url = new URL(req.url ?? "/", `http://127.0.0.1:${PORT}`);
+      const url = new URL(req.url ?? "/", `http://${HOST}:${PORT}`);
       const method = req.method ?? "GET";
 
       try {
@@ -357,9 +358,9 @@ async function boot(): Promise<void> {
     })();
   });
 
-  server.listen(PORT, () => {
+  server.listen(PORT, HOST, () => {
     log.info(
-      { url: `http://localhost:${PORT}` },
+      { url: `http://${HOST}:${PORT}` },
       `pooling worker listening — GET /status · POST /run · POST /probe · POST /backfill · poll every ${INTERVAL_MS}ms`,
     );
   });
