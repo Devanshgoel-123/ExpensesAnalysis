@@ -4,6 +4,18 @@ import { GlowBackdrop } from "@/components/GlowBackdrop";
 import { googleLoginUrl } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
+const GOOGLE_PERMISSIONS = [
+  {
+    title: "Basic profile",
+    detail: "Your name and email so we can create your account.",
+  },
+  {
+    title: "Gmail read-only",
+    detail:
+      "List bank statement emails only — we never read arbitrary mail. PDFs are parsed into transactions.",
+  },
+];
+
 function GoogleMark() {
   return (
     <svg className="google-mark" viewBox="0 0 24 24" aria-hidden>
@@ -46,22 +58,44 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   return (
     <main className="shell landing">
       <GlowBackdrop />
-      <div className="landing-content">
+      <div className="landing-content login-layout">
         <header className="brand-block">
           <p className="brand">Ledgerline</p>
           <h1 className="ui-header">Sign in to continue</h1>
           <p className="lede">
-            Use your Google account. You stay signed in for 7 days, then you
-            will need to sign in again.
+            One Google consent covers sign-in and optional bank-mail pooling.
+            Sessions last 7 days.
           </p>
         </header>
 
-        <div className="upload-panel panel login-panel">
-          {authError && <p className="form-error">{authError}</p>}
-          <a className="cta google-cta" href={googleLoginUrl()}>
-            <GoogleMark />
-            Continue with Google
-          </a>
+        <div className="login-grid">
+          <section className="panel login-panel">
+            <h2 className="ui-header login-subhead">Permissions we request</h2>
+            <ul className="permission-list">
+              {GOOGLE_PERMISSIONS.map((item) => (
+                <li key={item.title}>
+                  <strong>{item.title}</strong>
+                  <p className="meta">{item.detail}</p>
+                </li>
+              ))}
+            </ul>
+            <p className="meta login-note">
+              Google will show these scopes on the consent screen. You can revoke
+              access anytime from your Google Account.
+            </p>
+          </section>
+
+          <section className="panel login-panel login-action">
+            {authError && <p className="form-error">{authError}</p>}
+            <a className="cta google-cta" href={googleLoginUrl()}>
+              <GoogleMark />
+              Continue with Google
+            </a>
+            <p className="meta">
+              Includes Gmail read-only for statement pooling — only bank sender
+              emails you configure are searched.
+            </p>
+          </section>
         </div>
       </div>
     </main>

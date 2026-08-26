@@ -1,27 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, Sparkles } from "lucide-react";
-import Link from "next/link";
 import { fetchDashboard, parseStatement } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import type { AmountBand, ParseResult } from "@/lib/types";
-import { GlowBackdrop } from "@/components/GlowBackdrop";
-import { SiteNav } from "@/components/SiteNav";
-import { UploadPanel } from "@/components/UploadPanel";
-import { StatsRow } from "@/components/StatsRow";
-import { DailyChart } from "@/components/DailyChart";
-import { DailyInsightsPanel } from "@/components/DailyInsightsPanel";
-import { UpiRankingList } from "@/components/UpiRankingList";
-import { MerchantSpendPanel } from "@/components/MerchantSpendPanel";
-import { CategoryBreakdown } from "@/components/CategoryBreakdown";
-import { PayeeSpendPanel } from "@/components/PayeeSpendPanel";
-import { AmountBandPanel } from "@/components/AmountBandPanel";
-import { TransactionTable } from "@/components/TransactionTable";
-import { SettingsPanel } from "@/components/SettingsPanel";
-import { BankPoolingPanel } from "@/components/BankPoolingPanel";
+import type { AmountBand, DailyInsights, ParseResult } from "@/lib/types";
+import type { DashboardView } from "@/lib/dashboardViews";
 import { AuthGate } from "@/components/AuthGate";
+import { AppShell } from "@/components/layout/AppShell";
+import { DashboardViewRouter } from "@/components/dashboard/DashboardViewRouter";
 
 const EMPTY_BAND: AmountBand = {
   label: "",
@@ -31,6 +17,16 @@ const EMPTY_BAND: AmountBand = {
   total: 0,
   days: [],
   dayCounts: {},
+};
+
+const EMPTY_INSIGHTS: DailyInsights = {
+  limit: null,
+  enabled: false,
+  daysOverLimit: [],
+  daysUnderLimit: 0,
+  totalDaysWithSpend: 0,
+  worstDay: null,
+  totalOverLimit: 0,
 };
 
 function currentMonth(): string {
@@ -47,12 +43,13 @@ function monthBounds(month: string): { from: string; to: string } {
 }
 
 function DashboardInner() {
-  const { token, logout } = useAuth();
+  const { token, user, logout } = useAuth();
   const [data, setData] = useState<ParseResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [month, setMonth] = useState(currentMonth);
+  const [view, setView] = useState<DashboardView>("overview");
 
   const bump = useCallback(() => setRefreshKey((k) => k + 1), []);
   const range = useMemo(() => monthBounds(month), [month]);
@@ -82,6 +79,7 @@ function DashboardInner() {
     try {
       const result = await parseStatement(file, password, token);
       setData(result);
+      setView("overview");
       bump();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -91,7 +89,7 @@ function DashboardInner() {
   }
 
   const monthControl = (
-    <label className="field" style={{ minWidth: 140, margin: 0 }}>
+    <label className="field field-inline">
       <span className="meta">Month</span>
       <input
         type="month"
@@ -100,175 +98,46 @@ function DashboardInner() {
       />
     </label>
   );
-  if (!data) {
-    return (
-      <main className="shell landing">
-        <GlowBackdrop />
-        <div className="landing-content">
-          <SiteNav />
-          <div className="badge-pill">
-            <Sparkles size={13} /> Personal bank-mail pooling
-          </div>
-          <header className="brand-block">
-            <p className="brand">Ledgerline</p>
-            <h1 className="ui-header">Your spends. Sorted. Understood.</h1>
-            <p className="lede">
-              Molten backdrop. Counted spends. Set your bank senders, pool August,
-              and watch top UPI handles add up where the money went.
-            </p>
-          </header>
-          <div style={{ marginBottom: "1rem", maxWidth: 200 }}>{monthControl}</div>
-          <UploadPanel onParsed={handleParse} loading={loading} error={error} />
-          <div style={{ marginTop: "1.5rem" }}>
-            <BankPoolingPanel onChanged={bump} defaultMonth={month} />
-          </div>
-          <div style={{ marginTop: "1.5rem" }}>
-            <SettingsPanel onChanged={bump} />
-          </div>
-          <footer className="foot-note">
-            See the <Link href="/architecture">system architecture</Link>
-            <ArrowRight size={14} />
-          </footer>
-        </div>
-      </main>
-    );
-  }
 
   const periodLabel =
-    data.summary.dateFrom && data.summary.dateTo
+    data?.summary.dateFrom && data?.summary.dateTo
       ? `${data.summary.dateFrom} → ${data.summary.dateTo}`
       : `Month ${month}`;
-  const categories = data.categories ?? [];
-  const amountBand = data.amountBand25to60 ?? EMPTY_BAND;
-  const dailyInsights = data.dailyInsights ?? {
-    limit: null,
-    enabled: false,
-    daysOverLimit: [],
-    daysUnderLimit: 0,
-    totalDaysWithSpend: data.daily.length,
-    worstDay: null,
-    totalOverLimit: 0,
+
+  const amountBand = data?.amountBand25to60 ?? EMPTY_BAND;
+  const dailyInsights = data?.dailyInsights ?? {
+    ...EMPTY_INSIGHTS,
+    totalDaysWithSpend: data?.daily.length ?? 0,
   };
 
   return (
-    <main className="shell dashboard">
-      <GlowBackdrop />
-      <div className="dashboard-content">
-        <SiteNav />
-        <motion.header
-          className="dash-top"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35 }}
-        >
-          <div>
-            <p className="brand compact">Ledgerline</p>
-            <h1 className="ui-header">Expense dashboard</h1>
-            <p className="meta">{periodLabel}</p>
-          </div>
-          <div className="sort-bar">
-            {monthControl}
-            <button
-              type="button"
-              className="ghost"
-              onClick={() => {
-                setData(null);
-                setError(null);
-              }}
-            >
-              <ArrowLeft size={16} /> Import another
-            </button>
-            <button type="button" className="ghost" onClick={logout}>
-              Log out
-            </button>
-          </div>
-        </motion.header>
-
-        <StatsRow summary={data.summary} />
-
-        <motion.div
-          className="grid-main"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.08, duration: 0.35 }}
-        >
-          <DailyChart data={data.daily} insights={dailyInsights} />
-          <UpiRankingList items={data.upiRanking} month={month} />
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, duration: 0.35 }}
-        >
-          <DailyInsightsPanel insights={dailyInsights} />
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.12, duration: 0.35 }}
-        >
-          <CategoryBreakdown
-            merchants={data.merchantSpend ?? []}
-            cigaretteBand={amountBand}
-            categories={categories}
-          />
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.16, duration: 0.35 }}
-        >
-          <MerchantSpendPanel
-            items={data.merchantSpend ?? []}
-            categories={categories}
-          />
-        </motion.div>
-
-        <motion.div
-          className="grid-main"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.35 }}
-        >
-          <PayeeSpendPanel items={data.payeeSpend ?? []} />
-          <AmountBandPanel
-            band={amountBand}
-            dateFrom={data.summary.dateFrom}
-            dateTo={data.summary.dateTo}
-          />
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.22, duration: 0.35 }}
-        >
-          <BankPoolingPanel onChanged={bump} defaultMonth={month} />
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.23, duration: 0.35 }}
-        >
-          <SettingsPanel onChanged={bump} />
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.24, duration: 0.35 }}
-        >
-          <TransactionTable
-            items={data.transactions}
-            categories={categories}
-          />
-        </motion.div>
-      </div>
-    </main>
+    <AppShell
+      view={view}
+      onViewChange={setView}
+      periodLabel={periodLabel}
+      monthControl={monthControl}
+      hasData={Boolean(data)}
+      userEmail={user?.email}
+      onImportAnother={() => {
+        setData(null);
+        setError(null);
+        setView("import");
+      }}
+      onRefresh={bump}
+      onLogout={logout}
+    >
+      <DashboardViewRouter
+        view={view}
+        data={data}
+        dailyInsights={dailyInsights}
+        amountBand={amountBand}
+        month={month}
+        loading={loading}
+        error={error}
+        onParsed={handleParse}
+        onChanged={bump}
+      />
+    </AppShell>
   );
 }
 
