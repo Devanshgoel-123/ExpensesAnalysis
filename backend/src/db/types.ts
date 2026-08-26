@@ -62,6 +62,9 @@ export interface AccountRow {
   userId: string;
   bank: string;
   label: string;
+  statementSenderEmails: string[];
+  poolingEnabled: boolean;
+  poolingStartedAt: string | null;
 }
 
 export interface ImportRow {
@@ -149,6 +152,10 @@ export interface NewTransactionInput {
 export interface ListTransactionsOptions {
   limit?: number;
   offset?: number;
+  /** Inclusive YYYY-MM-DD */
+  from?: string;
+  /** Inclusive YYYY-MM-DD */
+  to?: string;
 }
 
 export interface Store {
@@ -187,6 +194,21 @@ export interface Store {
   deleteRule(userId: string, ruleId: string): Promise<void>;
 
   getOrCreateAccount(userId: string, bank?: string): Promise<AccountRow>;
+  listAccounts(userId: string): Promise<AccountRow[]>;
+  updateAccountMailSources(
+    userId: string,
+    accountId: string,
+    patch: {
+      bank?: string;
+      label?: string;
+      statementSenderEmails?: string[];
+    },
+  ): Promise<AccountRow | null>;
+  setPoolingEnabled(
+    userId: string,
+    accountId: string,
+    enabled: boolean,
+  ): Promise<AccountRow | null>;
 
   createImport(
     input: Omit<ImportRow, "id" | "createdAt" | "updatedAt"> & {

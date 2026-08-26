@@ -77,6 +77,20 @@ function mapRule(row: Record<string, unknown>): UserRuleRow {
   };
 }
 
+function mapAccount(row: Record<string, unknown>): AccountRow {
+  return {
+    id: String(row.id),
+    userId: String(row.user_id),
+    bank: String(row.bank),
+    label: String(row.label),
+    statementSenderEmails: (row.statement_sender_emails as string[]) ?? [],
+    poolingEnabled: Boolean(row.pooling_enabled),
+    poolingStartedAt: row.pooling_started_at
+      ? new Date(String(row.pooling_started_at)).toISOString()
+      : null,
+  };
+}
+
 function mapImport(row: Record<string, unknown>): ImportRow {
   return {
     id: String(row.id),
@@ -446,26 +460,68 @@ export class PostgresStore implements Store {
       `SELECT * FROM accounts WHERE user_id = $1 AND bank = $2 LIMIT 1`,
       [userId, bank],
     );
-    if (existing.rows[0]) {
-      return {
-        id: String(existing.rows[0].id),
-        userId: String(existing.rows[0].user_id),
-        bank: String(existing.rows[0].bank),
-        label: String(existing.rows[0].label),
-      };
-    }
+    if (existing.rows[0]) return mapAccount(existing.rows[0]);
     const inserted = await this.pool.query(
       `INSERT INTO accounts (user_id, bank, label)
        VALUES ($1, $2, 'Primary')
        RETURNING *`,
       [userId, bank],
     );
-    return {
-      id: String(inserted.rows[0].id),
-      userId: String(inserted.rows[0].user_id),
-      bank: String(inserted.rows[0].bank),
-      label: String(inserted.rows[0].label),
-    };
+    return mapAccount(inserted.rows[0]);
+  }
+
+  async listAccounts(userId: string): Promise<AccountRow[]> {
+    const result = await this.pool.query(
+      `SELECT * FROM accounts WHERE user_id = $1 ORDER BY created_at ASC`,
+      [userId],
+    );
+    return result.rows.map(mapAccount);
+  }
+
+  async updateAccountMailSources(
+    userId: string,
+    accountId: string,
+    patch: {
+      bank?: string;
+      label?: string;
+      statementSenderEmails?: string[];
+    },
+  ): Promise<AccountRow | null> {
+    const result = await this.pool.query(
+      `UPDATE accounts SET
+         bank = COALESCE($3, bank),
+         label = COALESCE($4, label),
+         statement_sender_emails = COALESCE($5, statement_sender_emails)
+       WHERE id = $1 AND user_id = $2
+       RETURNING *`,
+      [
+        accountId,
+        userId,
+        patch.bank ?? null,
+        patch.label ?? null,
+        patch.statementSenderEmails ?? null,
+      ],
+    );
+    return result.rows[0] ? mapAccount(result.rows[0]) : null;
+  }
+
+  async setPoolingEnabled(
+    userId: string,
+    accountId: string,
+    enabled: boolean,
+  ): Promise<AccountRow | null> {
+    const result = await this.pool.query(
+      `UPDATE accounts SET
+         pooling_enabled = $3,
+         pooling_started_at = CASE
+           WHEN $3 = TRUE THEN COALESCE(pooling_started_at, NOW())
+           ELSE pooling_started_at
+         END
+       WHERE id = $1 AND user_id = $2
+       RETURNING *`,
+      [accountId, userId, enabled],
+    );
+    return result.rows[0] ? mapAccount(result.rows[0]) : null;
   }
 
   async createImport(
@@ -617,16 +673,33 @@ export class PostgresStore implements Store {
   ): Promise<TransactionRow[]> {
     const limit = options?.limit;
     const offset = options?.offset ?? 0;
+    const from = options?.from;
+    const to = options?.to;
+    const clauses = ["user_id = $1"];
+    const params: unknown[] = [userId];
+    if (from) {
+      params.push(from);
+      clauses.push(`date >= $${params.length}::date`);
+    }
+    if (to) {
+      params.push(to);
+      clauses.push(`date <= $${params.length}::date`);
+    }
+    const where = clauses.join(" AND ");
+    params.push(offset);
+    const offsetParam = `$${params.length}`;
     if (limit === undefined) {
       const result = await this.pool.query(
-        `SELECT * FROM transactions WHERE user_id = $1 ORDER BY date DESC, created_at DESC OFFSET $2`,
-        [userId, offset],
+        `SELECT * FROM transactions WHERE ${where} ORDER BY date DESC, created_at DESC OFFSET ${offsetParam}`,
+        params,
       );
       return result.rows.map(mapTx);
     }
+    params.push(limit);
+    const limitParam = `$${params.length}`;
     const result = await this.pool.query(
-      `SELECT * FROM transactions WHERE user_id = $1 ORDER BY date DESC, created_at DESC LIMIT $2 OFFSET $3`,
-      [userId, limit, offset],
+      `SELECT * FROM transactions WHERE ${where} ORDER BY date DESC, created_at DESC LIMIT ${limitParam} OFFSET ${offsetParam}`,
+      params,
     );
     return result.rows.map(mapTx);
   }

@@ -8,10 +8,28 @@ const GLOBAL_CATEGORIES = [
     accent: "#8b7cff",
   },
   {
+    slug: "shopping",
+    label: "Shopping",
+    blurb: "Retail & marketplace spends",
+    accent: "#f59e0b",
+  },
+  {
     slug: "travel",
     label: "Travel",
-    blurb: "MakeMyTrip",
+    blurb: "MakeMyTrip · flights · hotels",
     accent: "#5ecbff",
+  },
+  {
+    slug: "outing",
+    label: "Outing",
+    blurb: "Rapido · District · local rides",
+    accent: "#34d399",
+  },
+  {
+    slug: "investments",
+    label: "Investments",
+    blurb: "Brokers · SIPs · mutual funds",
+    accent: "#38bdf8",
   },
   {
     slug: "cigarettes",
@@ -21,8 +39,8 @@ const GLOBAL_CATEGORIES = [
   },
   {
     slug: "other",
-    label: "Other apps",
-    blurb: "Rapido · District",
+    label: "Other",
+    blurb: "Uncategorized apps & people",
     accent: "#6d5cff",
   },
 ] as const;
@@ -80,7 +98,7 @@ export const GLOBAL_PROVIDERS = [
     senderDomains: ["rapido.bike"],
     websiteDomain: "rapido.bike",
     logoUrl: "/providers/rapido.svg",
-    categorySlug: "other",
+    categorySlug: "outing",
   },
   {
     canonicalName: "District",
@@ -89,7 +107,7 @@ export const GLOBAL_PROVIDERS = [
     senderDomains: ["district.in"],
     websiteDomain: "district.in",
     logoUrl: "/providers/district.svg",
-    categorySlug: "other",
+    categorySlug: "outing",
   },
   {
     canonicalName: "HDFC Bank",

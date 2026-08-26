@@ -184,8 +184,52 @@ export class MemoryStore implements Store {
       userId,
       bank,
       label: "Primary",
+      statementSenderEmails: [],
+      poolingEnabled: false,
+      poolingStartedAt: null,
     };
     this.accounts.push(row);
+    return row;
+  }
+
+  async listAccounts(userId: string): Promise<AccountRow[]> {
+    return this.accounts.filter((a) => a.userId === userId);
+  }
+
+  async updateAccountMailSources(
+    userId: string,
+    accountId: string,
+    patch: {
+      bank?: string;
+      label?: string;
+      statementSenderEmails?: string[];
+    },
+  ): Promise<AccountRow | null> {
+    const row = this.accounts.find(
+      (a) => a.id === accountId && a.userId === userId,
+    );
+    if (!row) return null;
+    if (patch.bank !== undefined) row.bank = patch.bank;
+    if (patch.label !== undefined) row.label = patch.label;
+    if (patch.statementSenderEmails !== undefined) {
+      row.statementSenderEmails = patch.statementSenderEmails;
+    }
+    return row;
+  }
+
+  async setPoolingEnabled(
+    userId: string,
+    accountId: string,
+    enabled: boolean,
+  ): Promise<AccountRow | null> {
+    const row = this.accounts.find(
+      (a) => a.id === accountId && a.userId === userId,
+    );
+    if (!row) return null;
+    row.poolingEnabled = enabled;
+    if (enabled && !row.poolingStartedAt) {
+      row.poolingStartedAt = nowIso();
+    }
     return row;
   }
 
@@ -272,7 +316,12 @@ export class MemoryStore implements Store {
     options?: ListTransactionsOptions,
   ): Promise<TransactionRow[]> {
     const rows = this.transactions
-      .filter((t) => t.userId === userId)
+      .filter((t) => {
+        if (t.userId !== userId) return false;
+        if (options?.from && t.date < options.from) return false;
+        if (options?.to && t.date > options.to) return false;
+        return true;
+      })
       .sort((a, b) => b.date.localeCompare(a.date));
     const offset = options?.offset ?? 0;
     if (options?.limit === undefined) return rows.slice(offset);

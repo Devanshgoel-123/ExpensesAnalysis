@@ -5,6 +5,7 @@ import type { AmountBand, MerchantSpend } from "@/lib/types";
 import { formatInr } from "@/lib/api";
 import {
   CATEGORY_META,
+  MERCHANT_CATEGORY,
   type LifestyleCategory,
 } from "@/lib/categories";
 import { LiveCounter } from "@/components/LiveCounter";
@@ -22,57 +23,53 @@ interface CategoryBucket {
   members: string[];
 }
 
+const DISPLAY_ORDER: LifestyleCategory[] = [
+  "food",
+  "shopping",
+  "travel",
+  "outing",
+  "investments",
+  "cigarettes",
+  "other",
+];
+
 function buildBuckets(
   merchants: MerchantSpend[],
   cigaretteBand: AmountBand,
 ): CategoryBucket[] {
-  const foodMerchants = ["Swiggy", "Bistro", "Zepto", "Ayodhya"];
-  const travelMerchants = ["MakeMyTrip"];
-  const otherMerchants = ["Rapido", "District"];
+  const byCategory = new Map<LifestyleCategory, MerchantSpend[]>();
+  for (const row of merchants) {
+    const cat = MERCHANT_CATEGORY[row.merchant] ?? "other";
+    const list = byCategory.get(cat) ?? [];
+    list.push(row);
+    byCategory.set(cat, list);
+  }
 
-  const sum = (names: string[]) => {
-    const rows = merchants.filter((m) => names.includes(m.merchant));
+  return DISPLAY_ORDER.map((id) => {
+    if (id === "cigarettes") {
+      return {
+        id,
+        total: cigaretteBand.total,
+        count: cigaretteBand.count,
+        members: cigaretteBand.days.length
+          ? [`${cigaretteBand.days.length} days`]
+          : ["₹25–₹60"],
+      };
+    }
+    const rows = byCategory.get(id) ?? [];
+    const known = Object.entries(MERCHANT_CATEGORY)
+      .filter(([, c]) => c === id)
+      .map(([name]) => name);
+    const members = rows
+      .filter((r) => r.count > 0)
+      .map((r) => r.merchant);
     return {
-      total: rows.reduce((s, m) => s + m.total, 0),
+      id,
+      total: Math.round(rows.reduce((s, m) => s + m.total, 0) * 100) / 100,
       count: rows.reduce((s, m) => s + m.count, 0),
-      members: names.filter(
-        (n) => (merchants.find((m) => m.merchant === n)?.count ?? 0) > 0,
-      ),
+      members: members.length ? members : known.length ? known : [CATEGORY_META[id].label],
     };
-  };
-
-  const food = sum(foodMerchants);
-  const travel = sum(travelMerchants);
-  const other = sum(otherMerchants);
-
-  return [
-    {
-      id: "food",
-      total: Math.round(food.total * 100) / 100,
-      count: food.count,
-      members: food.members.length ? food.members : foodMerchants,
-    },
-    {
-      id: "travel",
-      total: Math.round(travel.total * 100) / 100,
-      count: travel.count,
-      members: travel.members.length ? travel.members : travelMerchants,
-    },
-    {
-      id: "cigarettes",
-      total: cigaretteBand.total,
-      count: cigaretteBand.count,
-      members: cigaretteBand.days.length
-        ? [`${cigaretteBand.days.length} days`]
-        : ["₹25–₹60"],
-    },
-    {
-      id: "other",
-      total: Math.round(other.total * 100) / 100,
-      count: other.count,
-      members: other.members.length ? other.members : otherMerchants,
-    },
-  ];
+  });
 }
 
 export function CategoryBreakdown({
@@ -86,7 +83,7 @@ export function CategoryBreakdown({
     <SpotlightCard className="panel category-panel">
       <header className="panel-head">
         <h2 className="ui-header">Lifestyle split</h2>
-        <p className="meta">Food · Travel · Cigarettes — live totals</p>
+        <p className="meta">Food · Outing · Travel · Investments — live totals</p>
       </header>
 
       <div className="category-grid">
