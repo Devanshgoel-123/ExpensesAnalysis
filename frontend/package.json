@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run --config vitest.config.mts"
   },
   "dependencies": {
     "framer-motion": "^12.42.2",
@@ -30,6 +30,7 @@
     "@vitejs/plugin-react": "^4.7.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
+    "happy-dom": "^20.11.6",
     "jsdom": "^27.0.1",
     "tailwindcss": "^4",
     "typescript": "^5",

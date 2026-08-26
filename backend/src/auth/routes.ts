@@ -35,6 +35,7 @@ authRouter.get("/me", requireAuth, async (req, res) => {
     id: user.id,
     email: user.email,
     displayName: user.displayName,
+    dailySpendLimit: user.dailySpendLimit,
     createdAt: user.createdAt,
   });
 });

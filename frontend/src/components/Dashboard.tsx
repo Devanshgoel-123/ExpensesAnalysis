@@ -140,6 +140,15 @@ function DashboardInner() {
       : `Month ${month}`;
   const categories = data.categories ?? [];
   const amountBand = data.amountBand25to60 ?? EMPTY_BAND;
+  const dailyInsights = data.dailyInsights ?? {
+    limit: null,
+    enabled: false,
+    daysOverLimit: [],
+    daysUnderLimit: 0,
+    totalDaysWithSpend: data.daily.length,
+    worstDay: null,
+    totalOverLimit: 0,
+  };
 
   return (
     <main className="shell dashboard">
@@ -183,7 +192,7 @@ function DashboardInner() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.08, duration: 0.35 }}
         >
-          <DailyChart data={data.daily} insights={data.dailyInsights} />
+          <DailyChart data={data.daily} insights={dailyInsights} />
           <UpiRankingList items={data.upiRanking} month={month} />
         </motion.div>
 
@@ -192,7 +201,7 @@ function DashboardInner() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1, duration: 0.35 }}
         >
-          <DailyInsightsPanel insights={data.dailyInsights} />
+          <DailyInsightsPanel insights={dailyInsights} />
         </motion.div>
 
         <motion.div

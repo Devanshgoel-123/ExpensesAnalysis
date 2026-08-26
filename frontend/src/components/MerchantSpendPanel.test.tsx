@@ -13,11 +13,23 @@ describe("MerchantSpendPanel", () => {
             count: 2,
             lastDate: "2026-08-02",
             logoUrl: "/providers/swiggy.svg",
+            categorySlug: "food",
+          },
+        ]}
+        categories={[
+          {
+            id: "1",
+            slug: "food",
+            label: "Food",
+            blurb: "Delivery",
+            accent: "#8b7cff",
+            sortOrder: 1,
+            meta: {},
           },
         ]}
       />,
     );
-    expect(screen.getByText("Merchant spend")).toBeInTheDocument();
+    expect(screen.getByText("Tracked apps")).toBeInTheDocument();
     expect(screen.getByText("Swiggy")).toBeInTheDocument();
   });
 });

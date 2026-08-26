@@ -9,7 +9,11 @@ describe("BrandMark", () => {
   });
 
   it("renders provider image when logoUrl is set", () => {
-    render(<BrandMark name="Swiggy" logoUrl="/providers/swiggy.svg" />);
-    expect(screen.getByRole("img")).toHaveAttribute("src", "/providers/swiggy.svg");
+    const { container } = render(
+      <BrandMark name="Swiggy" logoUrl="/providers/swiggy.svg" />,
+    );
+    const img = container.querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img).toHaveAttribute("src", "/providers/swiggy.svg");
   });
 });

@@ -238,13 +238,13 @@ async function main() {
     throw new Error("daily insights should flag over-limit day");
   }
 
-  const ayodhya = providers.find((p) => p.canonicalName === "Ayodhya");
-  if (!ayodhya) throw new Error("Ayodhya provider missing");
+  const swiggyForLogo = providers.find((p) => p.canonicalName === "Swiggy");
+  if (!swiggyForLogo) throw new Error("Swiggy provider missing");
   const updatedLogo = await store.upsertProvider({
-    ...ayodhya,
-    logoUrl: "/providers/ayodhya.svg",
+    ...swiggyForLogo,
+    logoUrl: "/providers/swiggy.svg",
   });
-  if (updatedLogo.logoUrl !== "/providers/ayodhya.svg") {
+  if (updatedLogo.logoUrl !== "/providers/swiggy.svg") {
     throw new Error("admin provider logo update failed");
   }
 
