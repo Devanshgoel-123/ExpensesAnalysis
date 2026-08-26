@@ -136,6 +136,7 @@ function DashboardInner() {
         error={error}
         onParsed={handleParse}
         onChanged={bump}
+        onViewChange={setView}
       />
     </AppShell>
   );

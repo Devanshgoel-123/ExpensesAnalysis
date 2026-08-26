@@ -6,7 +6,7 @@ import { encryptSecret } from "../crypto/secrets.js";
 import { getStore } from "../db/index.js";
 import type { AccountRow, GmailConnectionRow } from "../db/types.js";
 import { AppError } from "../errors/AppError.js";
-import { processPdfImport } from "../imports/service.js";
+import { gmailLog } from "../logger/gmail.js";
 import { validate } from "../middleware/validate.js";
 import {
   enablePoolingBodySchema,
@@ -14,28 +14,20 @@ import {
 } from "../validators/gmail.js";
 import {
   buildGmailAuthUrl,
-  buildStatementQuery,
+  ensureHistoryId,
   exchangeCode,
-  fetchPdfAttachments,
   gmailConfigured,
-  listStatementMessageIds,
   renewWatch,
-  syncHistory,
 } from "./client.js";
+import {
+  currentMonth,
+  monthBounds,
+  runAllPoolingPolls,
+  runPoolingPoll,
+  runPoolingSync,
+} from "./poolingService.js";
 
 export const gmailRouter = Router();
-
-function monthBounds(month: string): { from: string; to: string; after: string; before: string } {
-  const [y, m] = month.split("-").map(Number);
-  const from = `${month}-01`;
-  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
-  const to = `${month}-${String(lastDay).padStart(2, "0")}`;
-  // Gmail before: is exclusive — use first day of next month
-  const nextMonth = m === 12 ? 1 : m + 1;
-  const nextYear = m === 12 ? y + 1 : y;
-  const before = `${nextYear}-${String(nextMonth).padStart(2, "0")}-01`;
-  return { from, to, after: from, before };
-}
 
 async function resolveAccountForPooling(
   userId: string,
@@ -58,86 +50,6 @@ async function resolveAccountForPooling(
     );
   }
   return account;
-}
-
-async function runStatementBackfill(input: {
-  userId: string;
-  connection: GmailConnectionRow;
-  senders: string[];
-  password: string;
-  maxMessages: number;
-  month?: string;
-}): Promise<{
-  scanned: number;
-  imported: number;
-  skipped: number;
-  errors: string[];
-  query: string;
-}> {
-  const store = await getStore();
-  const bounds = input.month ? monthBounds(input.month) : null;
-  const query = buildStatementQuery(
-    input.senders,
-    bounds ? { after: bounds.after, before: bounds.before } : undefined,
-  );
-
-  let pageToken: string | undefined;
-  let scanned = 0;
-  let imported = 0;
-  let skipped = 0;
-  const errors: string[] = [];
-
-  while (scanned < input.maxMessages) {
-    const page = await listStatementMessageIds(
-      input.connection,
-      pageToken,
-      query,
-    );
-    for (const messageId of page.ids) {
-      if (scanned >= input.maxMessages) break;
-      scanned += 1;
-      const existing = await store.findImportByGmailMessage(
-        input.userId,
-        messageId,
-      );
-      if (existing?.status === "completed") {
-        skipped += 1;
-        continue;
-      }
-      try {
-        const pdfs = await fetchPdfAttachments(input.connection, messageId);
-        for (const pdf of pdfs) {
-          try {
-            await processPdfImport({
-              userId: input.userId,
-              buffer: pdf.buffer,
-              filename: pdf.filename,
-              password: input.password,
-              source: "gmail",
-              gmailMessageId: messageId,
-            });
-            imported += 1;
-          } catch (error) {
-            const message =
-              error instanceof Error ? error.message : "import failed";
-            errors.push(`${pdf.filename}: ${message}`);
-          }
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "fetch failed";
-        errors.push(`${messageId}: ${message}`);
-      }
-    }
-    if (!page.nextPageToken) break;
-    pageToken = page.nextPageToken;
-  }
-
-  await store.upsertGmailConnection({
-    ...input.connection,
-    lastSyncAt: new Date().toISOString(),
-  });
-
-  return { scanned, imported, skipped, errors: errors.slice(0, 10), query };
 }
 
 gmailRouter.get("/status", requireAuth, async (req, res) => {
@@ -230,6 +142,31 @@ export async function handleGmailOAuthCallback(
         email: tokens.email,
         displayName: tokens.name,
       });
+      const store = await getStore();
+      const existing = await store.getGmailConnection(result.user.id);
+      if (tokens.refreshToken || existing) {
+        await store.upsertGmailConnection({
+          userId: result.user.id,
+          googleEmail: tokens.email,
+          refreshTokenEncrypted: tokens.refreshToken
+            ? encryptSecret(tokens.refreshToken)
+            : existing?.refreshTokenEncrypted ?? "",
+          accessTokenEncrypted: tokens.accessToken
+            ? encryptSecret(tokens.accessToken)
+            : existing?.accessTokenEncrypted ?? null,
+          tokenExpiry: tokens.expiry ?? existing?.tokenExpiry ?? null,
+          historyId: existing?.historyId ?? null,
+          watchExpiration: existing?.watchExpiration ?? null,
+          lastSyncAt: existing?.lastSyncAt ?? null,
+          disconnectedAt: null,
+        });
+        const connection = await store.getGmailConnection(result.user.id);
+        if (connection) await ensureHistoryId(connection);
+        await store.audit(result.user.id, "gmail.connected", {
+          email: tokens.email,
+          source: "google_login",
+        });
+      }
       const url = new URL(config.frontendUrl);
       url.hash = `token=${encodeURIComponent(result.token)}`;
       res.redirect(url.toString());
@@ -242,27 +179,36 @@ export async function handleGmailOAuthCallback(
     }
     const tokens = await exchangeCode(code);
     if (!tokens.refreshToken) {
-      res
-        .status(400)
-        .send(
-          "No refresh token returned. Disconnect the app in Google Account permissions and retry with consent.",
-        );
-      return;
+      const existing = await getStore().then((s) =>
+        s.getGmailConnection(payload.sub!),
+      );
+      if (!existing?.refreshTokenEncrypted) {
+        res
+          .status(400)
+          .send(
+            "No refresh token returned. Disconnect the app in Google Account permissions and retry with consent.",
+          );
+        return;
+      }
     }
     const store = await getStore();
+    const existing = await store.getGmailConnection(payload.sub);
     const connection = await store.upsertGmailConnection({
       userId: payload.sub,
       googleEmail: tokens.email,
-      refreshTokenEncrypted: encryptSecret(tokens.refreshToken),
+      refreshTokenEncrypted: tokens.refreshToken
+        ? encryptSecret(tokens.refreshToken)
+        : existing?.refreshTokenEncrypted ?? "",
       accessTokenEncrypted: tokens.accessToken
         ? encryptSecret(tokens.accessToken)
-        : null,
-      tokenExpiry: tokens.expiry,
-      historyId: null,
-      watchExpiration: null,
-      lastSyncAt: null,
+        : existing?.accessTokenEncrypted ?? null,
+      tokenExpiry: tokens.expiry ?? existing?.tokenExpiry ?? null,
+      historyId: existing?.historyId ?? null,
+      watchExpiration: existing?.watchExpiration ?? null,
+      lastSyncAt: existing?.lastSyncAt ?? null,
       disconnectedAt: null,
     });
+    await ensureHistoryId(connection);
     await store.audit(payload.sub, "gmail.connected", {
       email: tokens.email,
     });
@@ -318,21 +264,27 @@ gmailRouter.post(
       month?: string;
     };
     const account = await resolveAccountForPooling(req.user!.id);
-    const result = await runStatementBackfill({
+    const ready = await ensureHistoryId(connection);
+    const month = body.month ?? currentMonth();
+    const sync = await runPoolingSync({
       userId: req.user!.id,
-      connection,
-      senders: account.statementSenderEmails,
+      connection: ready,
+      account,
       password: body.password ?? "",
-      maxMessages: body.maxMessages ?? 10,
-      month: body.month,
+      maxMessages: body.maxMessages ?? 25,
+      month,
     });
     await store.audit(req.user!.id, "gmail.backfill", {
-      scanned: result.scanned,
-      imported: result.imported,
-      skipped: result.skipped,
-      month: body.month ?? null,
+      month,
+      statements: sync.statements,
+      alerts: sync.alerts,
     });
-    res.json(result);
+    res.json({
+      month,
+      bounds: monthBounds(month),
+      statements: sync.statements,
+      alerts: sync.alerts,
+    });
   },
 );
 
@@ -359,7 +311,7 @@ gmailRouter.post(
       maxMessages?: number;
       accountId?: string;
     };
-    const month = body.month ?? "2026-08";
+    const month = body.month ?? currentMonth();
     const account = await resolveAccountForPooling(
       req.user!.id,
       body.accountId,
@@ -369,27 +321,36 @@ gmailRouter.post(
       account.id,
       true,
     );
-    const backfill = await runStatementBackfill({
+    const ready = await ensureHistoryId(connection);
+    const sync = await runPoolingSync({
       userId: req.user!.id,
-      connection,
-      senders: account.statementSenderEmails,
+      connection: ready,
+      account: updated,
       password: body.password ?? "",
-      maxMessages: body.maxMessages ?? 15,
+      maxMessages: body.maxMessages ?? 25,
       month,
     });
+    gmailLog.enabled(req.user!.id, month);
     await store.audit(req.user!.id, "gmail.pooling_enabled", {
       accountId: account.id,
       bank: account.bank,
       month,
-      imported: backfill.imported,
+      statements: sync.statements,
+      alerts: sync.alerts,
     });
     res.json({
       account: updated,
       month,
       bounds: monthBounds(month),
-      backfill,
+      statements: sync.statements,
+      alerts: sync.alerts,
+      backfill: {
+        scanned: sync.statements.scanned + sync.alerts.scanned,
+        imported: sync.statements.imported + sync.alerts.imported,
+        skipped: sync.statements.skipped + sync.alerts.skipped,
+      },
       notice:
-        "Pooling enabled. Hourly history poll stays active; search uses only your bank sender allowlist.",
+        "Pooling enabled. Hourly sync stays active for bank PDFs and alert emails.",
     });
   },
 );
@@ -415,8 +376,10 @@ gmailRouter.post("/sync", requireAuth, async (req, res) => {
   if (!connection) {
     throw AppError.badRequest("Connect Gmail first");
   }
-  const result = await syncHistory(connection);
-  res.json(result);
+  const account = await resolveAccountForPooling(req.user!.id);
+  const ready = await ensureHistoryId(connection);
+  await runPoolingPoll(account, ready);
+  res.json({ ok: true, lastSyncAt: new Date().toISOString() });
 });
 
 /** Pub/Sub push endpoint for Gmail watch notifications. */
@@ -438,10 +401,14 @@ gmailRouter.post("/push", async (req, res) => {
         String(decoded.emailAddress ?? "").toLowerCase(),
     );
     if (connection) {
-      await syncHistory({
-        ...connection,
-        historyId: connection.historyId ?? decoded.historyId ?? null,
-      });
+      const accounts = await store.listPoolingAccounts();
+      const account = accounts.find((a) => a.userId === connection.userId);
+      if (account) {
+        await runPoolingPoll(account, {
+          ...connection,
+          historyId: connection.historyId ?? decoded.historyId ?? null,
+        });
+      }
     }
     res.status(204).end();
   } catch {

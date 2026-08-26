@@ -5,6 +5,7 @@ import type { Summary } from "@/lib/types";
 import { formatInr } from "@/lib/api";
 import { LiveCounter } from "@/components/LiveCounter";
 import { SpotlightCard } from "@/components/SpotlightCard";
+import { fadeUp, stagger } from "@/lib/motion";
 
 interface StatsRowProps {
   summary: Summary;
@@ -16,45 +17,45 @@ export function StatsRow({ summary }: StatsRowProps) {
       label: "Total spent",
       value: summary.totalSpent,
       format: (n: number) => formatInr(n),
-      display: true,
+      hint: "this month",
+      accent: false,
     },
     {
       label: "Avg / day",
       value: summary.avgDailySpend,
       format: (n: number) => formatInr(n),
-      display: true,
+      hint: "across days with spend",
+      accent: true,
     },
     {
       label: "Debits",
       value: summary.transactionCount,
       format: (n: number) => String(Math.round(n)),
-      display: false,
+      hint: "imported rows",
+      accent: false,
     },
     {
       label: "UPI payees",
       value: summary.upiPayees,
       format: (n: number) => String(Math.round(n)),
-      display: false,
+      hint: "distinct handles",
+      accent: false,
     },
   ];
 
   return (
-    <div className="stats-row">
-      {stats.map((stat, i) => (
-        <motion.div
-          key={stat.label}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 * i, duration: 0.45, ease: "easeOut" }}
-        >
+    <motion.div className="stats-row" variants={stagger} initial="hidden" animate="show">
+      {stats.map((stat) => (
+        <motion.div key={stat.label} variants={fadeUp}>
           <SpotlightCard className="stat">
-            <p className="meta">{stat.label}</p>
-            <strong className={stat.display ? "display-num" : "ui-total"}>
+            <p className="stat-kicker">{stat.label}</p>
+            <strong className={`display-num${stat.accent ? " accent" : ""}`}>
               <LiveCounter value={stat.value} format={stat.format} />
             </strong>
+            <p className="meta">{stat.hint}</p>
           </SpotlightCard>
         </motion.div>
       ))}
-    </div>
+    </motion.div>
   );
 }

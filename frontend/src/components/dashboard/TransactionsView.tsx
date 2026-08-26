@@ -2,6 +2,7 @@
 
 import type { CategorySummary, Transaction } from "@/lib/types";
 import { TransactionTable } from "@/components/TransactionTable";
+import { PageReveal } from "@/components/motion/PageReveal";
 
 interface TransactionsViewProps {
   items: Transaction[];
@@ -10,8 +11,8 @@ interface TransactionsViewProps {
 
 export function TransactionsView({ items, categories }: TransactionsViewProps) {
   return (
-    <div className="view-stack">
+    <PageReveal className="view-stack">
       <TransactionTable items={items} categories={categories} />
-    </div>
+    </PageReveal>
   );
 }

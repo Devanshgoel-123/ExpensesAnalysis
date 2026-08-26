@@ -3,6 +3,7 @@
 import type { AmountBand, CategorySummary, MerchantSpend } from "@/lib/types";
 import { CategoryBreakdown } from "@/components/CategoryBreakdown";
 import { MerchantSpendPanel } from "@/components/MerchantSpendPanel";
+import { PageReveal } from "@/components/motion/PageReveal";
 
 interface CategoriesViewProps {
   merchants: MerchantSpend[];
@@ -16,13 +17,13 @@ export function CategoriesView({
   amountBand,
 }: CategoriesViewProps) {
   return (
-    <div className="view-stack">
+    <PageReveal className="view-stack">
       <CategoryBreakdown
         merchants={merchants}
         cigaretteBand={amountBand}
         categories={categories}
       />
       <MerchantSpendPanel items={merchants} categories={categories} />
-    </div>
+    </PageReveal>
   );
 }

@@ -11,6 +11,9 @@ import { HabitsView } from "@/components/dashboard/HabitsView";
 import { TransactionsView } from "@/components/dashboard/TransactionsView";
 import { ImportView } from "@/components/dashboard/ImportView";
 import { SettingsView } from "@/components/dashboard/SettingsView";
+import { HeroCard } from "@/components/layout/HeroCard";
+import { PageReveal } from "@/components/motion/PageReveal";
+import { Sparkles } from "lucide-react";
 
 interface DashboardViewRouterProps {
   view: DashboardView;
@@ -22,6 +25,7 @@ interface DashboardViewRouterProps {
   error: string | null;
   onParsed: (file: File, password: string) => Promise<void>;
   onChanged: () => void;
+  onViewChange: (view: DashboardView) => void;
 }
 
 export function DashboardViewRouter({
@@ -34,6 +38,7 @@ export function DashboardViewRouter({
   error,
   onParsed,
   onChanged,
+  onViewChange,
 }: DashboardViewRouterProps) {
   if (view === "import") {
     return (
@@ -53,13 +58,16 @@ export function DashboardViewRouter({
 
   if (!data) {
     return (
-      <section className="panel empty-state">
-        <h2 className="ui-header">No data for this month</h2>
-        <p className="meta">
-          Open <strong>Import</strong> in the sidebar to upload a statement or run
-          Gmail pooling.
-        </p>
-      </section>
+      <PageReveal>
+        <HeroCard
+          kicker="No statement yet"
+          kickerIcon={Sparkles}
+          title="Import a month to begin."
+          lede="Upload a bank PDF or enable Gmail pooling for allowlisted statement senders. Analytics stay empty until the first import lands."
+          primary={{ label: "Open import", onClick: () => onViewChange("import") }}
+          secondary={{ label: "Open settings", onClick: () => onViewChange("settings") }}
+        />
+      </PageReveal>
     );
   }
 
@@ -68,7 +76,12 @@ export function DashboardViewRouter({
   switch (view) {
     case "overview":
       return (
-        <OverviewView data={data} dailyInsights={dailyInsights} month={month} />
+        <OverviewView
+          data={data}
+          dailyInsights={dailyInsights}
+          month={month}
+          onViewChange={onViewChange}
+        />
       );
     case "insights":
       return <InsightsView insights={dailyInsights} />;
@@ -98,7 +111,12 @@ export function DashboardViewRouter({
       );
     default:
       return (
-        <OverviewView data={data} dailyInsights={dailyInsights} month={month} />
+        <OverviewView
+          data={data}
+          dailyInsights={dailyInsights}
+          month={month}
+          onViewChange={onViewChange}
+        />
       );
   }
 }

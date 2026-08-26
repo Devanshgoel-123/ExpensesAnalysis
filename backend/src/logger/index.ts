@@ -25,11 +25,17 @@ export const logger = pino({
     ],
     censor: "[Redacted]",
   },
-  ...(config.env === "development" && process.env.LOG_PRETTY === "1"
+  ...(config.env === "development" &&
+  (process.env.LOG_PRETTY === "1" || process.env.LOG_PRETTY !== "0")
     ? {
         transport: {
           target: "pino-pretty",
-          options: { colorize: true, translateTime: "SYS:standard" },
+          options: {
+            colorize: true,
+            translateTime: "HH:MM:ss",
+            ignore: "pid,hostname,service,env,module",
+            messageFormat: "{msg}",
+          },
         },
       }
     : {}),

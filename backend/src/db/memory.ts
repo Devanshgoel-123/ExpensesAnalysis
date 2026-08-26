@@ -6,6 +6,7 @@ import type {
   GmailConnectionRow,
   ImportRow,
   ListTransactionsOptions,
+  MailMessageRow,
   NewTransactionInput,
   ProviderRow,
   Store,
@@ -31,6 +32,7 @@ export class MemoryStore implements Store {
   transactions: TransactionRow[] = [];
   overrides: TransactionOverrideRow[] = [];
   gmail: GmailConnectionRow[] = [];
+  mailMessages: MailMessageRow[] = [];
   audits: Array<{ userId: string | null; action: string; meta: Record<string, unknown> }> =
     [];
 
@@ -456,8 +458,14 @@ export class MemoryStore implements Store {
   ): Promise<GmailConnectionRow> {
     const existing = this.gmail.find((g) => g.userId === input.userId);
     if (existing) {
+      const keepRefresh =
+        !input.refreshTokenEncrypted && existing.refreshTokenEncrypted
+          ? existing.refreshTokenEncrypted
+          : input.refreshTokenEncrypted;
       Object.assign(existing, input, {
         id: existing.id,
+        refreshTokenEncrypted: keepRefresh,
+        historyId: input.historyId ?? existing.historyId,
         disconnectedAt: null,
       });
       return existing;
@@ -489,6 +497,41 @@ export class MemoryStore implements Store {
     return this.gmail.filter((g) => !g.disconnectedAt);
   }
 
+  async listPoolingAccounts(): Promise<AccountRow[]> {
+    return this.accounts.filter((a) => a.poolingEnabled);
+  }
+
+  async upsertMailMessage(
+    input: Omit<MailMessageRow, "id" | "createdAt"> & { id?: string },
+  ): Promise<MailMessageRow> {
+    const existing = this.mailMessages.find(
+      (m) =>
+        m.userId === input.userId && m.gmailMessageId === input.gmailMessageId,
+    );
+    if (existing) {
+      Object.assign(existing, input, { id: existing.id });
+      return existing;
+    }
+    const row: MailMessageRow = {
+      ...input,
+      id: input.id ?? randomUUID(),
+      createdAt: nowIso(),
+    };
+    this.mailMessages.push(row);
+    return row;
+  }
+
+  async findMailMessageByGmailId(
+    userId: string,
+    gmailMessageId: string,
+  ): Promise<MailMessageRow | null> {
+    return (
+      this.mailMessages.find(
+        (m) => m.userId === userId && m.gmailMessageId === gmailMessageId,
+      ) ?? null
+    );
+  }
+
   async audit(
     userId: string | null,
     action: string,
@@ -506,6 +549,7 @@ export class MemoryStore implements Store {
     this.providers = this.providers.filter((p) => p.userId !== userId);
     this.categories = this.categories.filter((c) => c.userId !== userId);
     this.gmail = this.gmail.filter((g) => g.userId !== userId);
+    this.mailMessages = this.mailMessages.filter((m) => m.userId !== userId);
     await this.softDeleteUser(userId);
   }
 }

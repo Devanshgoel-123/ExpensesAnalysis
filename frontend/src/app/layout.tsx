@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
-import { GeistSans } from "geist/font/sans";
-import { Instrument_Serif, JetBrains_Mono } from "next/font/google";
+import { Bricolage_Grotesque, Inter, JetBrains_Mono } from "next/font/google";
 import { AuthProvider } from "@/lib/auth";
 import "./globals.css";
 
-const instrument = Instrument_Serif({
+const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-instrument",
-  weight: "400",
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const bricolage = Bricolage_Grotesque({
+  subsets: ["latin"],
+  variable: "--font-bricolage",
   display: "swap",
 });
 
@@ -32,7 +36,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${GeistSans.variable} ${GeistSans.className} ${instrument.variable} ${jetbrains.variable}`}
+        className={`${inter.variable} ${inter.className} ${bricolage.variable} ${jetbrains.variable}`}
       >
         <AuthProvider>{children}</AuthProvider>
       </body>

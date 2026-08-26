@@ -9,6 +9,7 @@ export function SiteNav() {
       <div className="nav-links">
         <Link href="/">Dashboard</Link>
         <Link href="/architecture">Architecture</Link>
+        <Link href="/privacy">Privacy</Link>
       </div>
     </nav>
   );

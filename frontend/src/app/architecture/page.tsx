@@ -1,4 +1,5 @@
 import { SiteNav } from "@/components/SiteNav";
+import { SiteFooter } from "@/components/SiteFooter";
 import { GlowBackdrop } from "@/components/GlowBackdrop";
 
 const NODES = [
@@ -110,6 +111,7 @@ Dashboard
           </ul>
         </article>
       </section>
+      <SiteFooter />
     </main>
   );
 }

@@ -1,11 +1,12 @@
 "use client";
 
 import { SettingsPanel } from "@/components/SettingsPanel";
+import { PageReveal } from "@/components/motion/PageReveal";
 
 export function SettingsView({ onChanged }: { onChanged?: () => void }) {
   return (
-    <div className="view-stack">
+    <PageReveal className="view-stack">
       <SettingsPanel onChanged={onChanged} />
-    </div>
+    </PageReveal>
   );
 }

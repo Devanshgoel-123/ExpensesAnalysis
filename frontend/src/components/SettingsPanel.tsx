@@ -14,6 +14,7 @@ import {
   listRules,
   updatePreferences,
 } from "@/lib/api";
+import Link from "next/link";
 import { SpotlightCard } from "@/components/SpotlightCard";
 
 export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
@@ -151,6 +152,9 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
         >
           Delete account
         </button>
+        <Link href="/privacy" className="ghost">
+          Privacy policy
+        </Link>
       </div>
 
       {gmail?.connected && (

@@ -152,6 +152,23 @@ export interface GmailConnectionRow {
   disconnectedAt: string | null;
 }
 
+export interface MailMessageRow {
+  id: string;
+  userId: string;
+  accountId: string | null;
+  gmailMessageId: string;
+  fromAddress: string;
+  subject: string;
+  receivedAt: string | null;
+  snippet: string;
+  bodyExcerpt: string;
+  amount: number | null;
+  txType: TxType | null;
+  currency: string;
+  fingerprint: string;
+  createdAt: string;
+}
+
 export interface NewTransactionInput {
   importId: string | null;
   accountId: string | null;
@@ -329,6 +346,15 @@ export interface Store {
   getGmailConnection(userId: string): Promise<GmailConnectionRow | null>;
   disconnectGmail(userId: string): Promise<void>;
   listActiveGmailConnections(): Promise<GmailConnectionRow[]>;
+  listPoolingAccounts(): Promise<AccountRow[]>;
+
+  upsertMailMessage(
+    input: Omit<MailMessageRow, "id" | "createdAt"> & { id?: string },
+  ): Promise<MailMessageRow>;
+  findMailMessageByGmailId(
+    userId: string,
+    gmailMessageId: string,
+  ): Promise<MailMessageRow | null>;
 
   audit(userId: string | null, action: string, meta?: Record<string, unknown>): Promise<void>;
   deleteUserData(userId: string): Promise<void>;

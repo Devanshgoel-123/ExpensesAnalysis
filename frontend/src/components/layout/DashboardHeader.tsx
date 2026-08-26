@@ -1,14 +1,18 @@
 "use client";
 
-import { ArrowLeft, LogOut, Menu, RefreshCw } from "lucide-react";
+import { ArrowLeft, LogOut, Menu, RefreshCw, Search } from "lucide-react";
 import { viewLabel, type DashboardView } from "@/lib/dashboardViews";
+import { UserAvatar } from "@/components/layout/UserAvatar";
+import { userInitials } from "@/lib/userInitials";
 
 interface DashboardHeaderProps {
   view: DashboardView;
   periodLabel: string;
   monthControl: React.ReactNode;
   hasData: boolean;
+  userEmail?: string | null;
   onMenuOpen: () => void;
+  onOpenSearch: () => void;
   onImportAnother: () => void;
   onRefresh: () => void;
   onLogout: () => void;
@@ -19,7 +23,9 @@ export function DashboardHeader({
   periodLabel,
   monthControl,
   hasData,
+  userEmail,
   onMenuOpen,
+  onOpenSearch,
   onImportAnother,
   onRefresh,
   onLogout,
@@ -35,6 +41,11 @@ export function DashboardHeader({
           <p className="meta">{periodLabel}</p>
         </div>
       </div>
+      <button type="button" className="header-search" onClick={onOpenSearch}>
+        <Search size={16} />
+        <span>Search views, architecture, privacy…</span>
+        <kbd className="kbd">⌘K</kbd>
+      </button>
       <div className="app-header-actions">
         {monthControl}
         {hasData ? (
@@ -50,6 +61,7 @@ export function DashboardHeader({
         <button type="button" className="ghost" onClick={onLogout}>
           <LogOut size={16} /> Log out
         </button>
+        <UserAvatar initials={userInitials({ email: userEmail })} title={userEmail ?? undefined} />
       </div>
     </header>
   );

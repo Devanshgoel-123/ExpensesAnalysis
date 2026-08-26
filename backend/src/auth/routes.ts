@@ -25,6 +25,11 @@ authRouter.get("/google", (_req, res) => {
   res.redirect(buildGoogleLoginAuthUrl(state));
 });
 
+/** Lightweight session probe for clients expecting /api/auth/session. */
+authRouter.get("/session", (_req, res) => {
+  res.json({ user: null, authenticated: false });
+});
+
 authRouter.get("/me", requireAuth, async (req, res) => {
   const store = await getStore();
   const user = await store.findUserById(req.user!.id);

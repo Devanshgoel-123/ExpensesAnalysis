@@ -86,6 +86,12 @@ export const DASHBOARD_NAV: DashboardNavItem[] = [
   },
 ];
 
+export const DASHBOARD_NAV_GROUPS: { label: string; ids: DashboardView[] }[] = [
+  { label: "Overview", ids: ["overview", "insights", "categories"] },
+  { label: "Spend", ids: ["people", "upi", "habits", "transactions"] },
+  { label: "System", ids: ["import", "settings"] },
+];
+
 export function viewLabel(id: DashboardView): string {
   return DASHBOARD_NAV.find((item) => item.id === id)?.label ?? "Dashboard";
 }

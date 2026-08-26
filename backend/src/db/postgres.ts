@@ -10,6 +10,7 @@ import type {
   GmailConnectionRow,
   ImportRow,
   ListTransactionsOptions,
+  MailMessageRow,
   NewTransactionInput,
   ProviderRow,
   Store,
@@ -173,6 +174,27 @@ function mapGmail(row: Record<string, unknown>): GmailConnectionRow {
     disconnectedAt: row.disconnected_at
       ? new Date(String(row.disconnected_at)).toISOString()
       : null,
+  };
+}
+
+function mapMailMessage(row: Record<string, unknown>): MailMessageRow {
+  return {
+    id: String(row.id),
+    userId: String(row.user_id),
+    accountId: (row.account_id as string | null) ?? null,
+    gmailMessageId: String(row.gmail_message_id),
+    fromAddress: String(row.from_address ?? ""),
+    subject: String(row.subject ?? ""),
+    receivedAt: row.received_at
+      ? new Date(String(row.received_at)).toISOString()
+      : null,
+    snippet: String(row.snippet ?? ""),
+    bodyExcerpt: String(row.body_excerpt ?? ""),
+    amount: row.amount == null ? null : Number(row.amount),
+    txType: (row.tx_type as MailMessageRow["txType"]) ?? null,
+    currency: String(row.currency ?? "INR"),
+    fingerprint: String(row.fingerprint),
+    createdAt: new Date(String(row.created_at)).toISOString(),
   };
 }
 
@@ -924,8 +946,11 @@ export class PostgresStore implements Store {
        )
        ON CONFLICT (user_id) DO UPDATE SET
          google_email = EXCLUDED.google_email,
-         refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
-         access_token_encrypted = EXCLUDED.access_token_encrypted,
+         refresh_token_encrypted = CASE
+           WHEN EXCLUDED.refresh_token_encrypted <> '' THEN EXCLUDED.refresh_token_encrypted
+           ELSE gmail_connections.refresh_token_encrypted
+         END,
+         access_token_encrypted = COALESCE(EXCLUDED.access_token_encrypted, gmail_connections.access_token_encrypted),
          token_expiry = EXCLUDED.token_expiry,
          history_id = COALESCE(EXCLUDED.history_id, gmail_connections.history_id),
          watch_expiration = COALESCE(EXCLUDED.watch_expiration, gmail_connections.watch_expiration),
@@ -974,6 +999,64 @@ export class PostgresStore implements Store {
     return result.rows.map(mapGmail);
   }
 
+  async listPoolingAccounts(): Promise<AccountRow[]> {
+    const result = await this.pool.query(
+      `SELECT * FROM accounts WHERE pooling_enabled = TRUE`,
+    );
+    return result.rows.map(mapAccount);
+  }
+
+  async upsertMailMessage(
+    input: Omit<MailMessageRow, "id" | "createdAt"> & { id?: string },
+  ): Promise<MailMessageRow> {
+    const result = await this.pool.query(
+      `INSERT INTO mail_messages (
+         id, user_id, account_id, gmail_message_id, from_address, subject,
+         received_at, snippet, body_excerpt, amount, tx_type, currency, fingerprint
+       ) VALUES (
+         COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+       )
+       ON CONFLICT (user_id, gmail_message_id) DO UPDATE SET
+         from_address = EXCLUDED.from_address,
+         subject = EXCLUDED.subject,
+         received_at = COALESCE(EXCLUDED.received_at, mail_messages.received_at),
+         snippet = EXCLUDED.snippet,
+         body_excerpt = EXCLUDED.body_excerpt,
+         amount = COALESCE(EXCLUDED.amount, mail_messages.amount),
+         tx_type = COALESCE(EXCLUDED.tx_type, mail_messages.tx_type),
+         currency = EXCLUDED.currency,
+         fingerprint = EXCLUDED.fingerprint
+       RETURNING *`,
+      [
+        input.id ?? null,
+        input.userId,
+        input.accountId,
+        input.gmailMessageId,
+        input.fromAddress,
+        input.subject,
+        input.receivedAt,
+        input.snippet,
+        input.bodyExcerpt,
+        input.amount,
+        input.txType,
+        input.currency,
+        input.fingerprint,
+      ],
+    );
+    return mapMailMessage(result.rows[0]);
+  }
+
+  async findMailMessageByGmailId(
+    userId: string,
+    gmailMessageId: string,
+  ): Promise<MailMessageRow | null> {
+    const result = await this.pool.query(
+      `SELECT * FROM mail_messages WHERE user_id = $1 AND gmail_message_id = $2`,
+      [userId, gmailMessageId],
+    );
+    return result.rows[0] ? mapMailMessage(result.rows[0]) : null;
+  }
+
   async audit(
     userId: string | null,
     action: string,
@@ -1004,6 +1087,7 @@ export class PostgresStore implements Store {
         `DELETE FROM categories WHERE user_id = $1 AND is_global = FALSE`,
         [userId],
       );
+      await client.query(`DELETE FROM mail_messages WHERE user_id = $1`, [userId]);
       await client.query(`DELETE FROM gmail_connections WHERE user_id = $1`, [
         userId,
       ]);

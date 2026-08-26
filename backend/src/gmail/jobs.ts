@@ -1,7 +1,8 @@
 import { getStore } from "../db/index.js";
-import { renewWatch, syncHistory } from "./client.js";
+import { renewWatch } from "./client.js";
+import { runAllPoolingPolls } from "./poolingService.js";
 
-/** Daily watch renewal + lightweight history sync for private beta. */
+/** Daily watch renewal + hourly pooling sync for enabled accounts. */
 export function startGmailJobs(): void {
   const HOUR = 60 * 60 * 1000;
   const DAY = 24 * HOUR;
@@ -24,16 +25,6 @@ export function startGmailJobs(): void {
   }, DAY).unref?.();
 
   setInterval(() => {
-    void (async () => {
-      const store = await getStore();
-      const connections = await store.listActiveGmailConnections();
-      for (const connection of connections) {
-        try {
-          await syncHistory(connection);
-        } catch {
-          // Ignore polling errors; next tick retries.
-        }
-      }
-    })();
+    void runAllPoolingPolls();
   }, HOUR).unref?.();
 }

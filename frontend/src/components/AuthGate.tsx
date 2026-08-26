@@ -1,8 +1,12 @@
 "use client";
 
+import { motion } from "framer-motion";
+import Link from "next/link";
 import { GlowBackdrop } from "@/components/GlowBackdrop";
+import { SiteFooter } from "@/components/SiteFooter";
 import { googleLoginUrl } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { fadeUp, stagger, easeOut } from "@/lib/motion";
 
 const GOOGLE_PERMISSIONS = [
   {
@@ -59,17 +63,27 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     <main className="shell landing">
       <GlowBackdrop />
       <div className="landing-content login-layout">
-        <header className="brand-block">
+        <motion.header
+          className="brand-block"
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.55, ease: easeOut }}
+        >
           <p className="brand">Ledgerline</p>
           <h1 className="ui-header">Sign in to continue</h1>
           <p className="lede">
             One Google consent covers sign-in and optional bank-mail pooling.
             Sessions last 7 days.
           </p>
-        </header>
+        </motion.header>
 
-        <div className="login-grid">
-          <section className="panel login-panel">
+        <motion.div
+          className="login-grid"
+          variants={stagger}
+          initial="hidden"
+          animate="show"
+        >
+          <motion.section className="panel login-panel" variants={fadeUp}>
             <h2 className="ui-header login-subhead">Permissions we request</h2>
             <ul className="permission-list">
               {GOOGLE_PERMISSIONS.map((item) => (
@@ -81,11 +95,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             </ul>
             <p className="meta login-note">
               Google will show these scopes on the consent screen. You can revoke
-              access anytime from your Google Account.
+              access anytime from your Google Account. Read the{" "}
+              <Link href="/privacy">privacy policy</Link>.
             </p>
-          </section>
+          </motion.section>
 
-          <section className="panel login-panel login-action">
+          <motion.section className="panel login-panel login-action" variants={fadeUp}>
             {authError && <p className="form-error">{authError}</p>}
             <a className="cta google-cta" href={googleLoginUrl()}>
               <GoogleMark />
@@ -95,8 +110,9 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
               Includes Gmail read-only for statement pooling — only bank sender
               emails you configure are searched.
             </p>
-          </section>
-        </div>
+          </motion.section>
+        </motion.div>
+        <SiteFooter />
       </div>
     </main>
   );

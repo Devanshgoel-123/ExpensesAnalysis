@@ -33,9 +33,10 @@ export function buildGmailAuthUrl(state: string): string {
 export function buildGoogleLoginAuthUrl(state: string): string {
   const client = createOAuthClient();
   return client.generateAuthUrl({
-    access_type: "online",
-    prompt: "select_account",
-    scope: LOGIN_SCOPES,
+    access_type: "offline",
+    prompt: "consent",
+    include_granted_scopes: true,
+    scope: [...LOGIN_SCOPES, GMAIL_SCOPE],
     state,
   });
 }
@@ -130,6 +131,38 @@ export function buildStatementQuery(
   return parts.join(" ");
 }
 
+/** Bank alert / UPI notification emails (no PDF required). */
+export function buildAlertQuery(
+  senders: string[],
+  options?: { after?: string; before?: string },
+): string {
+  const cleaned = senders
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => s.replace(/[()]/g, ""));
+  if (cleaned.length === 0) {
+    throw new Error("No bank sender emails configured.");
+  }
+  const fromClause =
+    cleaned.length === 1
+      ? `from:${cleaned[0]}`
+      : `from:(${cleaned.join(" OR ")})`;
+  const parts = [
+    fromClause,
+    `(debited OR credited OR "has been debited" OR "has been credited" OR UPI OR "Rs.")`,
+  ];
+  if (options?.after) {
+    parts.push(`after:${options.after.replace(/-/g, "/")}`);
+  }
+  if (options?.before) {
+    parts.push(`before:${options.before.replace(/-/g, "/")}`);
+  }
+  if (!options?.after && !options?.before) {
+    parts.push("newer_than:90d");
+  }
+  return parts.join(" ");
+}
+
 /** @deprecated Prefer buildStatementQuery with account senders. */
 export const STATEMENT_QUERY = buildStatementQuery([
   "hdfcbank.net",
@@ -186,6 +219,93 @@ export async function fetchPdfAttachments(
   return pdfs;
 }
 
+export type GmailMessageDetails = {
+  id: string;
+  fromAddress: string;
+  subject: string;
+  snippet: string;
+  bodyText: string;
+  receivedAt: string | null;
+};
+
+function decodeBody(data?: string | null): string {
+  if (!data) return "";
+  return Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString(
+    "utf8",
+  );
+}
+
+function extractBodyText(
+  payload: {
+    mimeType?: string | null;
+    body?: { data?: string | null } | null;
+    parts?: unknown[] | null;
+  } | null | undefined,
+): string {
+  if (!payload) return "";
+  const mime = payload.mimeType ?? "";
+  if (mime.includes("text/plain") && payload.body?.data) {
+    return decodeBody(payload.body.data);
+  }
+  let text = "";
+  for (const child of payload.parts ?? []) {
+    const part = child as {
+      mimeType?: string | null;
+      body?: { data?: string | null } | null;
+      parts?: unknown[] | null;
+    };
+    const nested = extractBodyText(part);
+    if (nested) text += `${nested}\n`;
+  }
+  if (!text && payload.body?.data) {
+    return decodeBody(payload.body.data);
+  }
+  return text.trim();
+}
+
+export async function fetchMessageDetails(
+  connection: GmailConnectionRow,
+  messageId: string,
+): Promise<GmailMessageDetails> {
+  const gmail = await getAuthedGmail(connection);
+  const msg = await gmail.users.messages.get({
+    userId: "me",
+    id: messageId,
+    format: "full",
+  });
+  const headers = msg.data.payload?.headers ?? [];
+  const from =
+    headers.find((h) => h.name?.toLowerCase() === "from")?.value ?? "";
+  const subject =
+    headers.find((h) => h.name?.toLowerCase() === "subject")?.value ?? "";
+  const internal = msg.data.internalDate
+    ? new Date(Number(msg.data.internalDate)).toISOString()
+    : null;
+  return {
+    id: messageId,
+    fromAddress: from,
+    subject,
+    snippet: msg.data.snippet ?? "",
+    bodyText: extractBodyText(msg.data.payload),
+    receivedAt: internal,
+  };
+}
+
+export async function ensureHistoryId(
+  connection: GmailConnectionRow,
+): Promise<GmailConnectionRow> {
+  if (connection.historyId) return connection;
+  const gmail = await getAuthedGmail(connection);
+  const profile = await gmail.users.getProfile({ userId: "me" });
+  const historyId = profile.data.historyId;
+  if (!historyId) return connection;
+  const store = await getStore();
+  return store.upsertGmailConnection({
+    ...connection,
+    historyId,
+  });
+}
+
 function flattenParts(
   payload: {
     filename?: string | null;
@@ -235,18 +355,20 @@ export async function renewWatch(connection: GmailConnectionRow): Promise<void> 
   });
 }
 
-export async function syncHistory(connection: GmailConnectionRow): Promise<{
-  processedMessages: number;
-}> {
-  if (!connection.historyId) {
+export async function syncHistory(
+  connection: GmailConnectionRow,
+  processMessage?: (messageId: string) => Promise<void>,
+): Promise<{ processedMessages: number }> {
+  const ready = await ensureHistoryId(connection);
+  if (!ready.historyId) {
     return { processedMessages: 0 };
   }
-  const gmail = await getAuthedGmail(connection);
+  const gmail = await getAuthedGmail(ready);
   const store = await getStore();
   try {
     const history = await gmail.users.history.list({
       userId: "me",
-      startHistoryId: connection.historyId,
+      startHistoryId: ready.historyId,
       historyTypes: ["messageAdded"],
     });
     const messageIds = new Set<string>();
@@ -255,17 +377,20 @@ export async function syncHistory(connection: GmailConnectionRow): Promise<{
         if (added.message?.id) messageIds.add(added.message.id);
       }
     }
+    if (processMessage) {
+      for (const id of messageIds) {
+        await processMessage(id);
+      }
+    }
     await store.upsertGmailConnection({
-      ...connection,
-      historyId: history.data.historyId ?? connection.historyId,
+      ...ready,
+      historyId: history.data.historyId ?? ready.historyId,
       lastSyncAt: new Date().toISOString(),
     });
     return { processedMessages: messageIds.size };
   } catch (error) {
     const status = (error as { code?: number }).code;
     if (status === 404) {
-      // History expired — caller should run bounded backfill.
-      await store.audit(connection.userId, "gmail.history_expired", {});
       return { processedMessages: 0 };
     }
     throw error;
