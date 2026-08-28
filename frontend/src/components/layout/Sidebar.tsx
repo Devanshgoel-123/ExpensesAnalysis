@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Moon, Sun, X } from "lucide-react";
 import {
   DASHBOARD_NAV,
@@ -11,6 +12,7 @@ import {
 import { UserAvatar } from "@/components/layout/UserAvatar";
 import { userInitials } from "@/lib/userInitials";
 import { useTheme } from "@/lib/theme";
+import { cn } from "@/lib/cn";
 
 interface SidebarProps {
   open: boolean;
@@ -29,6 +31,7 @@ export function Sidebar({
 }: SidebarProps) {
   const navById = new Map(DASHBOARD_NAV.map((item) => [item.id, item]));
   const { theme, toggleTheme } = useTheme();
+  const pathname = usePathname();
 
   return (
     <>
@@ -47,7 +50,7 @@ export function Sidebar({
       </AnimatePresence>
 
       <aside
-        className={`app-sidebar${open ? " open" : ""}`}
+        className={cn("app-sidebar line-sidebar", open && "open")}
         aria-label="Dashboard navigation"
       >
         <div className="sidebar-top">
@@ -79,18 +82,16 @@ export function Sidebar({
                 const item = navById.get(id);
                 if (!item) return null;
                 const Icon = item.icon;
-                const active = item.id === current;
+                const active = item.id === current || pathname === item.path;
                 return (
-                  <button
+                  <Link
                     key={item.id}
-                    type="button"
-                    className={`sidebar-link${active ? " active" : ""}`}
+                    href={item.path}
+                    className={cn("sidebar-link", active && "active")}
                     aria-current={active ? "page" : undefined}
-                    onClick={() => {
-                      onNavigate(item.id);
-                      onClose();
-                    }}
+                    onClick={() => onNavigate(item.id)}
                   >
+                    <span className="sidebar-link-marker" aria-hidden />
                     <span className="sidebar-link-icon" aria-hidden>
                       <Icon size={16} />
                     </span>
@@ -98,7 +99,7 @@ export function Sidebar({
                       <strong>{item.label}</strong>
                       <span className="meta">{item.description}</span>
                     </span>
-                  </button>
+                  </Link>
                 );
               })}
             </div>

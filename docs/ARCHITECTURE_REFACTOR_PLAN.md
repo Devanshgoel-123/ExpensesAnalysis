@@ -28,6 +28,14 @@ The main architectural problems were not missing primitives, but inconsistent bo
 - Fixed frontend typed API drift for Gmail backfill responses.
 - Added explicit frontend/backend `typecheck` scripts.
 
+### Phase 2: Repository Extraction
+- Split the Postgres persistence layer for the active ingestion domains:
+  - `backend/src/db/postgres/importRepository.ts`
+  - `backend/src/db/postgres/gmailRepository.ts`
+  - `backend/src/db/postgres/shared.ts`
+- Slimmed `backend/src/db/postgres.ts` into a composition entry point that delegates import and Gmail query ownership to concrete domain repositories.
+- Documented when to use `try/catch` in `CONTRIBUTING.md` so future refactors follow the same error-handling boundary.
+
 ### Behavior Fixes
 - Provider-registry matches now take precedence over user rules, matching the documented classification order.
 - Gmail alert ingestion now classifies through the same provider/rule/amount-band/other flow as PDF imports.
@@ -37,9 +45,14 @@ The main architectural problems were not missing primitives, but inconsistent bo
 ### Phase 2: Repository Extraction
 - Split `PostgresStore` by domain query ownership:
   - auth/users
+  - rules/providers/categories
+- Completed in this pass:
   - imports/transactions
   - gmail/pooling
-  - rules/providers/categories
+- Keep bank presets with the reference/catalog slice rather than the account slice.
+- Defer cross-domain orchestration methods until the remaining repositories exist:
+  - `getOrCreateAccount`
+  - `deleteUserData`
 - Keep repository modules concrete and query-owning; do not introduce generic CRUD wrappers.
 
 ### Phase 3: Import Pipeline Isolation

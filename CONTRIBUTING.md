@@ -140,6 +140,16 @@ Rules:
 - Do not create folders or abstraction layers just for appearance.
 - Preserve current behavior unless a behavior change is required to fix a clear bug or architectural mismatch.
 
+## Error Handling
+- Do not wrap every async function in a blanket `try/catch`.
+- In Express 5 async handlers, thrown errors automatically flow to the global error handler in `backend/src/errors/errorHandler.ts`.
+- Use `try/catch` only when you need to:
+  - translate low-level failures into an `AppError`
+  - perform cleanup or rollback
+  - add domain context before rethrowing
+  - intentionally recover with a safe fallback
+- Avoid swallowing errors silently. If a failure is unexpected and you cannot recover safely, let it throw.
+
 ## Adding Features
 For a new API endpoint:
 1. Add a Zod schema.

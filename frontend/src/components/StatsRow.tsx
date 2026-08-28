@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import type { DailyInsights, Summary } from "@/lib/types";
 import { formatInr } from "@/lib/api";
-import { LiveCounter } from "@/components/LiveCounter";
+import { LedgerlineCountUp } from "@/components/animations/LedgerlineCountUp";
 import { SpotlightCard } from "@/components/SpotlightCard";
 import { fadeUp, stagger } from "@/lib/motion";
 
@@ -33,7 +33,7 @@ export function StatsRow({ summary, dailyInsights }: StatsRowProps) {
         <SpotlightCard className="metric-hero">
           <p className="stat-kicker">Total spent</p>
           <strong className="display-num lg">
-            <LiveCounter value={summary.totalSpent} format={(n) => formatInr(n)} />
+            <LedgerlineCountUp value={summary.totalSpent} format={(n) => formatInr(n)} />
           </strong>
           <p className="meta">spent this month</p>
           <p className="meta" style={{ marginTop: "0.55rem" }}>
@@ -46,7 +46,7 @@ export function StatsRow({ summary, dailyInsights }: StatsRowProps) {
         <SpotlightCard className="stat">
           <p className="stat-kicker">Avg / day</p>
           <strong className="display-num sm accent">
-            <LiveCounter
+            <LedgerlineCountUp
               value={summary.avgDailySpend}
               format={(n) => formatInr(n)}
             />
@@ -57,7 +57,7 @@ export function StatsRow({ summary, dailyInsights }: StatsRowProps) {
         <SpotlightCard className="stat">
           <p className="stat-kicker">Daily limit</p>
           <strong className="display-num sm">
-            {limit == null ? "—" : <LiveCounter value={limit} format={(n) => formatInr(n)} />}
+            {limit == null ? "—" : <LedgerlineCountUp value={limit} format={(n) => formatInr(n)} />}
           </strong>
           <p className={`meta${overDays > 0 ? " over-limit-text" : ""}`}>{budgetHint}</p>
         </SpotlightCard>
@@ -65,7 +65,7 @@ export function StatsRow({ summary, dailyInsights }: StatsRowProps) {
         <SpotlightCard className="stat">
           <p className="stat-kicker">Debits</p>
           <strong className="display-num sm">
-            <LiveCounter
+            <LedgerlineCountUp
               value={summary.transactionCount}
               format={(n) => String(Math.round(n))}
             />
@@ -76,7 +76,7 @@ export function StatsRow({ summary, dailyInsights }: StatsRowProps) {
         <SpotlightCard className="stat">
           <p className="stat-kicker">UPI payees</p>
           <strong className="display-num sm">
-            <LiveCounter
+            <LedgerlineCountUp
               value={summary.upiPayees}
               format={(n) => String(Math.round(n))}
             />

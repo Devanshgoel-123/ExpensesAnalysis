@@ -28,12 +28,11 @@ export function validate<T>(
         req.body = result.data;
         break;
       case "query":
-        // Express types query as IncomingHttpHeaders-like; cast for assignment
-        (req as Request & { query: unknown }).query = result.data as Request["query"];
+        // Express 5 exposes query as a read-only getter; merge parsed fields in place.
+        Object.assign(req.query, result.data as Record<string, unknown>);
         break;
       case "params":
-        (req as Request & { params: unknown }).params =
-          result.data as Request["params"];
+        Object.assign(req.params, result.data as Record<string, unknown>);
         break;
       case "headers":
         Object.assign(req.headers, result.data);

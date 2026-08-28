@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { GlowBackdrop } from "@/components/GlowBackdrop";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { DashboardHeader } from "@/components/layout/DashboardHeader";
 import { CommandPalette } from "@/components/layout/CommandPalette";
@@ -10,11 +9,12 @@ import type { DashboardView } from "@/lib/dashboardViews";
 
 interface AppShellProps {
   view: DashboardView;
-  onViewChange: (view: DashboardView) => void;
+  onNavigate: (view: DashboardView) => void;
   periodLabel: string;
   monthControl: React.ReactNode;
   hasData: boolean;
   userEmail?: string | null;
+  fetchError?: string | null;
   onImportAnother: () => void;
   onRefresh: () => void;
   onLogout: () => void;
@@ -23,11 +23,12 @@ interface AppShellProps {
 
 export function AppShell({
   view,
-  onViewChange,
+  onNavigate,
   periodLabel,
   monthControl,
   hasData,
   userEmail,
+  fetchError,
   onImportAnother,
   onRefresh,
   onLogout,
@@ -49,11 +50,13 @@ export function AppShell({
 
   return (
     <div className="app-shell">
-      <GlowBackdrop />
       <Sidebar
         open={sidebarOpen}
         current={view}
-        onNavigate={onViewChange}
+        onNavigate={(next) => {
+          onNavigate(next);
+          setSidebarOpen(false);
+        }}
         onClose={() => setSidebarOpen(false)}
         userEmail={userEmail}
       />
@@ -70,16 +73,17 @@ export function AppShell({
           onRefresh={onRefresh}
           onLogout={onLogout}
         />
+        {fetchError ? (
+          <p className="form-error mb-3 px-1" role="alert">
+            {fetchError}
+          </p>
+        ) : null}
         <main className="app-content" id="main-content">
           {children}
         </main>
       </div>
-      <MobileNav current={view} onNavigate={onViewChange} />
-      <CommandPalette
-        open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
-        onNavigate={onViewChange}
-      />
+      <MobileNav current={view} onNavigate={onNavigate} />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
   );
 }

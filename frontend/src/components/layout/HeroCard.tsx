@@ -2,11 +2,13 @@
 
 import { motion } from "framer-motion";
 import { ArrowRight, type LucideIcon } from "lucide-react";
+import Link from "next/link";
 import { easeOut } from "@/lib/motion";
 
 interface HeroAction {
   label: string;
-  onClick: () => void;
+  onClick?: () => void;
+  href?: string;
 }
 
 interface HeroCardProps {
@@ -42,15 +44,28 @@ export function HeroCard({
       {primary || secondary ? (
         <div className="hero-actions">
           {primary ? (
-            <button type="button" className="cta" onClick={primary.onClick}>
-              {primary.label}
-              <ArrowRight size={16} />
-            </button>
+            primary.href ? (
+              <Link href={primary.href} className="cta">
+                {primary.label}
+                <ArrowRight size={16} />
+              </Link>
+            ) : (
+              <button type="button" className="cta" onClick={primary.onClick}>
+                {primary.label}
+                <ArrowRight size={16} />
+              </button>
+            )
           ) : null}
           {secondary ? (
-            <button type="button" className="ghost" onClick={secondary.onClick}>
-              {secondary.label}
-            </button>
+            secondary.href ? (
+              <Link href={secondary.href} className="ghost">
+                {secondary.label}
+              </Link>
+            ) : (
+              <button type="button" className="ghost" onClick={secondary.onClick}>
+                {secondary.label}
+              </button>
+            )
           ) : null}
         </div>
       ) : null}

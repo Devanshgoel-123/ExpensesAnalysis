@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import {
   DASHBOARD_NAV,
+  pathForView,
   type DashboardView,
 } from "@/lib/dashboardViews";
 import { easeOut } from "@/lib/motion";
@@ -39,18 +40,13 @@ const PAGE_ITEMS: CommandItem[] = [
 interface CommandPaletteProps {
   open: boolean;
   onClose: () => void;
-  onNavigate: (view: DashboardView) => void;
 }
 
-export function CommandPalette({
-  open,
-  onClose,
-  onNavigate,
-}: CommandPaletteProps) {
+export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   return (
     <AnimatePresence>
       {open ? (
-        <PaletteDialog onClose={onClose} onNavigate={onNavigate} />
+        <PaletteDialog onClose={onClose} />
       ) : null}
     </AnimatePresence>
   );
@@ -58,8 +54,9 @@ export function CommandPalette({
 
 function PaletteDialog({
   onClose,
-  onNavigate,
-}: Omit<CommandPaletteProps, "open">) {
+}: {
+  onClose: () => void;
+}) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -83,7 +80,9 @@ function PaletteDialog({
   }, [query]);
 
   function run(item: CommandItem) {
-    if (item.kind === "view" && item.view) onNavigate(item.view);
+    if (item.kind === "view" && item.view) {
+      router.push(pathForView(item.view));
+    }
     if (item.kind === "page" && item.href) router.push(item.href);
     onClose();
   }

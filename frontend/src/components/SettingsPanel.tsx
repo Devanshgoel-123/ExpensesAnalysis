@@ -1,21 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import {
   createRule,
   deleteRule,
   fetchPreferences,
   fetchSuggestions,
-  gmailBackfill,
-  gmailConnectUrl,
-  gmailDisconnect,
   gmailStatus,
   listRules,
   updatePreferences,
   type GmailStatus,
 } from "@/lib/api";
+import { pathForView } from "@/lib/dashboardViews";
 import { formatTimestamp } from "@/lib/month";
 
 function buildRuleMatchFields(matchText: string): {
@@ -48,7 +46,6 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
   const [gmail, setGmail] = useState<GmailStatus | null>(null);
   const [payeeName, setPayeeName] = useState("");
   const [matchText, setMatchText] = useState("");
-  const [statementPassword, setStatementPassword] = useState("");
   const [dailyLimit, setDailyLimit] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -171,8 +168,8 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
       <section className="settings-section">
         <h3 className="ui-header">Gmail connection</h3>
         <p className="meta">
-          Read-only access for bank statement emails. Only senders on your
-          allowlist are searched.
+          Read-only access for bank statement emails. Connect and manage pooling
+          on the Import screen — sender allowlist included.
         </p>
         <div className="band-stats" style={{ marginBottom: "0.85rem" }}>
           <div>
@@ -186,95 +183,22 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
             </strong>
           </div>
           <div>
-            <p className="meta">Rules</p>
-            <strong>{rules.length}</strong>
+            <p className="meta">Pooling</p>
+            <strong>{gmail?.poolingEnabled ? "Active" : "Off"}</strong>
           </div>
           <div>
-            <p className="meta">Suggestions</p>
-            <strong>{suggestions.length}</strong>
+            <p className="meta">Last sync</p>
+            <strong>{formatTimestamp(gmail?.lastSyncAt)}</strong>
           </div>
         </div>
-        <div className="sort-bar">
-          {gmail?.configured && !gmail.connected && (
-            <button
-              type="button"
-              className="cta"
-              onClick={async () => {
-                try {
-                  const { url } = await gmailConnectUrl(token);
-                  window.location.href = url;
-                } catch (err) {
-                  setError(err instanceof Error ? err.message : "Connect failed");
-                }
-              }}
-            >
-              Connect Gmail
-            </button>
-          )}
-          {gmail?.connected && (
-            <>
-              <button
-                type="button"
-                className="ghost"
-                onClick={async () => {
-                  try {
-                    const result = await gmailBackfill(token, statementPassword);
-                    const imported =
-                      result.alerts.imported + result.statements.imported;
-                    const skipped =
-                      result.alerts.skipped + result.statements.skipped;
-                    setMessage(
-                      `Backfill: imported ${imported}, skipped ${skipped}${
-                        result.month ? ` for ${result.month}` : ""
-                      }`,
-                    );
-                    onChanged?.();
-                  } catch (err) {
-                    setError(
-                      err instanceof Error ? err.message : "Backfill failed",
-                    );
-                  }
-                }}
-              >
-                Run Gmail backfill
-              </button>
-              <button
-                type="button"
-                className="ghost"
-                onClick={async () => {
-                  await gmailDisconnect(token);
-                  await refresh();
-                }}
-              >
-                Disconnect Gmail
-              </button>
-            </>
-          )}
-        </div>
-        {gmail?.connected && (
-          <label className="field" style={{ marginTop: "0.85rem" }}>
-            <span>Statement PDF password (optional, for this backfill)</span>
-            <input
-              type="password"
-              value={statementPassword}
-              onChange={(e) => setStatementPassword(e.target.value)}
-              placeholder="Only sent for this request"
-            />
-          </label>
-        )}
         {gmail?.notice ? (
-          <p className="meta" style={{ marginTop: "0.75rem" }}>
+          <p className="meta" style={{ marginBottom: "0.75rem" }}>
             {gmail.notice}
           </p>
         ) : null}
-        {gmail?.connected && gmail.email ? (
-          <p className="meta" style={{ marginTop: "0.4rem" }}>
-            Connected account last synced {formatTimestamp(gmail.lastSyncAt)}
-          </p>
-        ) : null}
-        <p className="meta" style={{ marginTop: "0.75rem" }}>
-          Manage bank sender allowlist on the Import screen.
-        </p>
+        <Link href={pathForView("import")} className="cta inline-flex">
+          Manage Gmail import
+        </Link>
       </section>
 
       <section className="settings-section">

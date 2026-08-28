@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import {
   DASHBOARD_NAV,
   MOBILE_NAV_IDS,
   type DashboardView,
 } from "@/lib/dashboardViews";
+import { cn } from "@/lib/cn";
 
 interface MobileNavProps {
   current: DashboardView;
@@ -22,16 +24,16 @@ export function MobileNav({ current, onNavigate }: MobileNavProps) {
         const Icon = item.icon;
         const active = item.id === current;
         return (
-          <button
+          <Link
             key={item.id}
-            type="button"
-            className={`mobile-nav-item${active ? " active" : ""}`}
+            href={item.path}
+            className={cn("mobile-nav-item", active && "active")}
             aria-current={active ? "page" : undefined}
             onClick={() => onNavigate(item.id)}
           >
             <Icon size={18} aria-hidden />
             {item.label.split(" ")[0]}
-          </button>
+          </Link>
         );
       })}
     </nav>

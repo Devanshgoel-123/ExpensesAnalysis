@@ -1,5 +1,26 @@
 @import "tailwindcss";
 
+@theme {
+  --color-bg: var(--bg);
+  --color-bg-muted: var(--bg-muted);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-border: var(--border);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
+  --radius-lg: var(--radius-lg);
+  --radius-md: var(--radius);
+  --radius-sm: var(--radius-sm);
+}
+
 /* ── Ledgerline semantic tokens ── */
 :root,
 [data-theme="light"] {
@@ -310,10 +331,25 @@ textarea {
   pointer-events: none;
   overflow: hidden;
   isolation: isolate;
-  background: linear-gradient(180deg, #04110a 0%, #071811 45%, #0d2218 100%);
+  background: var(--bg);
 }
 
-.glow-backdrop__tunnel,
+.glow-backdrop--calm {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, var(--primary-soft), transparent 55%),
+    var(--bg);
+}
+
+[data-theme="dark"] .glow-backdrop--calm {
+  background:
+    radial-gradient(ellipse 70% 45% at 50% 0%, rgba(61, 186, 116, 0.08), transparent 50%),
+    var(--bg);
+}
+
+.glow-backdrop__tunnel {
+  display: none;
+}
+
 .glow-backdrop__wash,
 .glow-backdrop__grid,
 .glow-backdrop__vignette {
@@ -321,34 +357,31 @@ textarea {
   inset: 0;
 }
 
-.glow-backdrop__tunnel {
-  inset: -12%;
-  opacity: 0.96;
-  transform: scale(1.08);
-  filter: saturate(1.15) brightness(1.08);
+.glow-backdrop__wash {
+  opacity: 0.5;
+  background:
+    radial-gradient(circle at 15% 20%, var(--primary-soft), transparent 32%),
+    radial-gradient(circle at 82% 78%, var(--info-soft), transparent 28%);
 }
 
-.glow-backdrop__wash {
-  background:
-    radial-gradient(circle at 50% 44%, rgba(209, 250, 229, 0.08), transparent 16%),
-    radial-gradient(circle at 15% 20%, rgba(61, 186, 116, 0.18), transparent 32%),
-    radial-gradient(circle at 82% 78%, rgba(93, 184, 204, 0.14), transparent 28%);
+[data-theme="dark"] .glow-backdrop__wash {
+  opacity: 0.35;
 }
 
 .glow-backdrop__grid {
-  opacity: 0.22;
+  opacity: 0.12;
   background:
     linear-gradient(
       180deg,
-      rgba(255, 255, 255, 0.04) 0,
-      rgba(255, 255, 255, 0.04) 1px,
+      var(--ledger-line) 0,
+      var(--ledger-line) 1px,
       transparent 1px,
       transparent 28px
     ),
     linear-gradient(
       90deg,
-      rgba(255, 255, 255, 0.03) 0,
-      rgba(255, 255, 255, 0.03) 1px,
+      var(--ledger-line) 0,
+      var(--ledger-line) 1px,
       transparent 1px,
       transparent 28px
     );
@@ -356,9 +389,12 @@ textarea {
 }
 
 .glow-backdrop__vignette {
-  background:
-    radial-gradient(circle at center, transparent 0%, transparent 30%, rgba(4, 17, 10, 0.28) 66%, rgba(4, 17, 10, 0.84) 100%),
-    linear-gradient(180deg, rgba(4, 17, 10, 0.16) 0%, rgba(4, 17, 10, 0.08) 24%, rgba(4, 17, 10, 0.52) 100%);
+  background: radial-gradient(
+    circle at center,
+    transparent 0%,
+    transparent 40%,
+    color-mix(in srgb, var(--bg) 20%, transparent) 100%
+  );
 }
 
 .molten-stage,
@@ -392,8 +428,6 @@ textarea {
   min-height: 100vh;
   z-index: 1;
   background: transparent;
-  --header-bg: rgba(12, 20, 15, 0.72);
-  --overlay: rgba(4, 17, 10, 0.68);
 }
 
 [data-theme="light"] .app-shell {
@@ -580,7 +614,21 @@ textarea {
   color: var(--foreground);
   text-align: left;
   cursor: pointer;
+  text-decoration: none;
   transition: background var(--ease), border-color var(--ease), color var(--ease);
+  position: relative;
+}
+
+.sidebar-link-marker {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 0;
+  border-radius: 999px;
+  background: var(--primary);
+  transition: height var(--ease);
 }
 
 .sidebar-link:hover {
@@ -589,18 +637,22 @@ textarea {
 }
 
 .sidebar-link.active {
-  background: var(--primary);
-  border-color: transparent;
-  color: var(--primary-foreground);
+  background: var(--primary-soft);
+  border-color: color-mix(in srgb, var(--primary) 25%, transparent);
+  color: var(--foreground);
+}
+
+.sidebar-link.active .sidebar-link-marker {
+  height: 60%;
 }
 
 .sidebar-link.active .sidebar-link-icon {
-  background: rgba(255, 255, 255, 0.16);
-  color: var(--primary-foreground);
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
 .sidebar-link.active .meta {
-  color: color-mix(in srgb, var(--primary-foreground) 78%, transparent);
+  color: var(--muted);
 }
 
 .sidebar-link-icon {
@@ -2162,6 +2214,53 @@ td.credit {
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--bg-muted);
+}
+
+.import-stepper .import-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-muted);
+  transition: all var(--ease);
+}
+
+.import-stepper .import-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.import-stepper .import-step.active {
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 35%, transparent);
+  background: var(--primary-soft);
+}
+
+.import-stepper .import-step.done {
+  color: var(--foreground);
+  border-color: color-mix(in srgb, var(--success) 30%, transparent);
+}
+
+.import-trust-panel {
+  display: flex;
+  gap: 0.85rem;
+  padding: 0.95rem 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--info-soft);
 }
 
 .import-privacy {

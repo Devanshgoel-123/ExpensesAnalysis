@@ -2,6 +2,9 @@ import pg from "pg";
 import { config } from "../config.js";
 import { logger } from "../logger/index.js";
 import { migrateUp } from "./migrator.js";
+import { PostgresGmailRepository } from "./postgres/gmailRepository.js";
+import { PostgresImportRepository } from "./postgres/importRepository.js";
+import { mapAccount } from "./postgres/shared.js";
 import type {
   AccountRow,
   BankPresetRow,
@@ -12,10 +15,8 @@ import type {
   ListTransactionsOptions,
   MailMessageRow,
   NewTransactionInput,
-  PoolingRunMode,
   PoolingRunRow,
   PoolingRunStatus,
-  PoolingRunTrigger,
   ProviderRow,
   Store,
   TransactionOverrideRow,
@@ -102,127 +103,10 @@ function mapRule(row: Record<string, unknown>): UserRuleRow {
   };
 }
 
-function mapAccount(row: Record<string, unknown>): AccountRow {
-  return {
-    id: String(row.id),
-    userId: String(row.user_id),
-    bank: String(row.bank),
-    label: String(row.label),
-    statementSenderEmails: (row.statement_sender_emails as string[]) ?? [],
-    poolingEnabled: Boolean(row.pooling_enabled),
-    poolingStartedAt: row.pooling_started_at
-      ? new Date(String(row.pooling_started_at)).toISOString()
-      : null,
-  };
-}
-
-function mapImport(row: Record<string, unknown>): ImportRow {
-  return {
-    id: String(row.id),
-    userId: String(row.user_id),
-    accountId: (row.account_id as string | null) ?? null,
-    source: row.source as ImportRow["source"],
-    status: row.status as ImportRow["status"],
-    filename: (row.filename as string | null) ?? null,
-    gmailMessageId: (row.gmail_message_id as string | null) ?? null,
-    attachmentHash: (row.attachment_hash as string | null) ?? null,
-    bankAdapter: (row.bank_adapter as string | null) ?? null,
-    errorMessage: (row.error_message as string | null) ?? null,
-    passwordEncrypted: (row.password_encrypted as string | null) ?? null,
-    createdAt: new Date(String(row.created_at)).toISOString(),
-    updatedAt: new Date(String(row.updated_at)).toISOString(),
-  };
-}
-
-function mapTx(row: Record<string, unknown>): TransactionRow {
-  return {
-    id: String(row.id),
-    userId: String(row.user_id),
-    importId: (row.import_id as string | null) ?? null,
-    accountId: (row.account_id as string | null) ?? null,
-    date: String(row.date).slice(0, 10),
-    time: (row.time as string | null) ?? null,
-    description: String(row.description),
-    amount: Number(row.amount),
-    type: row.type as TransactionRow["type"],
-    upiId: (row.upi_id as string | null) ?? null,
-    merchant: (row.merchant as string | null) ?? null,
-    payee: (row.payee as string | null) ?? null,
-    providerId: (row.provider_id as string | null) ?? null,
-    categorySlug: (row.category_slug as string | null) ?? null,
-    counterparty: (row.counterparty as string | null) ?? null,
-    confidence: Number(row.confidence ?? 1),
-    classificationSource: String(row.classification_source ?? "parser"),
-    fingerprint: String(row.fingerprint),
-    raw: (row.raw as string | null) ?? null,
-  };
-}
-
-function mapGmail(row: Record<string, unknown>): GmailConnectionRow {
-  return {
-    id: String(row.id),
-    userId: String(row.user_id),
-    googleEmail: String(row.google_email),
-    refreshTokenEncrypted: String(row.refresh_token_encrypted),
-    accessTokenEncrypted: (row.access_token_encrypted as string | null) ?? null,
-    tokenExpiry: row.token_expiry
-      ? new Date(String(row.token_expiry)).toISOString()
-      : null,
-    historyId: (row.history_id as string | null) ?? null,
-    watchExpiration: row.watch_expiration
-      ? new Date(String(row.watch_expiration)).toISOString()
-      : null,
-    lastSyncAt: row.last_sync_at
-      ? new Date(String(row.last_sync_at)).toISOString()
-      : null,
-    disconnectedAt: row.disconnected_at
-      ? new Date(String(row.disconnected_at)).toISOString()
-      : null,
-  };
-}
-
-function mapMailMessage(row: Record<string, unknown>): MailMessageRow {
-  return {
-    id: String(row.id),
-    userId: String(row.user_id),
-    accountId: (row.account_id as string | null) ?? null,
-    gmailMessageId: String(row.gmail_message_id),
-    fromAddress: String(row.from_address ?? ""),
-    subject: String(row.subject ?? ""),
-    receivedAt: row.received_at
-      ? new Date(String(row.received_at)).toISOString()
-      : null,
-    amount: row.amount == null ? null : Number(row.amount),
-    txType: (row.tx_type as MailMessageRow["txType"]) ?? null,
-    currency: String(row.currency ?? "INR"),
-    fingerprint: String(row.fingerprint),
-    createdAt: new Date(String(row.created_at)).toISOString(),
-  };
-}
-
-function mapPoolingRun(row: Record<string, unknown>): PoolingRunRow {
-  return {
-    id: String(row.id),
-    userId: String(row.user_id),
-    accountId: (row.account_id as string | null) ?? null,
-    trigger: String(row.trigger) as PoolingRunTrigger,
-    status: String(row.status) as PoolingRunStatus,
-    mode: String(row.mode) as PoolingRunMode,
-    month: (row.month as string | null) ?? null,
-    scanned: Number(row.scanned ?? 0),
-    imported: Number(row.imported ?? 0),
-    skipped: Number(row.skipped ?? 0),
-    errorMessage: (row.error_message as string | null) ?? null,
-    startedAt: new Date(String(row.started_at)).toISOString(),
-    finishedAt: row.finished_at
-      ? new Date(String(row.finished_at)).toISOString()
-      : null,
-    meta: (row.meta as Record<string, unknown>) ?? {},
-  };
-}
-
 export class PostgresStore implements Store {
   private pool: pg.Pool;
+  private readonly imports: PostgresImportRepository;
+  private readonly gmail: PostgresGmailRepository;
 
   constructor(databaseUrl: string) {
     this.pool = new pg.Pool({
@@ -234,6 +118,8 @@ export class PostgresStore implements Store {
     this.pool.on("error", (err) => {
       logger.error({ err }, "Unexpected Postgres pool error");
     });
+    this.imports = new PostgresImportRepository(this.pool);
+    this.gmail = new PostgresGmailRepository(this.pool);
   }
 
   async migrate(): Promise<void> {
@@ -683,28 +569,7 @@ export class PostgresStore implements Store {
   async createImport(
     input: Omit<ImportRow, "id" | "createdAt" | "updatedAt"> & { id?: string },
   ): Promise<ImportRow> {
-    const result = await this.pool.query(
-      `INSERT INTO imports (
-         id, user_id, account_id, source, status, filename,
-         gmail_message_id, attachment_hash, bank_adapter, error_message, password_encrypted
-       ) VALUES (
-         COALESCE($1::uuid, gen_random_uuid()), $2,$3,$4,$5,$6,$7,$8,$9,$10,$11
-       ) RETURNING *`,
-      [
-        input.id ?? null,
-        input.userId,
-        input.accountId,
-        input.source,
-        input.status,
-        input.filename,
-        input.gmailMessageId,
-        input.attachmentHash,
-        input.bankAdapter,
-        input.errorMessage,
-        input.passwordEncrypted,
-      ],
-    );
-    return mapImport(result.rows[0]);
+    return this.imports.createImport(input);
   }
 
   async updateImport(
@@ -712,163 +577,50 @@ export class PostgresStore implements Store {
     userId: string,
     patch: Partial<ImportRow>,
   ): Promise<ImportRow | null> {
-    const result = await this.pool.query(
-      `UPDATE imports SET
-         status = COALESCE($3, status),
-         error_message = COALESCE($4, error_message),
-         bank_adapter = COALESCE($5, bank_adapter),
-         password_encrypted = COALESCE($6, password_encrypted),
-         attachment_hash = COALESCE($7, attachment_hash),
-         gmail_message_id = COALESCE($8, gmail_message_id),
-         filename = COALESCE($9, filename),
-         account_id = COALESCE($10, account_id),
-         updated_at = NOW()
-       WHERE id = $1 AND user_id = $2
-       RETURNING *`,
-      [
-        id,
-        userId,
-        patch.status ?? null,
-        patch.errorMessage ?? null,
-        patch.bankAdapter ?? null,
-        patch.passwordEncrypted ?? null,
-        patch.attachmentHash ?? null,
-        patch.gmailMessageId ?? null,
-        patch.filename ?? null,
-        patch.accountId ?? null,
-      ],
-    );
-    return result.rows[0] ? mapImport(result.rows[0]) : null;
+    return this.imports.updateImport(id, userId, patch);
   }
 
   async listImports(userId: string): Promise<ImportRow[]> {
-    const result = await this.pool.query(
-      `SELECT * FROM imports WHERE user_id = $1 ORDER BY created_at DESC`,
-      [userId],
-    );
-    return result.rows.map(mapImport);
+    return this.imports.listImports(userId);
   }
 
   async getImport(userId: string, id: string): Promise<ImportRow | null> {
-    const result = await this.pool.query(
-      `SELECT * FROM imports WHERE id = $1 AND user_id = $2`,
-      [id, userId],
-    );
-    return result.rows[0] ? mapImport(result.rows[0]) : null;
+    return this.imports.getImport(userId, id);
   }
 
   async findImportByHash(
     userId: string,
     attachmentHash: string,
   ): Promise<ImportRow | null> {
-    const result = await this.pool.query(
-      `SELECT * FROM imports WHERE user_id = $1 AND attachment_hash = $2`,
-      [userId, attachmentHash],
-    );
-    return result.rows[0] ? mapImport(result.rows[0]) : null;
+    return this.imports.findImportByHash(userId, attachmentHash);
   }
 
   async findImportByGmailMessage(
     userId: string,
     gmailMessageId: string,
   ): Promise<ImportRow | null> {
-    const result = await this.pool.query(
-      `SELECT * FROM imports WHERE user_id = $1 AND gmail_message_id = $2`,
-      [userId, gmailMessageId],
-    );
-    return result.rows[0] ? mapImport(result.rows[0]) : null;
+    return this.imports.findImportByGmailMessage(userId, gmailMessageId);
   }
 
   async insertTransactions(
     userId: string,
     rows: NewTransactionInput[],
   ): Promise<{ inserted: number; skipped: number }> {
-    let inserted = 0;
-    let skipped = 0;
-    for (const row of rows) {
-      const result = await this.pool.query(
-        `INSERT INTO transactions (
-           user_id, import_id, account_id, date, time, description, amount, type,
-           upi_id, merchant, payee, provider_id, category_slug, counterparty,
-           confidence, classification_source, fingerprint, raw
-         ) VALUES (
-           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18
-         )
-         ON CONFLICT (user_id, fingerprint) DO NOTHING
-         RETURNING id`,
-        [
-          userId,
-          row.importId,
-          row.accountId,
-          row.date,
-          row.time,
-          row.description,
-          row.amount,
-          row.type,
-          row.upiId,
-          row.merchant,
-          row.payee,
-          row.providerId,
-          row.categorySlug,
-          row.counterparty,
-          row.confidence,
-          row.classificationSource,
-          row.fingerprint,
-          row.raw,
-        ],
-      );
-      if (result.rows[0]) inserted += 1;
-      else skipped += 1;
-    }
-    return { inserted, skipped };
+    return this.imports.insertTransactions(userId, rows);
   }
 
   async listTransactions(
     userId: string,
     options?: ListTransactionsOptions,
   ): Promise<TransactionRow[]> {
-    const limit = options?.limit;
-    const offset = options?.offset ?? 0;
-    const from = options?.from;
-    const to = options?.to;
-    const clauses = ["user_id = $1"];
-    const params: unknown[] = [userId];
-    if (from) {
-      params.push(from);
-      clauses.push(`date >= $${params.length}::date`);
-    }
-    if (to) {
-      params.push(to);
-      clauses.push(`date <= $${params.length}::date`);
-    }
-    const where = clauses.join(" AND ");
-    params.push(offset);
-    const offsetParam = `$${params.length}`;
-    if (limit === undefined) {
-      const result = await this.pool.query(
-        `SELECT * FROM transactions WHERE ${where} ORDER BY date DESC, created_at DESC OFFSET ${offsetParam}`,
-        params,
-      );
-      return result.rows.map(mapTx);
-    }
-    params.push(limit);
-    const limitParam = `$${params.length}`;
-    const result = await this.pool.query(
-      `SELECT * FROM transactions WHERE ${where} ORDER BY date DESC, created_at DESC LIMIT ${limitParam} OFFSET ${offsetParam}`,
-      params,
-    );
-    return result.rows.map(mapTx);
+    return this.imports.listTransactions(userId, options);
   }
 
   async getTransaction(
     userId: string,
     id: string,
   ): Promise<TransactionRow | null> {
-    const result = await this.pool.query(
-      `SELECT * FROM transactions WHERE id = $1 AND user_id = $2`,
-      [id, userId],
-    );
-    return result.rows[0] ? mapTx(result.rows[0]) : null;
+    return this.imports.getTransaction(userId, id);
   }
 
   async updateTransaction(
@@ -876,30 +628,7 @@ export class PostgresStore implements Store {
     id: string,
     patch: Partial<TransactionRow>,
   ): Promise<TransactionRow | null> {
-    const result = await this.pool.query(
-      `UPDATE transactions SET
-         payee = COALESCE($3, payee),
-         merchant = COALESCE($4, merchant),
-         category_slug = COALESCE($5, category_slug),
-         provider_id = COALESCE($6, provider_id),
-         counterparty = COALESCE($7, counterparty),
-         confidence = COALESCE($8, confidence),
-         classification_source = COALESCE($9, classification_source)
-       WHERE id = $1 AND user_id = $2
-       RETURNING *`,
-      [
-        id,
-        userId,
-        patch.payee ?? null,
-        patch.merchant ?? null,
-        patch.categorySlug ?? null,
-        patch.providerId ?? null,
-        patch.counterparty ?? null,
-        patch.confidence ?? null,
-        patch.classificationSource ?? null,
-      ],
-    );
-    return result.rows[0] ? mapTx(result.rows[0]) : null;
+    return this.imports.updateTransaction(userId, id, patch);
   }
 
   async reclassifyByRule(
@@ -907,173 +636,48 @@ export class PostgresStore implements Store {
     matcher: (tx: TransactionRow) => boolean,
     patch: Partial<TransactionRow>,
   ): Promise<number> {
-    const txs = await this.listTransactions(userId);
-    let count = 0;
-    for (const tx of txs) {
-      if (!matcher(tx)) continue;
-      await this.updateTransaction(userId, tx.id, patch);
-      count += 1;
-    }
-    return count;
+    return this.imports.reclassifyByRule(userId, matcher, patch);
   }
 
   async upsertOverride(
     input: Omit<TransactionOverrideRow, "id"> & { id?: string },
   ): Promise<TransactionOverrideRow> {
-    const result = await this.pool.query(
-      `INSERT INTO transaction_overrides (
-         id, user_id, transaction_id, payee, merchant, category_slug, provider_id, apply_future
-       ) VALUES (
-         COALESCE($1::uuid, gen_random_uuid()), $2,$3,$4,$5,$6,$7,$8
-       )
-       ON CONFLICT (transaction_id) DO UPDATE SET
-         payee = EXCLUDED.payee,
-         merchant = EXCLUDED.merchant,
-         category_slug = EXCLUDED.category_slug,
-         provider_id = EXCLUDED.provider_id,
-         apply_future = EXCLUDED.apply_future
-       RETURNING *`,
-      [
-        input.id ?? null,
-        input.userId,
-        input.transactionId,
-        input.payee,
-        input.merchant,
-        input.categorySlug,
-        input.providerId,
-        input.applyFuture,
-      ],
-    );
-    const row = result.rows[0];
-    return {
-      id: String(row.id),
-      userId: String(row.user_id),
-      transactionId: String(row.transaction_id),
-      payee: (row.payee as string | null) ?? null,
-      merchant: (row.merchant as string | null) ?? null,
-      categorySlug: (row.category_slug as string | null) ?? null,
-      providerId: (row.provider_id as string | null) ?? null,
-      applyFuture: Boolean(row.apply_future),
-    };
+    return this.imports.upsertOverride(input);
   }
 
   async upsertGmailConnection(
     input: Omit<GmailConnectionRow, "id"> & { id?: string },
   ): Promise<GmailConnectionRow> {
-    const result = await this.pool.query(
-      `INSERT INTO gmail_connections (
-         id, user_id, google_email, refresh_token_encrypted, access_token_encrypted,
-         token_expiry, history_id, watch_expiration, last_sync_at, disconnected_at
-       ) VALUES (
-         COALESCE($1::uuid, gen_random_uuid()), $2,$3,$4,$5,$6,$7,$8,$9,NULL
-       )
-       ON CONFLICT (user_id) DO UPDATE SET
-         google_email = EXCLUDED.google_email,
-         refresh_token_encrypted = CASE
-           WHEN EXCLUDED.refresh_token_encrypted <> '' THEN EXCLUDED.refresh_token_encrypted
-           ELSE gmail_connections.refresh_token_encrypted
-         END,
-         access_token_encrypted = COALESCE(EXCLUDED.access_token_encrypted, gmail_connections.access_token_encrypted),
-         token_expiry = EXCLUDED.token_expiry,
-         history_id = COALESCE(EXCLUDED.history_id, gmail_connections.history_id),
-         watch_expiration = COALESCE(EXCLUDED.watch_expiration, gmail_connections.watch_expiration),
-         last_sync_at = COALESCE(EXCLUDED.last_sync_at, gmail_connections.last_sync_at),
-         disconnected_at = NULL
-       RETURNING *`,
-      [
-        input.id ?? null,
-        input.userId,
-        input.googleEmail,
-        input.refreshTokenEncrypted,
-        input.accessTokenEncrypted,
-        input.tokenExpiry,
-        input.historyId,
-        input.watchExpiration,
-        input.lastSyncAt,
-      ],
-    );
-    return mapGmail(result.rows[0]);
+    return this.gmail.upsertGmailConnection(input);
   }
 
   async getGmailConnection(userId: string): Promise<GmailConnectionRow | null> {
-    const result = await this.pool.query(
-      `SELECT * FROM gmail_connections
-       WHERE user_id = $1 AND disconnected_at IS NULL`,
-      [userId],
-    );
-    return result.rows[0] ? mapGmail(result.rows[0]) : null;
+    return this.gmail.getGmailConnection(userId);
   }
 
   async disconnectGmail(userId: string): Promise<void> {
-    await this.pool.query(
-      `UPDATE gmail_connections SET
-         disconnected_at = NOW(),
-         refresh_token_encrypted = '',
-         access_token_encrypted = NULL
-       WHERE user_id = $1`,
-      [userId],
-    );
+    return this.gmail.disconnectGmail(userId);
   }
 
   async listActiveGmailConnections(): Promise<GmailConnectionRow[]> {
-    const result = await this.pool.query(
-      `SELECT * FROM gmail_connections WHERE disconnected_at IS NULL`,
-    );
-    return result.rows.map(mapGmail);
+    return this.gmail.listActiveGmailConnections();
   }
 
   async listPoolingAccounts(): Promise<AccountRow[]> {
-    const result = await this.pool.query(
-      `SELECT * FROM accounts WHERE pooling_enabled = TRUE`,
-    );
-    return result.rows.map(mapAccount);
+    return this.gmail.listPoolingAccounts();
   }
 
   async upsertMailMessage(
     input: Omit<MailMessageRow, "id" | "createdAt"> & { id?: string },
   ): Promise<MailMessageRow> {
-    const result = await this.pool.query(
-      `INSERT INTO mail_messages (
-         id, user_id, account_id, gmail_message_id, from_address, subject,
-         received_at, amount, tx_type, currency, fingerprint
-       ) VALUES (
-         COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-       )
-       ON CONFLICT (user_id, gmail_message_id) DO UPDATE SET
-         from_address = EXCLUDED.from_address,
-         subject = EXCLUDED.subject,
-         received_at = COALESCE(EXCLUDED.received_at, mail_messages.received_at),
-         amount = COALESCE(EXCLUDED.amount, mail_messages.amount),
-         tx_type = COALESCE(EXCLUDED.tx_type, mail_messages.tx_type),
-         currency = EXCLUDED.currency,
-         fingerprint = EXCLUDED.fingerprint
-       RETURNING *`,
-      [
-        input.id ?? null,
-        input.userId,
-        input.accountId,
-        input.gmailMessageId,
-        input.fromAddress,
-        input.subject,
-        input.receivedAt,
-        input.amount,
-        input.txType,
-        input.currency,
-        input.fingerprint,
-      ],
-    );
-    return mapMailMessage(result.rows[0]);
+    return this.gmail.upsertMailMessage(input);
   }
 
   async findMailMessageByGmailId(
     userId: string,
     gmailMessageId: string,
   ): Promise<MailMessageRow | null> {
-    const result = await this.pool.query(
-      `SELECT * FROM mail_messages WHERE user_id = $1 AND gmail_message_id = $2`,
-      [userId, gmailMessageId],
-    );
-    return result.rows[0] ? mapMailMessage(result.rows[0]) : null;
+    return this.gmail.findMailMessageByGmailId(userId, gmailMessageId);
   }
 
   async createPoolingRun(
@@ -1082,31 +686,7 @@ export class PostgresStore implements Store {
       status?: PoolingRunStatus;
     },
   ): Promise<PoolingRunRow> {
-    const result = await this.pool.query(
-      `INSERT INTO pooling_runs (
-         id, user_id, account_id, trigger, status, mode, month,
-         scanned, imported, skipped, error_message, meta
-       ) VALUES (
-         COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7,
-         $8, $9, $10, $11, $12::jsonb
-       )
-       RETURNING *`,
-      [
-        input.id ?? null,
-        input.userId,
-        input.accountId,
-        input.trigger,
-        input.status ?? "running",
-        input.mode,
-        input.month,
-        input.scanned,
-        input.imported,
-        input.skipped,
-        input.errorMessage,
-        JSON.stringify(input.meta ?? {}),
-      ],
-    );
-    return mapPoolingRun(result.rows[0]);
+    return this.gmail.createPoolingRun(input);
   }
 
   async updatePoolingRun(
@@ -1124,64 +704,22 @@ export class PostgresStore implements Store {
       >
     >,
   ): Promise<PoolingRunRow | null> {
-    const result = await this.pool.query(
-      `UPDATE pooling_runs SET
-         status = COALESCE($2, status),
-         scanned = COALESCE($3, scanned),
-         imported = COALESCE($4, imported),
-         skipped = COALESCE($5, skipped),
-         error_message = COALESCE($6, error_message),
-         finished_at = COALESCE($7::timestamptz, finished_at),
-         meta = CASE WHEN $8::jsonb IS NULL THEN meta ELSE $8::jsonb END
-       WHERE id = $1
-       RETURNING *`,
-      [
-        id,
-        patch.status ?? null,
-        patch.scanned ?? null,
-        patch.imported ?? null,
-        patch.skipped ?? null,
-        patch.errorMessage ?? null,
-        patch.finishedAt ?? null,
-        patch.meta == null ? null : JSON.stringify(patch.meta),
-      ],
-    );
-    return result.rows[0] ? mapPoolingRun(result.rows[0]) : null;
+    return this.gmail.updatePoolingRun(id, patch);
   }
 
   async getLatestPoolingRun(userId: string): Promise<PoolingRunRow | null> {
-    const result = await this.pool.query(
-      `SELECT * FROM pooling_runs
-       WHERE user_id = $1
-       ORDER BY started_at DESC
-       LIMIT 1`,
-      [userId],
-    );
-    return result.rows[0] ? mapPoolingRun(result.rows[0]) : null;
+    return this.gmail.getLatestPoolingRun(userId);
   }
 
   async listPoolingRuns(
     userId: string,
     limit = 10,
   ): Promise<PoolingRunRow[]> {
-    const result = await this.pool.query(
-      `SELECT * FROM pooling_runs
-       WHERE user_id = $1
-       ORDER BY started_at DESC
-       LIMIT $2`,
-      [userId, limit],
-    );
-    return result.rows.map(mapPoolingRun);
+    return this.gmail.listPoolingRuns(userId, limit);
   }
 
   async hasRunningPoolingRun(userId: string): Promise<boolean> {
-    const result = await this.pool.query(
-      `SELECT 1 FROM pooling_runs
-       WHERE user_id = $1 AND status = 'running'
-       LIMIT 1`,
-      [userId],
-    );
-    return result.rows.length > 0;
+    return this.gmail.hasRunningPoolingRun(userId);
   }
 
   async audit(
