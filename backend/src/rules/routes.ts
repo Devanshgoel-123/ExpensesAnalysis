@@ -5,6 +5,7 @@ import { validate } from "../middleware/validate.js";
 import { uuidParamSchema } from "../validators/common.js";
 import { createRuleBodySchema } from "../validators/rules.js";
 import { matchRule } from "./engine.js";
+import { ruleClassificationSource } from "../enums/index.js";
 
 export const rulesRouter = Router();
 rulesRouter.use(requireAuth);
@@ -57,7 +58,7 @@ rulesRouter.post("/", validate(createRuleBodySchema), async (req, res) => {
       merchant: undefined,
       categorySlug: rule.setCategorySlug ?? undefined,
       providerId: rule.setProviderId ?? undefined,
-      classificationSource: `rule:${rule.id}`,
+      classificationSource: ruleClassificationSource(rule.id),
     },
   );
 

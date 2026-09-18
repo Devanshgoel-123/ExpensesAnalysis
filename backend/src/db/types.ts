@@ -1,11 +1,20 @@
-export type TxType = "debit" | "credit";
-export type ImportSource = "upload" | "gmail";
-export type ImportStatus =
-  | "queued"
-  | "processing"
-  | "needs_password"
-  | "completed"
-  | "failed";
+import type {
+  ImportSource,
+  ImportStatus,
+  PoolingRunMode,
+  PoolingRunStatus,
+  PoolingRunTrigger,
+  TxType,
+} from "../enums/index.js";
+
+export type {
+  ImportSource,
+  ImportStatus,
+  PoolingRunMode,
+  PoolingRunStatus,
+  PoolingRunTrigger,
+  TxType,
+};
 
 export interface UserRow {
   id: string;
@@ -166,15 +175,6 @@ export interface MailMessageRow {
   fingerprint: string;
   createdAt: string;
 }
-
-export type PoolingRunStatus = "running" | "completed" | "failed";
-export type PoolingRunTrigger =
-  | "enable"
-  | "backfill"
-  | "manual_sync"
-  | "dispatcher"
-  | "push";
-export type PoolingRunMode = "poll" | "backfill";
 
 export interface PoolingRunRow {
   id: string;

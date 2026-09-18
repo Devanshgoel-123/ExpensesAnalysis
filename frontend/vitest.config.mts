@@ -9,12 +9,13 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: "happy-dom",
-    setupFiles: ["./src/test/setup.ts"],
-    include: ["src/**/*.test.{ts,tsx}"],
+    setupFiles: ["./tests/support/setup.ts"],
+    include: ["tests/**/*.test.{ts,tsx}"],
   },
   resolve: {
     alias: {
       "@": path.resolve(rootDir, "./src"),
+      "@test": path.resolve(rootDir, "./tests/support"),
     },
   },
 });

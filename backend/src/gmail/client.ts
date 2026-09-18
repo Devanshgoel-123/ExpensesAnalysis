@@ -1,10 +1,20 @@
 import { google } from "googleapis";
 import { config } from "../config.js";
+import {
+  DEFAULT_HDFC_SENDERS,
+  GMAIL_READONLY_SCOPE,
+  GMAIL_REQUEST_TIMEOUT_MS,
+  GOOGLE_LOGIN_SCOPES,
+} from "../constants/index.js";
 import { decryptSecret, encryptSecret } from "../crypto/secrets.js";
 import { getStore } from "../db/index.js";
 import type { GmailConnectionRow } from "../db/types.js";
-
-const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+import {
+  clampPoolingAfter,
+  gmailFromClause,
+  toGmailQueryAfter,
+  toGmailQueryDate,
+} from "../helpers/index.js";
 
 export function gmailConfigured(): boolean {
   return Boolean(config.google.clientId && config.google.clientSecret);
@@ -18,14 +28,14 @@ export function createOAuthClient() {
   );
 }
 
-const LOGIN_SCOPES = ["openid", "email", "profile"];
+const LOGIN_SCOPES = [...GOOGLE_LOGIN_SCOPES];
 
 export function buildGmailAuthUrl(state: string): string {
   const client = createOAuthClient();
   return client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
-    scope: [GMAIL_SCOPE],
+    scope: [GMAIL_READONLY_SCOPE],
     state,
   });
 }
@@ -36,7 +46,7 @@ export function buildGoogleLoginAuthUrl(state: string): string {
     access_type: "offline",
     prompt: "consent",
     include_granted_scopes: true,
-    scope: [...LOGIN_SCOPES, GMAIL_SCOPE],
+    scope: [...LOGIN_SCOPES, GMAIL_READONLY_SCOPE],
     state,
   });
 }
@@ -100,32 +110,16 @@ export function buildStatementQuery(
   senders: string[],
   options?: { after?: string; before?: string },
 ): string {
-  const cleaned = senders
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((s) => s.replace(/[()]/g, ""));
-  if (cleaned.length === 0) {
-    throw new Error(
-      "No bank statement sender emails configured. Select a bank and confirm sender handles first.",
-    );
-  }
-  const fromClause =
-    cleaned.length === 1
-      ? `from:${cleaned[0]}`
-      : `from:(${cleaned.join(" OR ")})`;
-  // Hard floor: never query mail before pooling earliest date.
-  const after =
-    options?.after && options.after > "2025-08-01"
-      ? options.after
-      : "2025-08-01";
+  const fromClause = gmailFromClause(senders);
+  const after = clampPoolingAfter(options?.after);
   const parts = [
-    `(${fromClause}`,
+    fromClause,
     `subject:(statement OR "account statement" OR e-statement)`,
-    `has:attachment filename:pdf)`,
-    `after:${after.replace(/-/g, "/")}`,
+    "has:attachment filename:pdf",
+    `after:${toGmailQueryAfter(after)}`,
   ];
   if (options?.before && options.before > after) {
-    parts.push(`before:${options.before.replace(/-/g, "/")}`);
+    parts.push(`before:${toGmailQueryDate(options.before)}`);
   }
   return parts.join(" ");
 }
@@ -135,39 +129,22 @@ export function buildAlertQuery(
   senders: string[],
   options?: { after?: string; before?: string },
 ): string {
-  const cleaned = senders
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((s) => s.replace(/[()]/g, ""));
-  if (cleaned.length === 0) {
-    throw new Error("No bank sender emails configured.");
-  }
-  const fromClause =
-    cleaned.length === 1
-      ? `from:${cleaned[0]}`
-      : `from:(${cleaned.join(" OR ")})`;
-  const after =
-    options?.after && options.after > "2025-08-01"
-      ? options.after
-      : "2025-08-01";
+  const fromClause = gmailFromClause(senders);
+  const after = clampPoolingAfter(options?.after);
   const parts = [
     fromClause,
     // HDFC InstaAlerts often use "UPI txn" / "Account update" subjects.
     `(debited OR credited OR "has been debited" OR "has been credited" OR UPI OR "UPI txn" OR "Account update" OR InstaAlerts OR "Rs." OR INR)`,
-    `after:${after.replace(/-/g, "/")}`,
+    `after:${toGmailQueryAfter(after)}`,
   ];
   if (options?.before && options.before > after) {
-    parts.push(`before:${options.before.replace(/-/g, "/")}`);
+    parts.push(`before:${toGmailQueryDate(options.before)}`);
   }
   return parts.join(" ");
 }
 
 /** @deprecated Prefer buildStatementQuery with account senders. */
-export const STATEMENT_QUERY = buildStatementQuery([
-  "hdfcbank.net",
-  "hdfcbank.com",
-  "alerts@hdfcbank",
-]);
+export const STATEMENT_QUERY = buildStatementQuery([...DEFAULT_HDFC_SENDERS]);
 
 export async function listStatementMessageIds(
   connection: GmailConnectionRow,
@@ -176,12 +153,15 @@ export async function listStatementMessageIds(
 ): Promise<{ ids: string[]; nextPageToken?: string | null; resultSizeEstimate?: number | null }> {
   const gmail = await getAuthedGmail(connection);
   const q = query ?? STATEMENT_QUERY;
-  const res = await gmail.users.messages.list({
-    userId: "me",
-    q,
-    maxResults: 25,
-    pageToken,
-  });
+  const res = await gmail.users.messages.list(
+    {
+      userId: "me",
+      q,
+      maxResults: 25,
+      pageToken,
+    },
+    { timeout: GMAIL_REQUEST_TIMEOUT_MS },
+  );
   const ids = (res.data.messages ?? []).map((m) => m.id!).filter(Boolean);
   return {
     ids,
@@ -368,11 +348,14 @@ export async function syncHistory(
   const gmail = await getAuthedGmail(ready);
   const store = await getStore();
   try {
-    const history = await gmail.users.history.list({
-      userId: "me",
-      startHistoryId: ready.historyId,
-      historyTypes: ["messageAdded"],
-    });
+    const history = await gmail.users.history.list(
+      {
+        userId: "me",
+        startHistoryId: ready.historyId,
+        historyTypes: ["messageAdded"],
+      },
+      { timeout: GMAIL_REQUEST_TIMEOUT_MS },
+    );
     const messageIds = new Set<string>();
     for (const item of history.data.history ?? []) {
       for (const added of item.messagesAdded ?? []) {

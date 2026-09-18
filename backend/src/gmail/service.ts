@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import { config } from "../config.js";
+import { BACKFILL_DEFAULT_MAX_MESSAGES } from "../constants/index.js";
 import { encryptSecret } from "../crypto/secrets.js";
 import { getStore } from "../db/index.js";
 import type { AccountRow } from "../db/types.js";
@@ -18,6 +19,7 @@ import {
 } from "./client.js";
 import { poolingDateWindow, runPoolingPoll, runPoolingSync } from "./poolingService.js";
 
+/** Resolve the user's bank account configured for Gmail pooling. */
 export async function resolveAccountForPooling(
   userId: string,
   accountId?: string,
@@ -42,6 +44,7 @@ export async function resolveAccountForPooling(
   return account;
 }
 
+/** Dashboard-facing Gmail connection, pooling health, and recent run history. */
 export async function getGmailStatusForUser(userId: string) {
   const store = await getStore();
   const connection = await store.getGmailConnection(userId);
@@ -107,6 +110,7 @@ export async function getGmailStatusForUser(userId: string) {
   };
 }
 
+/** Build the Google OAuth URL used for Gmail read-only connect. */
 export function getGmailConnectUrl(userId: string): { url: string } {
   if (!gmailConfigured()) {
     throw AppError.serviceUnavailable(
@@ -119,6 +123,7 @@ export function getGmailConnectUrl(userId: string): { url: string } {
   return { url: buildGmailAuthUrl(state) };
 }
 
+/** Disconnect Gmail and disable pooling for every account. */
 export async function disconnectGmailForUser(userId: string) {
   const store = await getStore();
   const accounts = await store.listAccounts(userId);
@@ -132,6 +137,7 @@ export async function disconnectGmailForUser(userId: string) {
   return { ok: true };
 }
 
+/** Query-scan Gmail for alert mail and statement PDFs for one month. */
 export async function runGmailBackfillForUser(
   userId: string,
   body: GmailBackfillBody,
@@ -152,7 +158,7 @@ export async function runGmailBackfillForUser(
     connection: ready,
     account,
     password: body.password ?? "",
-    maxMessages: body.maxMessages ?? 25,
+    maxMessages: body.maxMessages ?? BACKFILL_DEFAULT_MAX_MESSAGES,
     month,
     trigger: "backfill",
   });
@@ -169,6 +175,7 @@ export async function runGmailBackfillForUser(
   };
 }
 
+/** Enable hourly pooling and run the initial alert + PDF sync. */
 export async function enablePoolingForUser(
   userId: string,
   body: EnablePoolingBody,
@@ -194,7 +201,7 @@ export async function enablePoolingForUser(
     connection: ready,
     account: updated ?? account,
     password: body.password ?? "",
-    maxMessages: body.maxMessages ?? 25,
+    maxMessages: body.maxMessages ?? BACKFILL_DEFAULT_MAX_MESSAGES,
     month,
     trigger: "enable",
   });
@@ -235,6 +242,7 @@ export async function disablePoolingForUser(userId: string) {
   return { ok: true, accounts: updated };
 }
 
+/** Manual history-based poll triggered from the dashboard. */
 export async function syncGmailForUser(userId: string) {
   const store = await getStore();
   const connection = await store.getGmailConnection(userId);

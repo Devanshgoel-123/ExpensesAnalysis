@@ -32,13 +32,21 @@ export function StatsRow({ summary, dailyInsights }: StatsRowProps) {
       <motion.div variants={fadeUp}>
         <SpotlightCard className="metric-hero">
           <p className="stat-kicker">Total spent</p>
-          <strong className="display-num lg">
+          <strong className="display-num lg text-[var(--primary)]">
             <LedgerlineCountUp value={summary.totalSpent} format={(n) => formatInr(n)} />
           </strong>
-          <p className="meta">spent this month</p>
-          <p className="meta" style={{ marginTop: "0.55rem" }}>
-            {summary.transactionCount} debits · {summary.upiPayees} UPI payees
-          </p>
+          <p className="meta mt-1">spent this month</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <span className="badge-pill !m-0 !text-[0.7rem]">
+              {summary.transactionCount} debits
+            </span>
+            <span className="badge-pill !m-0 !text-[0.7rem]">
+              {summary.upiPayees} UPI payees
+            </span>
+            <span className="badge-pill !m-0 !text-[0.7rem]">
+              Avg {formatInr(summary.avgDailySpend)}/day
+            </span>
+          </div>
         </SpotlightCard>
       </motion.div>
 
@@ -56,21 +64,21 @@ export function StatsRow({ summary, dailyInsights }: StatsRowProps) {
 
         <SpotlightCard className="stat">
           <p className="stat-kicker">Daily limit</p>
-          <strong className="display-num sm">
+          <strong className={`display-num sm${overDays > 0 ? " text-[var(--danger)]" : ""}`}>
             {limit == null ? "—" : <LedgerlineCountUp value={limit} format={(n) => formatInr(n)} />}
           </strong>
           <p className={`meta${overDays > 0 ? " over-limit-text" : ""}`}>{budgetHint}</p>
         </SpotlightCard>
 
         <SpotlightCard className="stat">
-          <p className="stat-kicker">Debits</p>
-          <strong className="display-num sm">
+          <p className="stat-kicker">Received</p>
+          <strong className="display-num sm text-[var(--credit)]">
             <LedgerlineCountUp
-              value={summary.transactionCount}
-              format={(n) => String(Math.round(n))}
+              value={summary.totalReceived}
+              format={(n) => formatInr(n)}
             />
           </strong>
-          <p className="meta">imported rows</p>
+          <p className="meta">credits this period</p>
         </SpotlightCard>
 
         <SpotlightCard className="stat">

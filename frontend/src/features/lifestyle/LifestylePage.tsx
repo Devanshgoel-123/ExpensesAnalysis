@@ -6,18 +6,23 @@ import {
   buildCategorySpendRows,
   weekendInsight,
   formatMonthTitle,
+  normalizeDailySpend,
+  aggregateMonthlySpend,
 } from "@/lib/finance";
+import { formatInr } from "@/lib/api";
 import { pathForView } from "@/lib/dashboardViews";
 import { CategorySpendChart } from "@/components/charts/CategorySpendChart";
 import { MerchantSpendChart } from "@/components/charts/MerchantSpendChart";
 import { SpendingTrendChart } from "@/components/charts/SpendingTrendChart";
-import { aggregateMonthlySpend } from "@/lib/finance";
-import { formatInr } from "@/lib/api";
 import { LedgerlineFadeContent } from "@/components/animations/LedgerlineFadeContent";
 import { Panel, PanelHead } from "@/components/ui/Panel";
+import { LoadingState } from "@/components/ui/LoadingState";
 
 export function LifestylePage() {
-  const { data, month } = useDashboard();
+  const { data, month, fetching } = useDashboard();
+  if (fetching && !data) {
+    return <LoadingState text="Loading lifestyle" variant="skeleton" />;
+  }
   if (!data) return null;
 
   const categoryRows = buildCategorySpendRows(
@@ -26,14 +31,15 @@ export function LifestylePage() {
     data.categories ?? [],
   );
   const monthlyTrend = aggregateMonthlySpend(data.transactions);
-  const weekend = weekendInsight(data.daily);
+  const weekend = weekendInsight(normalizeDailySpend(data.daily));
 
   return (
     <div className="view-stack">
       <LedgerlineFadeContent>
         <header>
-          <h2 className="month-label">{formatMonthTitle(month)} lifestyle</h2>
-          <p className="meta mt-1">
+          <p className="stat-kicker mb-2">Lifestyle</p>
+          <h2 className="month-label">{formatMonthTitle(month)}</h2>
+          <p className="meta mt-1.5">
             What kind of life is your spending creating?
           </p>
         </header>
@@ -43,7 +49,7 @@ export function LifestylePage() {
         <CategorySpendChart
           rows={categoryRows}
           title="Category breakdown"
-          subtitle="Ranked horizontal bars — not a pie chart"
+          subtitle="Where your money goes, ranked by spend"
         />
       </LedgerlineFadeContent>
 

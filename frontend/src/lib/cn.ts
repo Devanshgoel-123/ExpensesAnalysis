@@ -1,3 +1,2 @@
-export function cn(...parts: Array<string | false | null | undefined>): string {
-  return parts.filter(Boolean).join(" ");
-}
+/** @deprecated Import from `@/helpers/cn`. */
+export { cn } from "@/helpers/cn";

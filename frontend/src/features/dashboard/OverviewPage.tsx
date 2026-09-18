@@ -4,16 +4,23 @@ import Link from "next/link";
 import { useDashboard } from "@/lib/dashboard-context";
 import { formatMonthTitle, aggregateMonthlySpend, buildCategorySpendRows } from "@/lib/finance";
 import { pathForView } from "@/lib/dashboardViews";
+import { formatInr } from "@/lib/api";
 import { StatsRow } from "@/components/StatsRow";
+import { GmailBackfillButton } from "@/components/gmail/GmailBackfillButton";
 import { DailySpendChart } from "@/components/charts/DailySpendChart";
 import { CategorySpendChart } from "@/components/charts/CategorySpendChart";
 import { SpendingTrendChart } from "@/components/charts/SpendingTrendChart";
 import { MerchantSpendChart } from "@/components/charts/MerchantSpendChart";
 import { UpiRankingList } from "@/components/UpiRankingList";
+import { LoadingState } from "@/components/ui/LoadingState";
 import { LedgerlineFadeContent } from "@/components/animations/LedgerlineFadeContent";
 
 export function OverviewPage() {
-  const { data, dailyInsights, month } = useDashboard();
+  const { data, dailyInsights, month, fetching } = useDashboard();
+
+  if (fetching && !data) {
+    return <LoadingState text="Loading overview" variant="skeleton" />;
+  }
   if (!data) return null;
 
   const monthlyTrend = aggregateMonthlySpend(data.transactions);
@@ -22,18 +29,33 @@ export function OverviewPage() {
     data.amountBand25to60,
     data.categories ?? [],
   ).slice(0, 5);
+  const netHint =
+    data.summary.net >= 0
+      ? `${formatInr(data.summary.net)} net in`
+      : `${formatInr(Math.abs(data.summary.net))} net out`;
 
   return (
-    <div className="view-stack">
+    <div className="view-stack relative">
+      {fetching ? (
+        <LoadingState text="Refreshing" variant="inline" className="absolute right-0 top-0" />
+      ) : null}
+
       <LedgerlineFadeContent>
-        <header>
-          <h2 className="month-label">{formatMonthTitle(month)}</h2>
-          <p className="meta mt-1">
-            Total spent, daily pace, and where it went —{" "}
-            <Link href={pathForView("insights")} className="ghost inline-flex px-2 py-0.5 min-h-0 text-sm">
-              Daily Limit
-            </Link>
-          </p>
+        <header className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="stat-kicker mb-2">Overview</p>
+            <h2 className="month-label">{formatMonthTitle(month)}</h2>
+            <p className="meta mt-1.5 max-w-xl">
+              {netHint} · {data.summary.transactionCount} transactions ·{" "}
+              <Link
+                href={pathForView("insights")}
+                className="text-[var(--primary)] underline-offset-2 hover:underline"
+              >
+                Daily limit health
+              </Link>
+            </p>
+          </div>
+          <GmailBackfillButton />
         </header>
       </LedgerlineFadeContent>
 

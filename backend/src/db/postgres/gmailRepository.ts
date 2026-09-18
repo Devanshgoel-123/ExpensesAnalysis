@@ -1,3 +1,11 @@
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import type { AppDb } from "../client.js";
+import {
+  accounts,
+  gmailConnections,
+  mailMessages,
+  poolingRuns,
+} from "../schema.js";
 import type {
   AccountRow,
   GmailConnectionRow,
@@ -6,168 +14,163 @@ import type {
   PoolingRunStatus,
 } from "../types.js";
 import {
-  type DbExecutor,
   mapAccount,
   mapGmailConnection,
   mapMailMessage,
   mapPoolingRun,
 } from "./shared.js";
 
+const date = (value: string | null) => (value ? new Date(value) : null);
+
 export class PostgresGmailRepository {
-  constructor(private readonly db: DbExecutor) {}
+  constructor(private readonly db: AppDb) {}
 
   async upsertGmailConnection(
     input: Omit<GmailConnectionRow, "id"> & { id?: string },
   ): Promise<GmailConnectionRow> {
-    const result = await this.db.query(
-      `INSERT INTO gmail_connections (
-         id, user_id, google_email, refresh_token_encrypted, access_token_encrypted,
-         token_expiry, history_id, watch_expiration, last_sync_at, disconnected_at
-       ) VALUES (
-         COALESCE($1::uuid, gen_random_uuid()), $2,$3,$4,$5,$6,$7,$8,$9,NULL
-       )
-       ON CONFLICT (user_id) DO UPDATE SET
-         google_email = EXCLUDED.google_email,
-         refresh_token_encrypted = CASE
-           WHEN EXCLUDED.refresh_token_encrypted <> '' THEN EXCLUDED.refresh_token_encrypted
-           ELSE gmail_connections.refresh_token_encrypted
-         END,
-         access_token_encrypted = COALESCE(EXCLUDED.access_token_encrypted, gmail_connections.access_token_encrypted),
-         token_expiry = EXCLUDED.token_expiry,
-         history_id = COALESCE(EXCLUDED.history_id, gmail_connections.history_id),
-         watch_expiration = COALESCE(EXCLUDED.watch_expiration, gmail_connections.watch_expiration),
-         last_sync_at = COALESCE(EXCLUDED.last_sync_at, gmail_connections.last_sync_at),
-         disconnected_at = NULL
-       RETURNING *`,
-      [
-        input.id ?? null,
-        input.userId,
-        input.googleEmail,
-        input.refreshTokenEncrypted,
-        input.accessTokenEncrypted,
-        input.tokenExpiry,
-        input.historyId,
-        input.watchExpiration,
-        input.lastSyncAt,
-      ],
-    );
-    return mapGmailConnection(result.rows[0]);
+    const [row] = await this.db
+      .insert(gmailConnections)
+      .values({
+        ...(input.id ? { id: input.id } : {}),
+        userId: input.userId,
+        googleEmail: input.googleEmail,
+        refreshTokenEncrypted: input.refreshTokenEncrypted,
+        accessTokenEncrypted: input.accessTokenEncrypted,
+        tokenExpiry: date(input.tokenExpiry),
+        historyId: input.historyId,
+        watchExpiration: date(input.watchExpiration),
+        lastSyncAt: date(input.lastSyncAt),
+        disconnectedAt: null,
+      })
+      .onConflictDoUpdate({
+        target: gmailConnections.userId,
+        set: {
+          googleEmail: input.googleEmail,
+          refreshTokenEncrypted: sql`CASE WHEN excluded.refresh_token_encrypted <> '' THEN excluded.refresh_token_encrypted ELSE ${gmailConnections.refreshTokenEncrypted} END`,
+          accessTokenEncrypted: sql`COALESCE(excluded.access_token_encrypted, ${gmailConnections.accessTokenEncrypted})`,
+          tokenExpiry: date(input.tokenExpiry),
+          historyId: sql`COALESCE(excluded.history_id, ${gmailConnections.historyId})`,
+          watchExpiration: sql`COALESCE(excluded.watch_expiration, ${gmailConnections.watchExpiration})`,
+          lastSyncAt: sql`COALESCE(excluded.last_sync_at, ${gmailConnections.lastSyncAt})`,
+          disconnectedAt: null,
+        },
+      })
+      .returning();
+    return mapGmailConnection(row);
   }
-
   async getGmailConnection(userId: string): Promise<GmailConnectionRow | null> {
-    const result = await this.db.query(
-      `SELECT * FROM gmail_connections
-       WHERE user_id = $1 AND disconnected_at IS NULL`,
-      [userId],
-    );
-    return result.rows[0] ? mapGmailConnection(result.rows[0]) : null;
+    const [row] = await this.db
+      .select()
+      .from(gmailConnections)
+      .where(
+        and(
+          eq(gmailConnections.userId, userId),
+          isNull(gmailConnections.disconnectedAt),
+        ),
+      )
+      .limit(1);
+    return row ? mapGmailConnection(row) : null;
   }
-
   async disconnectGmail(userId: string): Promise<void> {
-    await this.db.query(
-      `UPDATE gmail_connections SET
-         disconnected_at = NOW(),
-         refresh_token_encrypted = '',
-         access_token_encrypted = NULL
-       WHERE user_id = $1`,
-      [userId],
-    );
+    await this.db
+      .update(gmailConnections)
+      .set({
+        disconnectedAt: new Date(),
+        refreshTokenEncrypted: "",
+        accessTokenEncrypted: null,
+      })
+      .where(eq(gmailConnections.userId, userId));
   }
-
   async listActiveGmailConnections(): Promise<GmailConnectionRow[]> {
-    const result = await this.db.query(
-      `SELECT * FROM gmail_connections WHERE disconnected_at IS NULL`,
-    );
-    return result.rows.map(mapGmailConnection);
+    return (
+      await this.db
+        .select()
+        .from(gmailConnections)
+        .where(isNull(gmailConnections.disconnectedAt))
+    ).map(mapGmailConnection);
   }
-
   async listPoolingAccounts(): Promise<AccountRow[]> {
-    const result = await this.db.query(
-      `SELECT * FROM accounts WHERE pooling_enabled = TRUE`,
-    );
-    return result.rows.map(mapAccount);
+    return (
+      await this.db
+        .select()
+        .from(accounts)
+        .where(eq(accounts.poolingEnabled, true))
+    ).map(mapAccount);
   }
-
   async upsertMailMessage(
     input: Omit<MailMessageRow, "id" | "createdAt"> & { id?: string },
   ): Promise<MailMessageRow> {
-    const result = await this.db.query(
-      `INSERT INTO mail_messages (
-         id, user_id, account_id, gmail_message_id, from_address, subject,
-         received_at, amount, tx_type, currency, fingerprint
-       ) VALUES (
-         COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-       )
-       ON CONFLICT (user_id, gmail_message_id) DO UPDATE SET
-         from_address = EXCLUDED.from_address,
-         subject = EXCLUDED.subject,
-         received_at = COALESCE(EXCLUDED.received_at, mail_messages.received_at),
-         amount = COALESCE(EXCLUDED.amount, mail_messages.amount),
-         tx_type = COALESCE(EXCLUDED.tx_type, mail_messages.tx_type),
-         currency = EXCLUDED.currency,
-         fingerprint = EXCLUDED.fingerprint
-       RETURNING *`,
-      [
-        input.id ?? null,
-        input.userId,
-        input.accountId,
-        input.gmailMessageId,
-        input.fromAddress,
-        input.subject,
-        input.receivedAt,
-        input.amount,
-        input.txType,
-        input.currency,
-        input.fingerprint,
-      ],
-    );
-    return mapMailMessage(result.rows[0]);
+    const [row] = await this.db
+      .insert(mailMessages)
+      .values({
+        ...(input.id ? { id: input.id } : {}),
+        userId: input.userId,
+        accountId: input.accountId,
+        gmailMessageId: input.gmailMessageId,
+        fromAddress: input.fromAddress,
+        subject: input.subject,
+        receivedAt: date(input.receivedAt),
+        amount: input.amount == null ? null : String(input.amount),
+        txType: input.txType,
+        currency: input.currency,
+        fingerprint: input.fingerprint,
+      })
+      .onConflictDoUpdate({
+        target: [mailMessages.userId, mailMessages.gmailMessageId],
+        set: {
+          fromAddress: input.fromAddress,
+          subject: input.subject,
+          receivedAt: sql`COALESCE(excluded.received_at, ${mailMessages.receivedAt})`,
+          amount: sql`COALESCE(excluded.amount, ${mailMessages.amount})`,
+          txType: sql`COALESCE(excluded.tx_type, ${mailMessages.txType})`,
+          currency: input.currency,
+          fingerprint: input.fingerprint,
+        },
+      })
+      .returning();
+    return mapMailMessage(row);
   }
-
   async findMailMessageByGmailId(
     userId: string,
     gmailMessageId: string,
   ): Promise<MailMessageRow | null> {
-    const result = await this.db.query(
-      `SELECT * FROM mail_messages WHERE user_id = $1 AND gmail_message_id = $2`,
-      [userId, gmailMessageId],
-    );
-    return result.rows[0] ? mapMailMessage(result.rows[0]) : null;
+    const [row] = await this.db
+      .select()
+      .from(mailMessages)
+      .where(
+        and(
+          eq(mailMessages.userId, userId),
+          eq(mailMessages.gmailMessageId, gmailMessageId),
+        ),
+      )
+      .limit(1);
+    return row ? mapMailMessage(row) : null;
   }
-
   async createPoolingRun(
     input: Omit<PoolingRunRow, "id" | "startedAt" | "finishedAt" | "status"> & {
       id?: string;
       status?: PoolingRunStatus;
     },
   ): Promise<PoolingRunRow> {
-    const result = await this.db.query(
-      `INSERT INTO pooling_runs (
-         id, user_id, account_id, trigger, status, mode, month,
-         scanned, imported, skipped, error_message, meta
-       ) VALUES (
-         COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7,
-         $8, $9, $10, $11, $12::jsonb
-       )
-       RETURNING *`,
-      [
-        input.id ?? null,
-        input.userId,
-        input.accountId,
-        input.trigger,
-        input.status ?? "running",
-        input.mode,
-        input.month,
-        input.scanned,
-        input.imported,
-        input.skipped,
-        input.errorMessage,
-        JSON.stringify(input.meta ?? {}),
-      ],
-    );
-    return mapPoolingRun(result.rows[0]);
+    const [row] = await this.db
+      .insert(poolingRuns)
+      .values({
+        ...(input.id ? { id: input.id } : {}),
+        userId: input.userId,
+        accountId: input.accountId,
+        trigger: input.trigger,
+        status: input.status ?? "running",
+        mode: input.mode,
+        month: input.month,
+        scanned: input.scanned,
+        imported: input.imported,
+        skipped: input.skipped,
+        errorMessage: input.errorMessage,
+        meta: input.meta ?? {},
+      })
+      .returning();
+    return mapPoolingRun(row);
   }
-
   async updatePoolingRun(
     id: string,
     patch: Partial<
@@ -183,60 +186,60 @@ export class PostgresGmailRepository {
       >
     >,
   ): Promise<PoolingRunRow | null> {
-    const result = await this.db.query(
-      `UPDATE pooling_runs SET
-         status = COALESCE($2, status),
-         scanned = COALESCE($3, scanned),
-         imported = COALESCE($4, imported),
-         skipped = COALESCE($5, skipped),
-         error_message = COALESCE($6, error_message),
-         finished_at = COALESCE($7::timestamptz, finished_at),
-         meta = CASE WHEN $8::jsonb IS NULL THEN meta ELSE $8::jsonb END
-       WHERE id = $1
-       RETURNING *`,
-      [
-        id,
-        patch.status ?? null,
-        patch.scanned ?? null,
-        patch.imported ?? null,
-        patch.skipped ?? null,
-        patch.errorMessage ?? null,
-        patch.finishedAt ?? null,
-        patch.meta == null ? null : JSON.stringify(patch.meta),
-      ],
-    );
-    return result.rows[0] ? mapPoolingRun(result.rows[0]) : null;
+    const set: Partial<typeof poolingRuns.$inferInsert> = {};
+    for (const key of [
+      "status",
+      "scanned",
+      "imported",
+      "skipped",
+      "errorMessage",
+      "meta",
+    ] as const)
+      if (patch[key] != null)
+        (set as Record<string, unknown>)[key] = patch[key];
+    if (patch.finishedAt != null) set.finishedAt = new Date(patch.finishedAt);
+    if (!Object.keys(set).length) {
+      const [current] = await this.db
+        .select()
+        .from(poolingRuns)
+        .where(eq(poolingRuns.id, id))
+        .limit(1);
+      return current ? mapPoolingRun(current) : null;
+    }
+    const [row] = await this.db
+      .update(poolingRuns)
+      .set(set)
+      .where(eq(poolingRuns.id, id))
+      .returning();
+    return row ? mapPoolingRun(row) : null;
   }
-
   async getLatestPoolingRun(userId: string): Promise<PoolingRunRow | null> {
-    const result = await this.db.query(
-      `SELECT * FROM pooling_runs
-       WHERE user_id = $1
-       ORDER BY started_at DESC
-       LIMIT 1`,
-      [userId],
-    );
-    return result.rows[0] ? mapPoolingRun(result.rows[0]) : null;
+    const [row] = await this.db
+      .select()
+      .from(poolingRuns)
+      .where(eq(poolingRuns.userId, userId))
+      .orderBy(desc(poolingRuns.startedAt))
+      .limit(1);
+    return row ? mapPoolingRun(row) : null;
   }
-
   async listPoolingRuns(userId: string, limit = 10): Promise<PoolingRunRow[]> {
-    const result = await this.db.query(
-      `SELECT * FROM pooling_runs
-       WHERE user_id = $1
-       ORDER BY started_at DESC
-       LIMIT $2`,
-      [userId, limit],
-    );
-    return result.rows.map(mapPoolingRun);
+    return (
+      await this.db
+        .select()
+        .from(poolingRuns)
+        .where(eq(poolingRuns.userId, userId))
+        .orderBy(desc(poolingRuns.startedAt))
+        .limit(limit)
+    ).map(mapPoolingRun);
   }
-
   async hasRunningPoolingRun(userId: string): Promise<boolean> {
-    const result = await this.db.query(
-      `SELECT 1 FROM pooling_runs
-       WHERE user_id = $1 AND status = 'running'
-       LIMIT 1`,
-      [userId],
-    );
-    return result.rows.length > 0;
+    const rows = await this.db
+      .select({ id: poolingRuns.id })
+      .from(poolingRuns)
+      .where(
+        and(eq(poolingRuns.userId, userId), eq(poolingRuns.status, "running")),
+      )
+      .limit(1);
+    return rows.length > 0;
   }
 }

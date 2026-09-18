@@ -1,7 +1,9 @@
+import { DEFAULT_CURRENCY, TxType } from "../lib/index.js";
+
 export type AlertParseResult = {
   amount: number | null;
-  type: "debit" | "credit" | null;
-  currency: "INR";
+  type: TxType | null;
+  currency: typeof DEFAULT_CURRENCY;
   description: string;
   /** YYYY-MM-DD when parsed from the alert body; null if not found. */
   date: string | null;
@@ -125,7 +127,7 @@ export function parseBankAlertEmail(
     if (match?.[1]) {
       const amount = parseInrAmount(match[1]);
       if (amount != null) {
-        return { amount, type: "debit", currency: "INR", description, date };
+        return { amount, type: TxType.Debit, currency: DEFAULT_CURRENCY, description, date };
       }
     }
   }
@@ -135,10 +137,10 @@ export function parseBankAlertEmail(
     if (match?.[1]) {
       const amount = parseInrAmount(match[1]);
       if (amount != null) {
-        return { amount, type: "credit", currency: "INR", description, date };
+        return { amount, type: TxType.Credit, currency: DEFAULT_CURRENCY, description, date };
       }
     }
   }
 
-  return { amount: null, type: null, currency: "INR", description, date };
+  return { amount: null, type: null, currency: DEFAULT_CURRENCY, description, date };
 }

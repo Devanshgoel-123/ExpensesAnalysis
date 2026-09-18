@@ -3,16 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
-import {
-  createRule,
-  deleteRule,
-  fetchPreferences,
-  fetchSuggestions,
-  gmailStatus,
-  listRules,
-  updatePreferences,
-  type GmailStatus,
-} from "@/lib/api";
+import { useApi } from "@/lib/useApi";
+import type { GmailStatus } from "@/lib/api/types";
 import { pathForView } from "@/lib/dashboardViews";
 import { formatTimestamp } from "@/lib/month";
 
@@ -38,7 +30,8 @@ function ruleMatchLabel(rule: Record<string, unknown>): string {
 }
 
 export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
-  const { token, logout, destroyAccount, user } = useAuth();
+  const api = useApi();
+  const { logout, destroyAccount, user } = useAuth();
   const [rules, setRules] = useState<Array<Record<string, unknown>>>([]);
   const [suggestions, setSuggestions] = useState<
     Array<{ label: string; count: number; sample: string }>
@@ -52,13 +45,13 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
   const [showDanger, setShowDanger] = useState(false);
 
   const refresh = useCallback(async () => {
-    if (!token) return;
+    if (!api) return;
     try {
       const [rulesRes, suggestionsRes, gmailRes, prefsRes] = await Promise.all([
-        listRules(token),
-        fetchSuggestions(token).catch(() => ({ suggestions: [] })),
-        gmailStatus(token).catch(() => null),
-        fetchPreferences(token),
+        api.listRules(),
+        api.fetchSuggestions().catch(() => ({ suggestions: [] })),
+        api.gmailStatus().catch(() => null),
+        api.fetchPreferences(),
       ]);
       setRules(rulesRes.rules);
       setSuggestions(suggestionsRes.suggestions);
@@ -69,20 +62,20 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load settings");
     }
-  }, [token]);
+  }, [api]);
 
   useEffect(() => {
     let cancelled = false;
     void Promise.resolve().then(async () => {
-      if (!token || cancelled) return;
+      if (!api || cancelled) return;
       await refresh();
     });
     return () => {
       cancelled = true;
     };
-  }, [token, refresh]);
+  }, [api, refresh]);
 
-  if (!token) return null;
+  if (!api) return null;
 
   return (
     <div className="settings-sections">
@@ -133,7 +126,7 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
                     setError("Enter a positive amount or clear the field");
                     return;
                   }
-                  await updatePreferences(token, { dailySpendLimit: parsed });
+                  await api.updatePreferences({ dailySpendLimit: parsed });
                   setMessage(
                     parsed ? `Daily limit set to ₹${parsed}` : "Daily limit cleared",
                   );
@@ -153,7 +146,7 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
                 className="ghost"
                 onClick={async () => {
                   setDailyLimit("");
-                  await updatePreferences(token, { dailySpendLimit: null });
+                  await api.updatePreferences({ dailySpendLimit: null });
                   setMessage("Daily limit cleared");
                   onChanged?.();
                 }}
@@ -240,7 +233,7 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
                   setError("Enter narration or UPI text to match");
                   return;
                 }
-                const result = await createRule(token, {
+                const result = await api.createRule({
                   name: `Track ${name}`,
                   priority: 20,
                   ...buildRuleMatchFields(match),
@@ -304,7 +297,7 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
                 type="button"
                 className="ghost"
                 onClick={async () => {
-                  await deleteRule(token, String(rule.id));
+                  await api.deleteRule(String(rule.id));
                   await refresh();
                 }}
               >

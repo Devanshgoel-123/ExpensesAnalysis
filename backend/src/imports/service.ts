@@ -9,6 +9,7 @@ import type {
   TransactionRow,
   UserRuleRow,
 } from "../db/types.js";
+import { ClassificationSource, ImportSource, ImportStatus, ruleClassificationSource } from "../enums/index.js";
 import { AppError } from "../errors/AppError.js";
 import { extractTextFromPdf } from "../parser.js";
 import { buildMatchFieldsFromText, matchRule } from "../rules/engine.js";
@@ -57,7 +58,7 @@ export async function processPdfImport(input: {
   buffer: Buffer;
   filename: string;
   password?: string;
-  source?: "upload" | "gmail";
+  source?: ImportSource;
   gmailMessageId?: string | null;
   /** When set, drop parsed rows with date strictly before this YYYY-MM-DD. */
   earliestDate?: string;
@@ -120,8 +121,8 @@ export async function processPdfImport(input: {
   const importRow = await store.createImport({
     userId: input.userId,
     accountId: account.id,
-    source: input.source ?? "upload",
-    status: "processing",
+    source: input.source ?? ImportSource.Upload,
+    status: ImportStatus.Processing,
     filename: input.filename,
     gmailMessageId: input.gmailMessageId ?? null,
     attachmentHash,
@@ -189,7 +190,7 @@ export async function processPdfImport(input: {
     );
 
     await store.updateImport(importRow.id, input.userId, {
-      status: "completed",
+      status: ImportStatus.Completed,
       bankAdapter: adapter.id,
       errorMessage: null,
     });
@@ -216,7 +217,7 @@ export async function processPdfImport(input: {
     const message = error instanceof Error ? error.message : "Import failed";
     const needsPassword = /password/i.test(message);
     await store.updateImport(importRow.id, input.userId, {
-      status: needsPassword ? "needs_password" : "failed",
+      status: needsPassword ? ImportStatus.NeedsPassword : ImportStatus.Failed,
       errorMessage: message,
     });
     await store.audit(input.userId, "import.failed", {
@@ -268,7 +269,7 @@ export async function correctTransactionForUser(input: {
     merchant: input.merchant,
     categorySlug: input.categorySlug,
     providerId: input.providerId ?? undefined,
-    classificationSource: "user_override",
+    classificationSource: ClassificationSource.UserOverride,
     confidence: 1,
   });
 
@@ -312,7 +313,7 @@ export async function correctTransactionForUser(input: {
         merchant: input.merchant,
         categorySlug: input.categorySlug,
         providerId: input.providerId ?? undefined,
-        classificationSource: `rule:${rule.id}`,
+        classificationSource: ruleClassificationSource(rule.id),
       },
     );
   }

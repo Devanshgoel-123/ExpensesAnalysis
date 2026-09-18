@@ -61,8 +61,8 @@ export function SpendingTrendChart({
                   transition={{ delay: index * 0.06, duration: 0.45 }}
                   title={`${row.label}: ${formatInr(row.total)}`}
                 />
-                <span className="bar-label mt-1 truncate w-full text-center">
-                  {row.label.split(" ")[0]}
+                <span className="bar-label mt-1 truncate w-full text-center text-[10px]">
+                  {row.month.slice(5)}/{row.month.slice(2, 4)}
                 </span>
               </div>
             );

@@ -3,7 +3,9 @@
 import { useMemo, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import type { DailyInsights, DailySpend } from "@/lib/types";
-import { formatInr, formatShortDate } from "@/lib/api";
+import { formatInr } from "@/lib/api";
+import { formatChartDay, formatShortDate } from "@/lib/dates";
+import { normalizeDailySpend } from "@/lib/finance";
 import { LedgerlineCountUp } from "@/components/animations/LedgerlineCountUp";
 import { Panel, PanelHead } from "@/components/ui/Panel";
 
@@ -23,9 +25,10 @@ export function DailySpendChart({
   dailyLimit,
   insights,
 }: DailySpendChartProps) {
+  const rows = useMemo(() => normalizeDailySpend(data), [data]);
   const limit =
     dailyLimit ?? (insights?.enabled ? insights.limit : null);
-  const max = Math.max(...data.map((d) => d.amount), limit ?? 1, 1);
+  const max = Math.max(...rows.map((d) => d.amount), limit ?? 1, 1);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [hover, setHover] = useState<{ index: number; x: number; y: number } | null>(
     null,
@@ -38,21 +41,22 @@ export function DailySpendChart({
 
   const ticks = useMemo(
     () =>
-      data.map((d, i) => ({
+      rows.map((d, i) => ({
         ...d,
-        showLabel: i % 3 === 0 || i === data.length - 1,
+        showLabel:
+          rows.length <= 12 || i % Math.ceil(rows.length / 8) === 0 || i === rows.length - 1,
       })),
-    [data],
+    [rows],
   );
 
   const today = todayIso();
   const focusIndex = hover?.index ?? activeIndex;
-  const focused = focusIndex != null ? data[focusIndex] : null;
+  const focused = focusIndex != null ? rows[focusIndex] : null;
   const overCount = insights?.daysOverLimit.length ?? 0;
   const worst = insights?.worstDay ?? null;
   const avg =
-    data.length > 0
-      ? data.reduce((sum, d) => sum + d.amount, 0) / data.length
+    rows.length > 0
+      ? rows.reduce((sum, d) => sum + d.amount, 0) / rows.length
       : 0;
 
   const showTooltip = useCallback(
@@ -147,7 +151,7 @@ export function DailySpendChart({
                 />
                 {d.showLabel ? (
                   <span className={`bar-label${overLimit ? " over-limit" : ""}`}>
-                    {formatShortDate(d.date)}
+                    {formatChartDay(d.date)}
                   </span>
                 ) : (
                   <span className="bar-label ghost" />

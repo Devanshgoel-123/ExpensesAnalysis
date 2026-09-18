@@ -115,6 +115,8 @@ Pooling modes:
 - `poll`: incremental Gmail history sync
 - `push`: optional Pub/Sub-triggered poll path
 
+Step-by-step flows and examples: [POOLING.md](./POOLING.md).
+
 Important constraints:
 - Only configured bank sender domains or emails are searched.
 - OAuth scope is `gmail.readonly`.

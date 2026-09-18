@@ -4,11 +4,37 @@ import type {
   AccountRow,
   GmailConnectionRow,
   PoolingRunRow,
-  PoolingRunTrigger,
 } from "../db/types.js";
 import { classifyTransaction } from "../imports/classification.js";
 import { loadClassificationContext } from "../imports/context.js";
 import { processPdfImport } from "../imports/service.js";
+import {
+  ClassificationSource,
+  ImportSource,
+  ImportStatus,
+  MailProcessResult,
+  PoolingRunMode,
+  PoolingRunStatus,
+  PoolingRunTrigger,
+  PoolingScanMode,
+} from "../enums/index.js";
+import {
+  BACKFILL_DEFAULT_MAX_MESSAGES,
+  POOLING_DISPATCHER_CONCURRENCY,
+  POOLING_EARLIEST_DATE,
+  POOLING_EARLIEST_MONTH,
+  POOLING_PROGRESS_EVERY,
+} from "../constants/index.js";
+import {
+  currentMonth,
+  gmailFromClause,
+  isOnOrAfterPoolingCutoff,
+  monthBounds,
+  poolingDateWindow,
+  statementScanBudget,
+  toGmailQueryAfter,
+  toIstCalendarDate,
+} from "../helpers/index.js";
 import { gmailLog } from "../logger/gmail.js";
 import { parseBankAlertEmail } from "./alertParser.js";
 import {
@@ -21,53 +47,14 @@ import {
   syncHistory,
 } from "./client.js";
 
-const PROGRESS_EVERY = 50;
-const DISPATCHER_CONCURRENCY = 3;
-
-/** Hard floor — never poll or store mail/transactions before this date. */
-export const POOLING_EARLIEST_DATE = "2025-08-01";
-
-export type PoolingBounds = {
-  from: string;
-  to: string;
-  after: string;
-  before: string;
+export {
+  POOLING_EARLIEST_DATE,
+  currentMonth,
+  monthBounds,
+  poolingDateWindow,
+  statementScanBudget,
 };
-
-export function monthBounds(month: string): PoolingBounds {
-  const [y, m] = month.split("-").map(Number);
-  const from = `${month}-01`;
-  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
-  const to = `${month}-${String(lastDay).padStart(2, "0")}`;
-  const nextMonth = m === 12 ? 1 : m + 1;
-  const nextYear = m === 12 ? y + 1 : y;
-  const before = `${nextYear}-${String(nextMonth).padStart(2, "0")}-01`;
-  return { from, to, after: from, before };
-}
-
-export function currentMonth(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
-
-/** Gmail after/before window, always clamped to POOLING_EARLIEST_DATE. */
-export function poolingDateWindow(month?: string | null): {
-  after: string;
-  before?: string;
-} {
-  if (!month || month < "2025-08") {
-    return { after: POOLING_EARLIEST_DATE };
-  }
-  const bounds = monthBounds(month);
-  const after =
-    bounds.after < POOLING_EARLIEST_DATE ? POOLING_EARLIEST_DATE : bounds.after;
-  return { after, before: bounds.before };
-}
-
-function isOnOrAfterCutoff(isoDate: string | null | undefined): boolean {
-  if (!isoDate) return false;
-  return isoDate.slice(0, 10) >= POOLING_EARLIEST_DATE;
-}
+export type { PoolingBounds } from "../types/index.js";
 
 /** Statement PDF mail — handled by the secondary statement path, not alert storage. */
 function isStatementLikeEmail(subject: string, snippet: string): boolean {
@@ -75,20 +62,15 @@ function isStatementLikeEmail(subject: string, snippet: string): boolean {
   return /e-?statement|account statement|\bstatement\b/.test(text);
 }
 
-/** Alert emails get the full scan budget; PDF statements use a smaller secondary cap. */
-export function statementScanBudget(maxMessages: number): number {
-  return Math.min(10, Math.max(3, Math.floor(maxMessages / 3)));
-}
-
 function maybeLogProgress(input: {
   userId: string;
-  mode: "statement" | "alert" | "poll";
+  mode: PoolingScanMode;
   scanned: number;
   imported: number;
   skipped: number;
   runId?: string;
 }): void {
-  if (input.scanned > 0 && input.scanned % PROGRESS_EVERY === 0) {
+  if (input.scanned > 0 && input.scanned % POOLING_PROGRESS_EVERY === 0) {
     gmailLog.mailsProcessed(input);
   }
 }
@@ -98,7 +80,7 @@ async function processAlertMessage(input: {
   accountId: string;
   connection: GmailConnectionRow;
   messageId: string;
-}): Promise<"imported" | "skipped" | "stored" | "not_alert"> {
+}): Promise<MailProcessResult> {
   const store = await getStore();
   const existingMail = await store.findMailMessageByGmailId(
     input.userId,
@@ -109,7 +91,7 @@ async function processAlertMessage(input: {
   }
 
   const details = await fetchMessageDetails(input.connection, input.messageId);
-  if (!isOnOrAfterCutoff(details.receivedAt)) {
+  if (!isOnOrAfterPoolingCutoff(details.receivedAt)) {
     return "skipped";
   }
   if (isStatementLikeEmail(details.subject, details.snippet)) {
@@ -120,10 +102,10 @@ async function processAlertMessage(input: {
   const parsed = parseBankAlertEmail(details.subject, details.bodyText);
   const fingerprint = sha256Hex(`mail:${input.messageId}`);
   const txDate =
-    (parsed.date && isOnOrAfterCutoff(parsed.date) ? parsed.date : null) ??
-    details.receivedAt!.slice(0, 10);
+    (parsed.date && isOnOrAfterPoolingCutoff(parsed.date) ? parsed.date : null) ??
+    toIstCalendarDate(details.receivedAt);
 
-  if (!isOnOrAfterCutoff(txDate)) {
+  if (!txDate || !isOnOrAfterPoolingCutoff(txDate)) {
     return "skipped";
   }
 
@@ -158,7 +140,7 @@ async function processAlertMessage(input: {
     await loadClassificationContext(input.userId),
     {
       confidence: 0.85,
-      classificationSource: "email_alert",
+      classificationSource: ClassificationSource.EmailAlert,
     },
   );
   const txFingerprint = transactionFingerprint({
@@ -172,8 +154,8 @@ async function processAlertMessage(input: {
   const imp = await store.createImport({
     userId: input.userId,
     accountId: account.id,
-    source: "gmail",
-    status: "completed",
+    source: ImportSource.Gmail,
+    status: ImportStatus.Completed,
     filename: null,
     gmailMessageId: input.messageId,
     attachmentHash: fingerprint,
@@ -212,16 +194,16 @@ async function processStatementMessage(input: {
   connection: GmailConnectionRow;
   messageId: string;
   password: string;
-}): Promise<"imported" | "skipped"> {
+}): Promise<MailProcessResult> {
   const store = await getStore();
   const existing = await store.findImportByGmailMessage(
     input.userId,
     input.messageId,
   );
-  if (existing?.status === "completed") return "skipped";
+  if (existing?.status === ImportStatus.Completed) return MailProcessResult.Skipped;
 
   const details = await fetchMessageDetails(input.connection, input.messageId);
-  if (!isOnOrAfterCutoff(details.receivedAt)) {
+  if (!isOnOrAfterPoolingCutoff(details.receivedAt)) {
     return "skipped";
   }
 
@@ -235,7 +217,7 @@ async function processStatementMessage(input: {
       buffer: pdf.buffer,
       filename: pdf.filename,
       password: input.password,
-      source: "gmail",
+      source: ImportSource.Gmail,
       gmailMessageId: input.messageId,
       earliestDate: POOLING_EARLIEST_DATE,
     });
@@ -252,7 +234,7 @@ async function scanQuery(input: {
   query: string;
   password: string;
   maxMessages: number;
-  mode: "statement" | "alert";
+  mode: Exclude<PoolingScanMode, "poll">;
   runId?: string;
 }): Promise<{ scanned: number; imported: number; skipped: number }> {
   let pageToken: string | undefined;
@@ -278,7 +260,7 @@ async function scanQuery(input: {
       if (scanned >= input.maxMessages) break;
       scanned += 1;
       try {
-        if (input.mode === "statement") {
+        if (input.mode === PoolingScanMode.Statement) {
           const result = await processStatementMessage({
             userId: input.userId,
             connection: input.connection,
@@ -321,7 +303,7 @@ async function startRun(input: {
   userId: string;
   accountId: string | null;
   trigger: PoolingRunTrigger;
-  mode: "poll" | "backfill";
+  mode: PoolingRunMode;
   month?: string | null;
 }): Promise<PoolingRunRow> {
   const store = await getStore();
@@ -339,10 +321,34 @@ async function startRun(input: {
   });
 }
 
+const STALE_RUN_MS = 10 * 60 * 1000;
+
+async function failStaleRunningRuns(
+  userId: string,
+  maxAgeMs = STALE_RUN_MS,
+): Promise<void> {
+  const store = await getStore();
+  const recent = await store.listPoolingRuns(userId, 20);
+  const cutoff = Date.now() - maxAgeMs;
+  for (const run of recent) {
+    if (run.status !== PoolingRunStatus.Running) continue;
+    const started = Date.parse(run.startedAt);
+    if (!Number.isFinite(started) || started > cutoff) continue;
+    await store.updatePoolingRun(run.id, {
+      status: PoolingRunStatus.Failed,
+      errorMessage:
+        maxAgeMs === 0
+          ? "Replaced by a new scan"
+          : "Run timed out after 10 minutes",
+      finishedAt: new Date().toISOString(),
+    });
+  }
+}
+
 async function finishRun(
   run: PoolingRunRow,
   patch: {
-    status: "completed" | "failed";
+    status: typeof PoolingRunStatus.Completed | typeof PoolingRunStatus.Failed;
     scanned: number;
     imported: number;
     skipped: number;
@@ -362,6 +368,7 @@ async function finishRun(
   });
 }
 
+/** Full query-based sync: alert mail first, then statement PDFs. */
 export async function runPoolingSync(input: {
   userId: string;
   connection: GmailConnectionRow;
@@ -385,20 +392,22 @@ export async function runPoolingSync(input: {
   // Always clamp to POOLING_EARLIEST_DATE; never scan earlier mail.
   const month = input.month ?? null;
   const dateWindow = poolingDateWindow(month);
-  const maxMessages = input.maxMessages ?? 25;
+  const maxMessages = input.maxMessages ?? BACKFILL_DEFAULT_MAX_MESSAGES;
   const password = input.password ?? "";
-  const trigger = input.trigger ?? "backfill";
+  const trigger = input.trigger ?? PoolingRunTrigger.Backfill;
   const monthLabel = month ?? `from-${POOLING_EARLIEST_DATE}`;
+
+  await failStaleRunningRuns(input.userId, 0);
 
   const run = await startRun({
     userId: input.userId,
     accountId: input.account.id,
     trigger,
-    mode: "backfill",
+    mode: PoolingRunMode.Backfill,
     month:
-      month && month >= POOLING_EARLIEST_DATE.slice(0, 7)
+      month && month >= POOLING_EARLIEST_MONTH
         ? month
-        : POOLING_EARLIEST_DATE.slice(0, 7),
+        : POOLING_EARLIEST_MONTH,
   });
 
   try {
@@ -420,7 +429,7 @@ export async function runPoolingSync(input: {
       query: alertQuery,
       password,
       maxMessages,
-      mode: "alert",
+      mode: PoolingScanMode.Alert,
       runId: run.id,
     });
 
@@ -432,7 +441,7 @@ export async function runPoolingSync(input: {
       query: statementQuery,
       password,
       maxMessages: statementScanBudget(maxMessages),
-      mode: "statement",
+      mode: PoolingScanMode.Statement,
       runId: run.id,
     });
 
@@ -447,7 +456,7 @@ export async function runPoolingSync(input: {
     const skipped = statements.skipped + alerts.skipped;
 
     await finishRun(run, {
-      status: "completed",
+      status: PoolingRunStatus.Completed,
       scanned,
       imported,
       skipped,
@@ -464,7 +473,7 @@ export async function runPoolingSync(input: {
     return { statements, alerts, runId: run.id };
   } catch (error) {
     await finishRun(run, {
-      status: "failed",
+      status: PoolingRunStatus.Failed,
       scanned: 0,
       imported: 0,
       skipped: 0,
@@ -474,10 +483,11 @@ export async function runPoolingSync(input: {
   }
 }
 
+/** Incremental history poll for one pooling-enabled account. */
 export async function runPoolingPoll(
   account: AccountRow,
   connection: GmailConnectionRow,
-  trigger: PoolingRunTrigger = "dispatcher",
+  trigger: PoolingRunTrigger = PoolingRunTrigger.Dispatcher,
 ): Promise<{
   scanned: number;
   imported: number;
@@ -486,6 +496,7 @@ export async function runPoolingPoll(
   busy: boolean;
 }> {
   const store = await getStore();
+  await failStaleRunningRuns(account.userId);
   if (await store.hasRunningPoolingRun(account.userId)) {
     gmailLog.dispatcherSkipped({
       userId: account.userId,
@@ -504,7 +515,7 @@ export async function runPoolingPoll(
     userId: account.userId,
     accountId: account.id,
     trigger,
-    mode: "poll",
+    mode: PoolingRunMode.Poll,
     month: currentMonth(),
   });
 
@@ -532,7 +543,7 @@ export async function runPoolingPoll(
         else skipped += 1;
         maybeLogProgress({
           userId: account.userId,
-          mode: "poll",
+          mode: PoolingScanMode.Poll,
           scanned,
           imported,
           skipped,
@@ -553,7 +564,7 @@ export async function runPoolingPoll(
 
       maybeLogProgress({
         userId: account.userId,
-        mode: "poll",
+        mode: PoolingScanMode.Poll,
         scanned,
         imported,
         skipped,
@@ -573,7 +584,7 @@ export async function runPoolingPoll(
     });
 
     await finishRun(run, {
-      status: "completed",
+      status: PoolingRunStatus.Completed,
       scanned,
       imported,
       skipped,
@@ -590,7 +601,7 @@ export async function runPoolingPoll(
     return { scanned, imported, skipped, runId: run.id, busy: false };
   } catch (error) {
     await finishRun(run, {
-      status: "failed",
+      status: PoolingRunStatus.Failed,
       scanned,
       imported,
       skipped,
@@ -618,12 +629,8 @@ export async function probeGmailQueries(input: {
   const alertQuery = buildAlertQuery(input.senders, dateWindow);
   const statementQuery = buildStatementQuery(input.senders, dateWindow);
   // Broader probe: any mail from configured senders on/after the cutoff.
-  const cleaned = input.senders.map((s) => s.trim()).filter(Boolean);
-  const fromClause =
-    cleaned.length === 1
-      ? `from:${cleaned[0]}`
-      : `from:(${cleaned.join(" OR ")})`;
-  const broadQuery = `${fromClause} after:${POOLING_EARLIEST_DATE.replace(/-/g, "/")}`;
+  const fromClause = gmailFromClause(input.senders);
+  const broadQuery = `${fromClause} after:${toGmailQueryAfter(POOLING_EARLIEST_DATE)}`;
 
   const [alertPage, statementPage, broadPage] = await Promise.all([
     listStatementMessageIds(input.connection, undefined, alertQuery),
@@ -781,6 +788,7 @@ async function mapPool<T, R>(
 }
 
 /** Dispatcher: poll all pooling-enabled accounts with concurrency + run records. */
+/** Hourly dispatcher entry — polls every pooling-enabled account. */
 export async function runAllPoolingPolls(): Promise<{
   accountCount: number;
   succeeded: number;
@@ -796,7 +804,7 @@ export async function runAllPoolingPolls(): Promise<{
   let failed = 0;
   let skipped = 0;
 
-  await mapPool(accounts, DISPATCHER_CONCURRENCY, async (account) => {
+  await mapPool(accounts, POOLING_DISPATCHER_CONCURRENCY, async (account) => {
     const connection = await store.getGmailConnection(account.userId);
     if (!connection?.refreshTokenEncrypted) {
       skipped += 1;
@@ -807,6 +815,7 @@ export async function runAllPoolingPolls(): Promise<{
       return;
     }
 
+    await failStaleRunningRuns(account.userId);
     if (await store.hasRunningPoolingRun(account.userId)) {
       skipped += 1;
       gmailLog.dispatcherSkipped({
@@ -817,7 +826,11 @@ export async function runAllPoolingPolls(): Promise<{
     }
 
     try {
-      const result = await runPoolingPoll(account, connection, "dispatcher");
+      const result = await runPoolingPoll(
+        account,
+        connection,
+        PoolingRunTrigger.Dispatcher,
+      );
       if (result.busy) {
         skipped += 1;
         return;

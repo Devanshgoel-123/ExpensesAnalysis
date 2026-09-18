@@ -1,0 +1,7 @@
+/** YYYY-MM-DD */
+export const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** YYYY-MM */
+export const ISO_MONTH_RE = /^\d{4}-\d{2}$/;
+
+export const DDMMYY_RE = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/;

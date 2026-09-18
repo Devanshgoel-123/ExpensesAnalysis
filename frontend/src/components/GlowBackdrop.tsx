@@ -1,14 +1,6 @@
 "use client";
 
 /**
- * Calm, theme-aware backdrop — no WebGL on data-heavy screens.
+ * @deprecated Prefer AppSurfaceBackdrop — kept as a thin alias for old imports.
  */
-export function GlowBackdrop() {
-  return (
-    <div className="glow-backdrop glow-backdrop--calm" aria-hidden>
-      <div className="glow-backdrop__wash" />
-      <div className="glow-backdrop__grid" />
-      <div className="glow-backdrop__vignette" />
-    </div>
-  );
-}
+export { AppSurfaceBackdrop as GlowBackdrop } from "@/components/effects/AppSurfaceBackdrop";

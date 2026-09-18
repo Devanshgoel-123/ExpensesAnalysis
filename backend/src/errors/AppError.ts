@@ -3,18 +3,9 @@
  * Never expose stack traces to clients — the global handler sanitizes responses.
  */
 
-export type ErrorCode =
-  | "BAD_REQUEST"
-  | "UNAUTHORIZED"
-  | "FORBIDDEN"
-  | "NOT_FOUND"
-  | "CONFLICT"
-  | "VALIDATION_ERROR"
-  | "RATE_LIMITED"
-  | "PAYLOAD_TOO_LARGE"
-  | "UNPROCESSABLE"
-  | "INTERNAL"
-  | "SERVICE_UNAVAILABLE";
+import { ErrorCode } from "../enums/index.js";
+
+export type { ErrorCode };
 
 export class AppError extends Error {
   readonly statusCode: number;
@@ -43,27 +34,30 @@ export class AppError extends Error {
   static badRequest(message: string, details?: unknown): AppError {
     return new AppError(message, {
       statusCode: 400,
-      code: "BAD_REQUEST",
+      code: ErrorCode.BadRequest,
       details,
     });
   }
 
   static unauthorized(message = "Authentication required"): AppError {
-    return new AppError(message, { statusCode: 401, code: "UNAUTHORIZED" });
+    return new AppError(message, {
+      statusCode: 401,
+      code: ErrorCode.Unauthorized,
+    });
   }
 
   static forbidden(message = "Forbidden"): AppError {
-    return new AppError(message, { statusCode: 403, code: "FORBIDDEN" });
+    return new AppError(message, { statusCode: 403, code: ErrorCode.Forbidden });
   }
 
   static notFound(message = "Resource not found"): AppError {
-    return new AppError(message, { statusCode: 404, code: "NOT_FOUND" });
+    return new AppError(message, { statusCode: 404, code: ErrorCode.NotFound });
   }
 
   static conflict(message: string, details?: unknown): AppError {
     return new AppError(message, {
       statusCode: 409,
-      code: "CONFLICT",
+      code: ErrorCode.Conflict,
       details,
     });
   }
@@ -71,7 +65,7 @@ export class AppError extends Error {
   static validation(message: string, details?: unknown): AppError {
     return new AppError(message, {
       statusCode: 400,
-      code: "VALIDATION_ERROR",
+      code: ErrorCode.ValidationError,
       details,
     });
   }
@@ -79,21 +73,21 @@ export class AppError extends Error {
   static tooManyRequests(message = "Too many requests"): AppError {
     return new AppError(message, {
       statusCode: 429,
-      code: "RATE_LIMITED",
+      code: ErrorCode.RateLimited,
     });
   }
 
   static serviceUnavailable(message: string): AppError {
     return new AppError(message, {
       statusCode: 503,
-      code: "SERVICE_UNAVAILABLE",
+      code: ErrorCode.ServiceUnavailable,
     });
   }
 
   static internal(message = "Internal server error", cause?: unknown): AppError {
     return new AppError(message, {
       statusCode: 500,
-      code: "INTERNAL",
+      code: ErrorCode.Internal,
       isOperational: false,
       cause,
     });
@@ -103,25 +97,25 @@ export class AppError extends Error {
 function statusToCode(status: number): ErrorCode {
   switch (status) {
     case 400:
-      return "BAD_REQUEST";
+      return ErrorCode.BadRequest;
     case 401:
-      return "UNAUTHORIZED";
+      return ErrorCode.Unauthorized;
     case 403:
-      return "FORBIDDEN";
+      return ErrorCode.Forbidden;
     case 404:
-      return "NOT_FOUND";
+      return ErrorCode.NotFound;
     case 409:
-      return "CONFLICT";
+      return ErrorCode.Conflict;
     case 413:
-      return "PAYLOAD_TOO_LARGE";
+      return ErrorCode.PayloadTooLarge;
     case 422:
-      return "UNPROCESSABLE";
+      return ErrorCode.Unprocessable;
     case 429:
-      return "RATE_LIMITED";
+      return ErrorCode.RateLimited;
     case 503:
-      return "SERVICE_UNAVAILABLE";
+      return ErrorCode.ServiceUnavailable;
     default:
-      return status >= 500 ? "INTERNAL" : "BAD_REQUEST";
+      return status >= 500 ? ErrorCode.Internal : ErrorCode.BadRequest;
   }
 }
 

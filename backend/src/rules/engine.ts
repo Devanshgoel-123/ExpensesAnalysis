@@ -1,4 +1,9 @@
 import type { CategoryRow, ProviderRow, TransactionRow, UserRuleRow } from "../db/types.js";
+import {
+  ClassificationSource,
+  ruleClassificationSource,
+  TxType,
+} from "../enums/index.js";
 import { resolveAmountBand } from "../categories/heuristics.js";
 
 export interface ClassifiedFields {
@@ -85,7 +90,7 @@ export function applyRules(
     categorySlug: defaults.categorySlug ?? null,
     counterparty: defaults.counterparty ?? null,
     confidence: defaults.confidence ?? 0.5,
-    classificationSource: defaults.classificationSource ?? "parser",
+    classificationSource: defaults.classificationSource ?? ClassificationSource.Parser,
   };
 
   for (const rule of rules) {
@@ -107,7 +112,7 @@ export function applyRules(
       }
     }
     result.confidence = 0.95;
-    result.classificationSource = `rule:${rule.id}`;
+    result.classificationSource = ruleClassificationSource(rule.id);
     break;
   }
 
@@ -115,7 +120,7 @@ export function applyRules(
   if (
     amountBand &&
     !result.categorySlug &&
-    tx.type === "debit" &&
+    tx.type === TxType.Debit &&
     tx.amount >= amountBand.min &&
     tx.amount <= amountBand.max &&
     !result.merchant &&
@@ -123,7 +128,7 @@ export function applyRules(
   ) {
     result.categorySlug = amountBand.slug;
     result.confidence = 0.6;
-    result.classificationSource = "amount_band";
+    result.classificationSource = ClassificationSource.AmountBand;
   }
 
   if (!result.counterparty) {

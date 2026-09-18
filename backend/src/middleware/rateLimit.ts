@@ -1,4 +1,5 @@
 import rateLimit, {
+  ipKeyGenerator,
   type Options,
   type RateLimitRequestHandler,
 } from "express-rate-limit";
@@ -21,10 +22,17 @@ function sendRateLimitResponse(req: Request, res: Response, windowMs: number, me
   res.status(429).json(body);
 }
 
+function clientIp(req: Request): string {
+  return req.ip || req.socket.remoteAddress || "unknown";
+}
+
+function keyByIp(req: Request): string {
+  return ipKeyGenerator(clientIp(req));
+}
+
 function keyByIpAndUser(req: Request): string {
   const userId = req.user?.id;
-  const ip = req.ip || req.socket.remoteAddress || "unknown";
-  return userId ? `user:${userId}` : `ip:${ip}`;
+  return userId ? `user:${userId}` : `ip:${keyByIp(req)}`;
 }
 
 const shared: Partial<Options> = {
@@ -39,7 +47,7 @@ const shared: Partial<Options> = {
 export const globalRateLimiter: RateLimitRequestHandler = rateLimit({
   ...shared,
   max: config.rateLimit.max,
-  keyGenerator: (req) => req.ip || req.socket.remoteAddress || "unknown",
+  keyGenerator: keyByIp,
   handler: (req, res, _next, optionsUsed) => {
     sendRateLimitResponse(
       req,
@@ -54,7 +62,7 @@ export const globalRateLimiter: RateLimitRequestHandler = rateLimit({
 export const authRateLimiter: RateLimitRequestHandler = rateLimit({
   ...shared,
   max: config.rateLimit.authMax,
-  keyGenerator: (req) => req.ip || req.socket.remoteAddress || "unknown",
+  keyGenerator: keyByIp,
   handler: (req, res, _next, optionsUsed) => {
     sendRateLimitResponse(
       req,

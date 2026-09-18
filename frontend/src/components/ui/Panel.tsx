@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { SpotlightCard } from "@/components/SpotlightCard";
 
 interface PanelProps {
   children: ReactNode;
@@ -15,9 +16,11 @@ export function Panel({
   "aria-label": ariaLabel,
 }: PanelProps) {
   return (
-    <Tag className={cn("panel spotlight-card", className)} aria-label={ariaLabel}>
-      {children}
-    </Tag>
+    <SpotlightCard className={cn("panel", className)}>
+      <Tag aria-label={ariaLabel} className="contents">
+        {children}
+      </Tag>
+    </SpotlightCard>
   );
 }
 

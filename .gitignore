@@ -21,3 +21,4 @@ backend/.env
 uploads/
 *.pdf
 data/
+backend/dumps/

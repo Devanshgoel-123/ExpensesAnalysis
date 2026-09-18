@@ -1,5 +1,6 @@
 import type { RequestHandler } from "express";
 import { config } from "../config.js";
+import { ImportSource } from "../enums/index.js";
 import { AppError } from "../errors/AppError.js";
 import { parsePdf } from "../parser.js";
 import type {
@@ -37,7 +38,7 @@ export const uploadImportController: RequestHandler = async (req, res) => {
       buffer: file.buffer,
       filename: file.originalname,
       password: body.password ?? "",
-      source: "upload",
+      source: ImportSource.Upload,
     });
     res.json({ importId, inserted, skipped, ...result });
   } catch (error) {

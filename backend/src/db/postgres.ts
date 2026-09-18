@@ -1,14 +1,16 @@
+import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
 import pg from "pg";
 import { config } from "../config.js";
 import { logger } from "../logger/index.js";
+import { createDb, type AppDb } from "./client.js";
 import { migrateUp } from "./migrator.js";
+import * as s from "./schema.js";
 import { PostgresGmailRepository } from "./postgres/gmailRepository.js";
 import { PostgresImportRepository } from "./postgres/importRepository.js";
 import { mapAccount } from "./postgres/shared.js";
 import type {
   AccountRow,
   BankPresetRow,
-  CategoryMeta,
   CategoryRow,
   GmailConnectionRow,
   ImportRow,
@@ -25,89 +27,68 @@ import type {
   UserRuleRow,
 } from "./types.js";
 
-function mapUser(row: Record<string, unknown>): UserRow {
-  const dailyLimit = row.daily_spend_limit;
-  return {
-    id: String(row.id),
-    email: String(row.email),
-    passwordHash: String(row.password_hash),
-    displayName: (row.display_name as string | null) ?? null,
-    dailySpendLimit:
-      dailyLimit == null ? null : Number(dailyLimit),
-    createdAt: new Date(String(row.created_at)).toISOString(),
-    deletedAt: row.deleted_at
-      ? new Date(String(row.deleted_at)).toISOString()
-      : null,
-  };
-}
-
-function mapCategory(row: Record<string, unknown>): CategoryRow {
-  const meta = (row.meta as CategoryMeta | null) ?? {};
-  return {
-    id: String(row.id),
-    userId: (row.user_id as string | null) ?? null,
-    slug: String(row.slug),
-    label: String(row.label),
-    blurb: String(row.blurb ?? ""),
-    accent: String(row.accent ?? "#8b7cff"),
-    sortOrder: Number(row.sort_order ?? 100),
-    meta,
-    isGlobal: Boolean(row.is_global),
-  };
-}
-
-function mapBankPreset(row: Record<string, unknown>): BankPresetRow {
-  return {
-    id: String(row.id),
-    label: String(row.label),
-    adapterId: (row.adapter_id as string | null) ?? null,
-    pdfAdapterReady: Boolean(row.pdf_adapter_ready),
-    defaultSenderEmails: (row.default_sender_emails as string[]) ?? [],
-    description: String(row.description ?? ""),
-    sortOrder: Number(row.sort_order ?? 100),
-  };
-}
-
-function mapProvider(row: Record<string, unknown>): ProviderRow {
-  return {
-    id: String(row.id),
-    userId: (row.user_id as string | null) ?? null,
-    canonicalName: String(row.canonical_name),
-    aliases: (row.aliases as string[]) ?? [],
-    upiHandles: (row.upi_handles as string[]) ?? [],
-    senderDomains: (row.sender_domains as string[]) ?? [],
-    websiteDomain: (row.website_domain as string | null) ?? null,
-    logoUrl: (row.logo_url as string | null) ?? null,
-    categorySlug: (row.category_slug as string | null) ?? null,
-    isGlobal: Boolean(row.is_global),
-  };
-}
-
-function mapRule(row: Record<string, unknown>): UserRuleRow {
-  return {
-    id: String(row.id),
-    userId: String(row.user_id),
-    name: String(row.name),
-    priority: Number(row.priority),
-    enabled: Boolean(row.enabled),
-    matchNarrationRe: (row.match_narration_re as string | null) ?? null,
-    matchUpiId: (row.match_upi_id as string | null) ?? null,
-    matchMerchantAlias: (row.match_merchant_alias as string | null) ?? null,
-    matchAmountMin: row.match_amount_min == null ? null : Number(row.match_amount_min),
-    matchAmountMax: row.match_amount_max == null ? null : Number(row.match_amount_max),
-    matchType: (row.match_type as UserRuleRow["matchType"]) ?? null,
-    setProviderId: (row.set_provider_id as string | null) ?? null,
-    setPayeeName: (row.set_payee_name as string | null) ?? null,
-    setCategorySlug: (row.set_category_slug as string | null) ?? null,
-    setTags: (row.set_tags as string[]) ?? [],
-  };
-}
+const iso = (v: Date | string) => new Date(v).toISOString();
+const mapUser = (r: typeof s.users.$inferSelect): UserRow => ({
+  ...r,
+  dailySpendLimit: r.dailySpendLimit == null ? null : Number(r.dailySpendLimit),
+  createdAt: iso(r.createdAt),
+  deletedAt: r.deletedAt ? iso(r.deletedAt) : null,
+});
+const mapCategory = (r: typeof s.categories.$inferSelect): CategoryRow => ({
+  id: r.id,
+  userId: r.userId,
+  slug: r.slug,
+  label: r.label,
+  blurb: r.blurb,
+  accent: r.accent,
+  sortOrder: r.sortOrder,
+  meta: r.meta,
+  isGlobal: r.isGlobal,
+});
+const mapBank = (r: typeof s.bankPresets.$inferSelect): BankPresetRow => ({
+  id: r.id,
+  label: r.label,
+  adapterId: r.adapterId,
+  pdfAdapterReady: r.pdfAdapterReady,
+  defaultSenderEmails: r.defaultSenderEmails,
+  description: r.description,
+  sortOrder: r.sortOrder,
+});
+const mapProvider = (r: typeof s.providers.$inferSelect): ProviderRow => ({
+  id: r.id,
+  userId: r.userId,
+  canonicalName: r.canonicalName,
+  aliases: r.aliases,
+  upiHandles: r.upiHandles,
+  senderDomains: r.senderDomains,
+  websiteDomain: r.websiteDomain,
+  logoUrl: r.logoUrl,
+  categorySlug: r.categorySlug,
+  isGlobal: r.isGlobal,
+});
+const mapRule = (r: typeof s.userRules.$inferSelect): UserRuleRow => ({
+  id: r.id,
+  userId: r.userId,
+  name: r.name,
+  priority: r.priority,
+  enabled: r.enabled,
+  matchNarrationRe: r.matchNarrationRe,
+  matchUpiId: r.matchUpiId,
+  matchMerchantAlias: r.matchMerchantAlias,
+  matchAmountMin: r.matchAmountMin == null ? null : Number(r.matchAmountMin),
+  matchAmountMax: r.matchAmountMax == null ? null : Number(r.matchAmountMax),
+  matchType: r.matchType as UserRuleRow["matchType"],
+  setProviderId: r.setProviderId,
+  setPayeeName: r.setPayeeName,
+  setCategorySlug: r.setCategorySlug,
+  setTags: r.setTags,
+});
 
 export class PostgresStore implements Store {
   private pool: pg.Pool;
+  private db: AppDb;
   private readonly imports: PostgresImportRepository;
   private readonly gmail: PostgresGmailRepository;
-
   constructor(databaseUrl: string) {
     this.pool = new pg.Pool({
       connectionString: databaseUrl,
@@ -115,658 +96,485 @@ export class PostgresStore implements Store {
       idleTimeoutMillis: config.dbPool.idleTimeoutMillis,
       connectionTimeoutMillis: config.dbPool.connectionTimeoutMillis,
     });
-    this.pool.on("error", (err) => {
-      logger.error({ err }, "Unexpected Postgres pool error");
-    });
-    this.imports = new PostgresImportRepository(this.pool);
-    this.gmail = new PostgresGmailRepository(this.pool);
+    this.pool.on("error", (err) =>
+      logger.error({ err }, "Unexpected Postgres pool error"),
+    );
+    this.db = createDb(this.pool);
+    this.imports = new PostgresImportRepository(this.db);
+    this.gmail = new PostgresGmailRepository(this.db);
   }
-
-  async migrate(): Promise<void> {
+  async migrate() {
     const applied = await migrateUp(this.pool);
-    if (applied.length === 0) {
-      logger.info("Database schema is up to date");
-    }
+    if (!applied.length) logger.info("Database schema is up to date");
   }
-
-  async healthCheck(): Promise<boolean> {
-    const client = await this.pool.connect();
+  async healthCheck() {
+    const c = await this.pool.connect();
     try {
-      await client.query("SELECT 1");
+      await c.query("SELECT 1");
       return true;
     } finally {
-      client.release();
+      c.release();
     }
   }
-
-  async close(): Promise<void> {
+  async close() {
     await this.pool.end();
   }
-
-  async createUser(input: {
+  async createUser(i: {
     email: string;
     passwordHash: string;
     displayName?: string | null;
-  }): Promise<UserRow> {
-    const result = await this.pool.query(
-      `INSERT INTO users (email, password_hash, display_name)
-       VALUES ($1, $2, $3)
-       RETURNING *`,
-      [input.email.toLowerCase(), input.passwordHash, input.displayName ?? null],
-    );
-    return mapUser(result.rows[0]);
+  }) {
+    const [r] = await this.db
+      .insert(s.users)
+      .values({
+        email: i.email.toLowerCase(),
+        passwordHash: i.passwordHash,
+        displayName: i.displayName ?? null,
+      })
+      .returning();
+    return mapUser(r);
   }
-
-  async findUserByEmail(email: string): Promise<UserRow | null> {
-    const result = await this.pool.query(
-      `SELECT * FROM users WHERE email = $1 AND deleted_at IS NULL`,
-      [email.toLowerCase()],
-    );
-    return result.rows[0] ? mapUser(result.rows[0]) : null;
+  async findUserByEmail(email: string) {
+    const [r] = await this.db
+      .select()
+      .from(s.users)
+      .where(
+        and(eq(s.users.email, email.toLowerCase()), isNull(s.users.deletedAt)),
+      )
+      .limit(1);
+    return r ? mapUser(r) : null;
   }
-
-  async findUserById(id: string): Promise<UserRow | null> {
-    const result = await this.pool.query(
-      `SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL`,
-      [id],
-    );
-    return result.rows[0] ? mapUser(result.rows[0]) : null;
+  async findUserById(id: string) {
+    const [r] = await this.db
+      .select()
+      .from(s.users)
+      .where(and(eq(s.users.id, id), isNull(s.users.deletedAt)))
+      .limit(1);
+    return r ? mapUser(r) : null;
   }
-
   async updateUserPreferences(
     userId: string,
     patch: Partial<{ dailySpendLimit: number | null }>,
-  ): Promise<UserRow | null> {
-    if (!("dailySpendLimit" in patch)) {
-      return this.findUserById(userId);
+  ) {
+    if (!("dailySpendLimit" in patch)) return this.findUserById(userId);
+    const [r] = await this.db
+      .update(s.users)
+      .set({
+        dailySpendLimit:
+          patch.dailySpendLimit == null ? null : String(patch.dailySpendLimit),
+      })
+      .where(and(eq(s.users.id, userId), isNull(s.users.deletedAt)))
+      .returning();
+    return r ? mapUser(r) : null;
+  }
+  async softDeleteUser(userId: string) {
+    await this.db
+      .update(s.users)
+      .set({ deletedAt: new Date() })
+      .where(eq(s.users.id, userId));
+  }
+  async consumeInvite(code: string) {
+    const r = await this.db
+      .update(s.invites)
+      .set({ usedCount: sql`${s.invites.usedCount}+1` })
+      .where(
+        and(
+          eq(s.invites.code, code),
+          sql`${s.invites.usedCount}<${s.invites.maxUses}`,
+        ),
+      )
+      .returning({ code: s.invites.code });
+    return !!r.length;
+  }
+  async seedInvite(code: string, maxUses = 100) {
+    await this.db
+      .insert(s.invites)
+      .values({ code, maxUses })
+      .onConflictDoNothing();
+  }
+  async listCategories(userId: string) {
+    return (
+      await this.db
+        .select()
+        .from(s.categories)
+        .where(
+          or(eq(s.categories.isGlobal, true), eq(s.categories.userId, userId)),
+        )
+        .orderBy(asc(s.categories.sortOrder), asc(s.categories.label))
+    ).map(mapCategory);
+  }
+  async upsertCategory(i: Omit<CategoryRow, "id"> & { id?: string }) {
+    const cond = i.isGlobal
+      ? and(eq(s.categories.isGlobal, true), eq(s.categories.slug, i.slug))
+      : and(eq(s.categories.userId, i.userId!), eq(s.categories.slug, i.slug));
+    const [e] = await this.db.select().from(s.categories).where(cond).limit(1);
+    const values = {
+      label: i.label,
+      blurb: i.blurb,
+      accent: i.accent,
+      sortOrder: i.sortOrder,
+      meta: i.meta ?? {},
+    };
+    const [r] = e
+      ? await this.db
+          .update(s.categories)
+          .set(values)
+          .where(eq(s.categories.id, e.id))
+          .returning()
+      : await this.db
+          .insert(s.categories)
+          .values({
+            ...values,
+            ...(i.id ? { id: i.id } : {}),
+            userId: i.userId,
+            slug: i.slug,
+            isGlobal: i.isGlobal,
+          })
+          .returning();
+    return mapCategory(r);
+  }
+  async listBankPresets() {
+    return (
+      await this.db
+        .select()
+        .from(s.bankPresets)
+        .orderBy(asc(s.bankPresets.sortOrder), asc(s.bankPresets.label))
+    ).map(mapBank);
+  }
+  async getBankPreset(id: string) {
+    const [r] = await this.db
+      .select()
+      .from(s.bankPresets)
+      .where(sql`lower(${s.bankPresets.id})=lower(${id})`)
+      .limit(1);
+    return r ? mapBank(r) : null;
+  }
+  async getDefaultBankPreset() {
+    const [r] = await this.db
+      .select()
+      .from(s.bankPresets)
+      .orderBy(
+        sql`CASE WHEN ${s.bankPresets.pdfAdapterReady} THEN 0 ELSE 1 END`,
+        asc(s.bankPresets.sortOrder),
+        asc(s.bankPresets.label),
+      )
+      .limit(1);
+    return r ? mapBank(r) : null;
+  }
+  async upsertBankPreset(i: BankPresetRow) {
+    const [r] = await this.db
+      .insert(s.bankPresets)
+      .values(i)
+      .onConflictDoUpdate({
+        target: s.bankPresets.id,
+        set: {
+          label: i.label,
+          adapterId: i.adapterId,
+          pdfAdapterReady: i.pdfAdapterReady,
+          defaultSenderEmails: i.defaultSenderEmails,
+          description: i.description,
+          sortOrder: i.sortOrder,
+        },
+      })
+      .returning();
+    return mapBank(r);
+  }
+  async listProviders(userId: string) {
+    return (
+      await this.db
+        .select()
+        .from(s.providers)
+        .where(
+          or(eq(s.providers.isGlobal, true), eq(s.providers.userId, userId)),
+        )
+        .orderBy(asc(s.providers.canonicalName))
+    ).map(mapProvider);
+  }
+  async upsertProvider(i: Omit<ProviderRow, "id"> & { id?: string }) {
+    const set = {
+      canonicalName: i.canonicalName,
+      aliases: i.aliases,
+      upiHandles: i.upiHandles,
+      senderDomains: i.senderDomains,
+      websiteDomain: i.websiteDomain,
+      logoUrl: i.logoUrl,
+      categorySlug: i.categorySlug,
+    };
+    if (i.id) {
+      const [r] = await this.db
+        .update(s.providers)
+        .set(set)
+        .where(eq(s.providers.id, i.id))
+        .returning();
+      if (r) return mapProvider(r);
     }
-    const result = await this.pool.query(
-      `UPDATE users SET daily_spend_limit = $2 WHERE id = $1 AND deleted_at IS NULL RETURNING *`,
-      [userId, patch.dailySpendLimit ?? null],
-    );
-    return result.rows[0] ? mapUser(result.rows[0]) : null;
+    const [e] = await this.db
+      .select()
+      .from(s.providers)
+      .where(
+        and(
+          sql`lower(${s.providers.canonicalName})=lower(${i.canonicalName})`,
+          i.isGlobal
+            ? eq(s.providers.isGlobal, true)
+            : eq(s.providers.userId, i.userId!),
+        ),
+      )
+      .limit(1);
+    const [r] = e
+      ? await this.db
+          .update(s.providers)
+          .set(set)
+          .where(eq(s.providers.id, e.id))
+          .returning()
+      : await this.db
+          .insert(s.providers)
+          .values({ ...set, userId: i.userId, isGlobal: i.isGlobal })
+          .returning();
+    return mapProvider(r);
   }
-
-  async softDeleteUser(userId: string): Promise<void> {
-    await this.pool.query(
-      `UPDATE users SET deleted_at = NOW() WHERE id = $1`,
-      [userId],
-    );
+  async findProviderByName(userId: string, name: string) {
+    const [r] = await this.db
+      .select()
+      .from(s.providers)
+      .where(
+        and(
+          or(eq(s.providers.isGlobal, true), eq(s.providers.userId, userId)),
+          or(
+            sql`lower(${s.providers.canonicalName})=lower(${name})`,
+            sql`EXISTS (SELECT 1 FROM unnest(${s.providers.aliases}) a WHERE lower(a)=lower(${name}))`,
+          ),
+        ),
+      )
+      .limit(1);
+    return r ? mapProvider(r) : null;
   }
-
-  async consumeInvite(code: string): Promise<boolean> {
-    const result = await this.pool.query(
-      `UPDATE invites
-       SET used_count = used_count + 1
-       WHERE code = $1 AND used_count < max_uses
-       RETURNING code`,
-      [code],
-    );
-    return Boolean(result.rows[0]);
+  async getProviderById(id: string) {
+    const [r] = await this.db
+      .select()
+      .from(s.providers)
+      .where(eq(s.providers.id, id))
+      .limit(1);
+    return r ? mapProvider(r) : null;
   }
-
-  async seedInvite(code: string, maxUses = 100): Promise<void> {
-    await this.pool.query(
-      `INSERT INTO invites (code, max_uses)
-       VALUES ($1, $2)
-       ON CONFLICT (code) DO NOTHING`,
-      [code, maxUses],
-    );
+  async listRules(userId: string) {
+    return (
+      await this.db
+        .select()
+        .from(s.userRules)
+        .where(
+          and(eq(s.userRules.userId, userId), eq(s.userRules.enabled, true)),
+        )
+        .orderBy(asc(s.userRules.priority), asc(s.userRules.createdAt))
+    ).map(mapRule);
   }
-
-  async listCategories(userId: string): Promise<CategoryRow[]> {
-    const result = await this.pool.query(
-      `SELECT * FROM categories
-       WHERE is_global = TRUE OR user_id = $1
-       ORDER BY sort_order, label`,
-      [userId],
-    );
-    return result.rows.map(mapCategory);
+  async createRule(i: Omit<UserRuleRow, "id"> & { id?: string }) {
+    const [r] = await this.db
+      .insert(s.userRules)
+      .values({
+        ...i,
+        ...(i.id ? { id: i.id } : {}),
+        matchAmountMin:
+          i.matchAmountMin == null ? null : String(i.matchAmountMin),
+        matchAmountMax:
+          i.matchAmountMax == null ? null : String(i.matchAmountMax),
+      })
+      .returning();
+    return mapRule(r);
   }
-
-  async upsertCategory(
-    input: Omit<CategoryRow, "id"> & { id?: string },
-  ): Promise<CategoryRow> {
-    const existing = await this.pool.query(
-      input.isGlobal
-        ? `SELECT * FROM categories WHERE is_global = TRUE AND slug = $1 LIMIT 1`
-        : `SELECT * FROM categories WHERE user_id = $1 AND slug = $2 LIMIT 1`,
-      input.isGlobal ? [input.slug] : [input.userId, input.slug],
-    );
-    if (existing.rows[0]) {
-      const updated = await this.pool.query(
-        `UPDATE categories
-         SET label = $2, blurb = $3, accent = $4, sort_order = $5, meta = $6::jsonb
-         WHERE id = $1
-         RETURNING *`,
-        [
-          existing.rows[0].id,
-          input.label,
-          input.blurb,
-          input.accent,
-          input.sortOrder,
-          JSON.stringify(input.meta ?? {}),
-        ],
-      );
-      return mapCategory(updated.rows[0]);
-    }
-    const result = await this.pool.query(
-      `INSERT INTO categories (id, user_id, slug, label, blurb, accent, sort_order, meta, is_global)
-       VALUES (COALESCE($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
-       RETURNING *`,
-      [
-        input.id ?? null,
-        input.userId,
-        input.slug,
-        input.label,
-        input.blurb,
-        input.accent,
-        input.sortOrder,
-        JSON.stringify(input.meta ?? {}),
-        input.isGlobal,
-      ],
-    );
-    return mapCategory(result.rows[0]);
+  async deleteRule(userId: string, ruleId: string) {
+    await this.db
+      .delete(s.userRules)
+      .where(and(eq(s.userRules.id, ruleId), eq(s.userRules.userId, userId)));
   }
-
-  async listBankPresets(): Promise<BankPresetRow[]> {
-    const result = await this.pool.query(
-      `SELECT * FROM bank_presets ORDER BY sort_order, label`,
-    );
-    return result.rows.map(mapBankPreset);
-  }
-
-  async getBankPreset(id: string): Promise<BankPresetRow | null> {
-    const result = await this.pool.query(
-      `SELECT * FROM bank_presets WHERE lower(id) = lower($1) LIMIT 1`,
-      [id],
-    );
-    return result.rows[0] ? mapBankPreset(result.rows[0]) : null;
-  }
-
-  async getDefaultBankPreset(): Promise<BankPresetRow | null> {
-    const result = await this.pool.query(
-      `SELECT * FROM bank_presets
-       ORDER BY CASE WHEN pdf_adapter_ready THEN 0 ELSE 1 END, sort_order, label
-       LIMIT 1`,
-    );
-    return result.rows[0] ? mapBankPreset(result.rows[0]) : null;
-  }
-
-  async upsertBankPreset(input: BankPresetRow): Promise<BankPresetRow> {
-    const result = await this.pool.query(
-      `INSERT INTO bank_presets (
-         id, label, adapter_id, pdf_adapter_ready, default_sender_emails, description, sort_order
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT (id) DO UPDATE SET
-         label = EXCLUDED.label,
-         adapter_id = EXCLUDED.adapter_id,
-         pdf_adapter_ready = EXCLUDED.pdf_adapter_ready,
-         default_sender_emails = EXCLUDED.default_sender_emails,
-         description = EXCLUDED.description,
-         sort_order = EXCLUDED.sort_order
-       RETURNING *`,
-      [
-        input.id,
-        input.label,
-        input.adapterId,
-        input.pdfAdapterReady,
-        input.defaultSenderEmails,
-        input.description,
-        input.sortOrder,
-      ],
-    );
-    return mapBankPreset(result.rows[0]);
-  }
-
-  async listProviders(userId: string): Promise<ProviderRow[]> {
-    const result = await this.pool.query(
-      `SELECT * FROM providers
-       WHERE is_global = TRUE OR user_id = $1
-       ORDER BY canonical_name`,
-      [userId],
-    );
-    return result.rows.map(mapProvider);
-  }
-
-  async upsertProvider(
-    input: Omit<ProviderRow, "id"> & { id?: string },
-  ): Promise<ProviderRow> {
-    if (input.id) {
-      const updated = await this.pool.query(
-        `UPDATE providers SET
-           canonical_name = $2,
-           aliases = $3,
-           upi_handles = $4,
-           sender_domains = $5,
-           website_domain = $6,
-           logo_url = $7,
-           category_slug = $8
-         WHERE id = $1
-         RETURNING *`,
-        [
-          input.id,
-          input.canonicalName,
-          input.aliases,
-          input.upiHandles,
-          input.senderDomains,
-          input.websiteDomain,
-          input.logoUrl,
-          input.categorySlug,
-        ],
-      );
-      if (updated.rows[0]) return mapProvider(updated.rows[0]);
-    }
-
-    const existing = await this.pool.query(
-      `SELECT * FROM providers
-       WHERE lower(canonical_name) = lower($1)
-         AND ((is_global = TRUE AND $2::boolean = TRUE) OR user_id = $3)
-       LIMIT 1`,
-      [input.canonicalName, input.isGlobal, input.userId],
-    );
-    if (existing.rows[0]) {
-      const updated = await this.pool.query(
-        `UPDATE providers SET
-           aliases = $2,
-           upi_handles = $3,
-           sender_domains = $4,
-           website_domain = $5,
-           logo_url = $6,
-           category_slug = $7
-         WHERE id = $1
-         RETURNING *`,
-        [
-          existing.rows[0].id,
-          input.aliases,
-          input.upiHandles,
-          input.senderDomains,
-          input.websiteDomain,
-          input.logoUrl,
-          input.categorySlug,
-        ],
-      );
-      return mapProvider(updated.rows[0]);
-    }
-
-    const inserted = await this.pool.query(
-      `INSERT INTO providers (
-         user_id, canonical_name, aliases, upi_handles, sender_domains,
-         website_domain, logo_url, category_slug, is_global
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       RETURNING *`,
-      [
-        input.userId,
-        input.canonicalName,
-        input.aliases,
-        input.upiHandles,
-        input.senderDomains,
-        input.websiteDomain,
-        input.logoUrl,
-        input.categorySlug,
-        input.isGlobal,
-      ],
-    );
-    return mapProvider(inserted.rows[0]);
-  }
-
-  async findProviderByName(
-    userId: string,
-    name: string,
-  ): Promise<ProviderRow | null> {
-    const result = await this.pool.query(
-      `SELECT * FROM providers
-       WHERE (is_global = TRUE OR user_id = $1)
-         AND (
-           lower(canonical_name) = lower($2)
-           OR EXISTS (
-             SELECT 1 FROM unnest(aliases) a WHERE lower(a) = lower($2)
-           )
-         )
-       LIMIT 1`,
-      [userId, name],
-    );
-    return result.rows[0] ? mapProvider(result.rows[0]) : null;
-  }
-
-  async getProviderById(id: string): Promise<ProviderRow | null> {
-    const result = await this.pool.query(`SELECT * FROM providers WHERE id = $1`, [
-      id,
-    ]);
-    return result.rows[0] ? mapProvider(result.rows[0]) : null;
-  }
-
-  async listRules(userId: string): Promise<UserRuleRow[]> {
-    const result = await this.pool.query(
-      `SELECT * FROM user_rules
-       WHERE user_id = $1 AND enabled = TRUE
-       ORDER BY priority ASC, created_at ASC`,
-      [userId],
-    );
-    return result.rows.map(mapRule);
-  }
-
-  async createRule(
-    input: Omit<UserRuleRow, "id"> & { id?: string },
-  ): Promise<UserRuleRow> {
-    const result = await this.pool.query(
-      `INSERT INTO user_rules (
-         id, user_id, name, priority, enabled,
-         match_narration_re, match_upi_id, match_merchant_alias,
-         match_amount_min, match_amount_max, match_type,
-         set_provider_id, set_payee_name, set_category_slug, set_tags
-       ) VALUES (
-         COALESCE($1::uuid, gen_random_uuid()), $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15
-       ) RETURNING *`,
-      [
-        input.id ?? null,
-        input.userId,
-        input.name,
-        input.priority,
-        input.enabled,
-        input.matchNarrationRe,
-        input.matchUpiId,
-        input.matchMerchantAlias,
-        input.matchAmountMin,
-        input.matchAmountMax,
-        input.matchType,
-        input.setProviderId,
-        input.setPayeeName,
-        input.setCategorySlug,
-        input.setTags,
-      ],
-    );
-    return mapRule(result.rows[0]);
-  }
-
-  async deleteRule(userId: string, ruleId: string): Promise<void> {
-    await this.pool.query(
-      `DELETE FROM user_rules WHERE id = $1 AND user_id = $2`,
-      [ruleId, userId],
-    );
-  }
-
-  async getOrCreateAccount(
-    userId: string,
-    bank?: string | null,
-  ): Promise<AccountRow> {
+  async getOrCreateAccount(userId: string, bank?: string | null) {
     const resolved =
       bank ?? (await this.getDefaultBankPreset())?.id ?? "UNKNOWN";
-    const existing = await this.pool.query(
-      `SELECT * FROM accounts WHERE user_id = $1 AND bank = $2 LIMIT 1`,
-      [userId, resolved],
-    );
-    if (existing.rows[0]) return mapAccount(existing.rows[0]);
-    const preset = await this.getBankPreset(resolved);
-    const inserted = await this.pool.query(
-      `INSERT INTO accounts (user_id, bank, label, statement_sender_emails)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
-      [
+    const [e] = await this.db
+      .select()
+      .from(s.accounts)
+      .where(and(eq(s.accounts.userId, userId), eq(s.accounts.bank, resolved)))
+      .limit(1);
+    if (e) return mapAccount(e);
+    const p = await this.getBankPreset(resolved);
+    const [r] = await this.db
+      .insert(s.accounts)
+      .values({
         userId,
-        resolved,
-        preset?.label ?? "Primary",
-        preset?.defaultSenderEmails ?? [],
-      ],
-    );
-    return mapAccount(inserted.rows[0]);
+        bank: resolved,
+        label: p?.label ?? "Primary",
+        statementSenderEmails: p?.defaultSenderEmails ?? [],
+      })
+      .returning();
+    return mapAccount(r);
   }
-
-  async listAccounts(userId: string): Promise<AccountRow[]> {
-    const result = await this.pool.query(
-      `SELECT * FROM accounts WHERE user_id = $1 ORDER BY created_at ASC`,
-      [userId],
-    );
-    return result.rows.map(mapAccount);
+  async listAccounts(userId: string) {
+    return (
+      await this.db
+        .select()
+        .from(s.accounts)
+        .where(eq(s.accounts.userId, userId))
+        .orderBy(asc(s.accounts.createdAt))
+    ).map(mapAccount);
   }
-
   async updateAccountMailSources(
     userId: string,
     accountId: string,
-    patch: {
-      bank?: string;
-      label?: string;
-      statementSenderEmails?: string[];
-    },
-  ): Promise<AccountRow | null> {
-    const result = await this.pool.query(
-      `UPDATE accounts SET
-         bank = COALESCE($3, bank),
-         label = COALESCE($4, label),
-         statement_sender_emails = COALESCE($5, statement_sender_emails)
-       WHERE id = $1 AND user_id = $2
-       RETURNING *`,
-      [
-        accountId,
-        userId,
-        patch.bank ?? null,
-        patch.label ?? null,
-        patch.statementSenderEmails ?? null,
-      ],
-    );
-    return result.rows[0] ? mapAccount(result.rows[0]) : null;
+    patch: { bank?: string; label?: string; statementSenderEmails?: string[] },
+  ) {
+    const set: Partial<typeof s.accounts.$inferInsert> = {};
+    if (patch.bank != null) set.bank = patch.bank;
+    if (patch.label != null) set.label = patch.label;
+    if (patch.statementSenderEmails != null)
+      set.statementSenderEmails = patch.statementSenderEmails;
+    if (!Object.keys(set).length) {
+      const [r] = await this.db
+        .select()
+        .from(s.accounts)
+        .where(and(eq(s.accounts.id, accountId), eq(s.accounts.userId, userId)))
+        .limit(1);
+      return r ? mapAccount(r) : null;
+    }
+    const [r] = await this.db
+      .update(s.accounts)
+      .set(set)
+      .where(and(eq(s.accounts.id, accountId), eq(s.accounts.userId, userId)))
+      .returning();
+    return r ? mapAccount(r) : null;
   }
-
-  async setPoolingEnabled(
-    userId: string,
-    accountId: string,
-    enabled: boolean,
-  ): Promise<AccountRow | null> {
-    const result = await this.pool.query(
-      `UPDATE accounts SET
-         pooling_enabled = $3,
-         pooling_started_at = CASE
-           WHEN $3 = TRUE THEN COALESCE(pooling_started_at, NOW())
-           ELSE pooling_started_at
-         END
-       WHERE id = $1 AND user_id = $2
-       RETURNING *`,
-      [accountId, userId, enabled],
-    );
-    return result.rows[0] ? mapAccount(result.rows[0]) : null;
+  async setPoolingEnabled(userId: string, accountId: string, enabled: boolean) {
+    const [r] = await this.db
+      .update(s.accounts)
+      .set({
+        poolingEnabled: enabled,
+        poolingStartedAt: sql`CASE WHEN ${enabled} THEN COALESCE(${s.accounts.poolingStartedAt},NOW()) ELSE ${s.accounts.poolingStartedAt} END`,
+      })
+      .where(and(eq(s.accounts.id, accountId), eq(s.accounts.userId, userId)))
+      .returning();
+    return r ? mapAccount(r) : null;
   }
-
-  async createImport(
-    input: Omit<ImportRow, "id" | "createdAt" | "updatedAt"> & { id?: string },
-  ): Promise<ImportRow> {
-    return this.imports.createImport(input);
+  createImport(
+    i: Omit<ImportRow, "id" | "createdAt" | "updatedAt"> & { id?: string },
+  ) {
+    return this.imports.createImport(i);
   }
-
-  async updateImport(
-    id: string,
-    userId: string,
-    patch: Partial<ImportRow>,
-  ): Promise<ImportRow | null> {
-    return this.imports.updateImport(id, userId, patch);
+  updateImport(id: string, u: string, p: Partial<ImportRow>) {
+    return this.imports.updateImport(id, u, p);
   }
-
-  async listImports(userId: string): Promise<ImportRow[]> {
-    return this.imports.listImports(userId);
+  listImports(u: string) {
+    return this.imports.listImports(u);
   }
-
-  async getImport(userId: string, id: string): Promise<ImportRow | null> {
-    return this.imports.getImport(userId, id);
+  getImport(u: string, id: string) {
+    return this.imports.getImport(u, id);
   }
-
-  async findImportByHash(
-    userId: string,
-    attachmentHash: string,
-  ): Promise<ImportRow | null> {
-    return this.imports.findImportByHash(userId, attachmentHash);
+  findImportByHash(u: string, h: string) {
+    return this.imports.findImportByHash(u, h);
   }
-
-  async findImportByGmailMessage(
-    userId: string,
-    gmailMessageId: string,
-  ): Promise<ImportRow | null> {
-    return this.imports.findImportByGmailMessage(userId, gmailMessageId);
+  findImportByGmailMessage(u: string, g: string) {
+    return this.imports.findImportByGmailMessage(u, g);
   }
-
-  async insertTransactions(
-    userId: string,
-    rows: NewTransactionInput[],
-  ): Promise<{ inserted: number; skipped: number }> {
-    return this.imports.insertTransactions(userId, rows);
+  insertTransactions(u: string, r: NewTransactionInput[]) {
+    return this.imports.insertTransactions(u, r);
   }
-
-  async listTransactions(
-    userId: string,
-    options?: ListTransactionsOptions,
-  ): Promise<TransactionRow[]> {
-    return this.imports.listTransactions(userId, options);
+  listTransactions(u: string, o?: ListTransactionsOptions) {
+    return this.imports.listTransactions(u, o);
   }
-
-  async getTransaction(
-    userId: string,
-    id: string,
-  ): Promise<TransactionRow | null> {
-    return this.imports.getTransaction(userId, id);
+  getTransaction(u: string, id: string) {
+    return this.imports.getTransaction(u, id);
   }
-
-  async updateTransaction(
-    userId: string,
-    id: string,
-    patch: Partial<TransactionRow>,
-  ): Promise<TransactionRow | null> {
-    return this.imports.updateTransaction(userId, id, patch);
+  updateTransaction(u: string, id: string, p: Partial<TransactionRow>) {
+    return this.imports.updateTransaction(u, id, p);
   }
-
-  async reclassifyByRule(
-    userId: string,
-    matcher: (tx: TransactionRow) => boolean,
-    patch: Partial<TransactionRow>,
-  ): Promise<number> {
-    return this.imports.reclassifyByRule(userId, matcher, patch);
+  reclassifyByRule(
+    u: string,
+    m: (t: TransactionRow) => boolean,
+    p: Partial<TransactionRow>,
+  ) {
+    return this.imports.reclassifyByRule(u, m, p);
   }
-
-  async upsertOverride(
-    input: Omit<TransactionOverrideRow, "id"> & { id?: string },
-  ): Promise<TransactionOverrideRow> {
-    return this.imports.upsertOverride(input);
+  upsertOverride(i: Omit<TransactionOverrideRow, "id"> & { id?: string }) {
+    return this.imports.upsertOverride(i);
   }
-
-  async upsertGmailConnection(
-    input: Omit<GmailConnectionRow, "id"> & { id?: string },
-  ): Promise<GmailConnectionRow> {
-    return this.gmail.upsertGmailConnection(input);
+  upsertGmailConnection(i: Omit<GmailConnectionRow, "id"> & { id?: string }) {
+    return this.gmail.upsertGmailConnection(i);
   }
-
-  async getGmailConnection(userId: string): Promise<GmailConnectionRow | null> {
-    return this.gmail.getGmailConnection(userId);
+  getGmailConnection(u: string) {
+    return this.gmail.getGmailConnection(u);
   }
-
-  async disconnectGmail(userId: string): Promise<void> {
-    return this.gmail.disconnectGmail(userId);
+  disconnectGmail(u: string) {
+    return this.gmail.disconnectGmail(u);
   }
-
-  async listActiveGmailConnections(): Promise<GmailConnectionRow[]> {
+  listActiveGmailConnections() {
     return this.gmail.listActiveGmailConnections();
   }
-
-  async listPoolingAccounts(): Promise<AccountRow[]> {
+  listPoolingAccounts() {
     return this.gmail.listPoolingAccounts();
   }
-
-  async upsertMailMessage(
-    input: Omit<MailMessageRow, "id" | "createdAt"> & { id?: string },
-  ): Promise<MailMessageRow> {
-    return this.gmail.upsertMailMessage(input);
+  upsertMailMessage(
+    i: Omit<MailMessageRow, "id" | "createdAt"> & { id?: string },
+  ) {
+    return this.gmail.upsertMailMessage(i);
   }
-
-  async findMailMessageByGmailId(
-    userId: string,
-    gmailMessageId: string,
-  ): Promise<MailMessageRow | null> {
-    return this.gmail.findMailMessageByGmailId(userId, gmailMessageId);
+  findMailMessageByGmailId(u: string, g: string) {
+    return this.gmail.findMailMessageByGmailId(u, g);
   }
-
-  async createPoolingRun(
-    input: Omit<PoolingRunRow, "id" | "startedAt" | "finishedAt" | "status"> & {
+  createPoolingRun(
+    i: Omit<PoolingRunRow, "id" | "startedAt" | "finishedAt" | "status"> & {
       id?: string;
       status?: PoolingRunStatus;
     },
-  ): Promise<PoolingRunRow> {
-    return this.gmail.createPoolingRun(input);
+  ) {
+    return this.gmail.createPoolingRun(i);
   }
-
-  async updatePoolingRun(
-    id: string,
-    patch: Partial<
-      Pick<
-        PoolingRunRow,
-        | "status"
-        | "scanned"
-        | "imported"
-        | "skipped"
-        | "errorMessage"
-        | "finishedAt"
-        | "meta"
-      >
-    >,
-  ): Promise<PoolingRunRow | null> {
-    return this.gmail.updatePoolingRun(id, patch);
+  updatePoolingRun(id: string, p: Partial<PoolingRunRow>) {
+    return this.gmail.updatePoolingRun(id, p);
   }
-
-  async getLatestPoolingRun(userId: string): Promise<PoolingRunRow | null> {
-    return this.gmail.getLatestPoolingRun(userId);
+  getLatestPoolingRun(u: string) {
+    return this.gmail.getLatestPoolingRun(u);
   }
-
-  async listPoolingRuns(
-    userId: string,
-    limit = 10,
-  ): Promise<PoolingRunRow[]> {
-    return this.gmail.listPoolingRuns(userId, limit);
+  listPoolingRuns(u: string, l = 10) {
+    return this.gmail.listPoolingRuns(u, l);
   }
-
-  async hasRunningPoolingRun(userId: string): Promise<boolean> {
-    return this.gmail.hasRunningPoolingRun(userId);
+  hasRunningPoolingRun(u: string) {
+    return this.gmail.hasRunningPoolingRun(u);
   }
-
   async audit(
     userId: string | null,
     action: string,
     meta: Record<string, unknown> = {},
-  ): Promise<void> {
-    await this.pool.query(
-      `INSERT INTO audit_logs (user_id, action, meta) VALUES ($1, $2, $3)`,
-      [userId, action, JSON.stringify(meta)],
-    );
+  ) {
+    await this.db.insert(s.auditLogs).values({ userId, action, meta });
   }
-
-  async deleteUserData(userId: string): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      await client.query("BEGIN");
-      await client.query(`DELETE FROM transaction_overrides WHERE user_id = $1`, [
-        userId,
-      ]);
-      await client.query(`DELETE FROM transactions WHERE user_id = $1`, [userId]);
-      await client.query(`DELETE FROM imports WHERE user_id = $1`, [userId]);
-      await client.query(`DELETE FROM user_rules WHERE user_id = $1`, [userId]);
-      await client.query(`DELETE FROM pooling_runs WHERE user_id = $1`, [userId]);
-      await client.query(`DELETE FROM accounts WHERE user_id = $1`, [userId]);
-      await client.query(
-        `DELETE FROM providers WHERE user_id = $1 AND is_global = FALSE`,
-        [userId],
-      );
-      await client.query(
-        `DELETE FROM categories WHERE user_id = $1 AND is_global = FALSE`,
-        [userId],
-      );
-      await client.query(`DELETE FROM mail_messages WHERE user_id = $1`, [userId]);
-      await client.query(`DELETE FROM gmail_connections WHERE user_id = $1`, [
-        userId,
-      ]);
-      await client.query(
-        `UPDATE users SET deleted_at = NOW() WHERE id = $1`,
-        [userId],
-      );
-      await client.query("COMMIT");
-    } catch (error) {
-      await client.query("ROLLBACK");
-      throw error;
-    } finally {
-      client.release();
-    }
+  async deleteUserData(userId: string) {
+    await this.db.transaction(async (tx) => {
+      await tx
+        .delete(s.transactionOverrides)
+        .where(eq(s.transactionOverrides.userId, userId));
+      await tx.delete(s.transactions).where(eq(s.transactions.userId, userId));
+      await tx.delete(s.imports).where(eq(s.imports.userId, userId));
+      await tx.delete(s.userRules).where(eq(s.userRules.userId, userId));
+      await tx.delete(s.poolingRuns).where(eq(s.poolingRuns.userId, userId));
+      await tx.delete(s.accounts).where(eq(s.accounts.userId, userId));
+      await tx
+        .delete(s.providers)
+        .where(
+          and(eq(s.providers.userId, userId), eq(s.providers.isGlobal, false)),
+        );
+      await tx
+        .delete(s.categories)
+        .where(
+          and(
+            eq(s.categories.userId, userId),
+            eq(s.categories.isGlobal, false),
+          ),
+        );
+      await tx.delete(s.mailMessages).where(eq(s.mailMessages.userId, userId));
+      await tx
+        .delete(s.gmailConnections)
+        .where(eq(s.gmailConnections.userId, userId));
+      await tx
+        .update(s.users)
+        .set({ deletedAt: new Date() })
+        .where(eq(s.users.id, userId));
+    });
   }
 }

@@ -50,10 +50,14 @@ export async function listMigrations(): Promise<MigrationFile[]> {
   });
 }
 
+function migrationVersionNumber(version: string): number {
+  return Number.parseInt(version, 10);
+}
+
 async function ensureMigrationsTable(client: pg.Pool | pg.PoolClient): Promise<void> {
   await client.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
-      version TEXT PRIMARY KEY,
+      version INTEGER PRIMARY KEY,
       name TEXT NOT NULL,
       applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
@@ -62,9 +66,9 @@ async function ensureMigrationsTable(client: pg.Pool | pg.PoolClient): Promise<v
 
 export async function getAppliedVersions(
   client: pg.Pool | pg.PoolClient,
-): Promise<Set<string>> {
+): Promise<Set<number>> {
   await ensureMigrationsTable(client);
-  const result = await client.query<{ version: string }>(
+  const result = await client.query<{ version: number }>(
     `SELECT version FROM schema_migrations ORDER BY version`,
   );
   return new Set(result.rows.map((r) => r.version));
@@ -80,7 +84,7 @@ export async function migrateUp(pool: pg.Pool): Promise<string[]> {
   const appliedNow: string[] = [];
 
   for (const migration of migrations) {
-    if (applied.has(migration.version)) continue;
+    if (applied.has(migrationVersionNumber(migration.version))) continue;
 
     const sql = await readFile(migration.upPath, "utf8");
     const client = await pool.connect();
@@ -89,7 +93,7 @@ export async function migrateUp(pool: pg.Pool): Promise<string[]> {
       await client.query(sql);
       await client.query(
         `INSERT INTO schema_migrations (version, name) VALUES ($1, $2)`,
-        [migration.version, migration.name],
+        [migrationVersionNumber(migration.version), migration.name],
       );
       await client.query("COMMIT");
       appliedNow.push(migration.name);
@@ -118,7 +122,9 @@ export async function migrateUp(pool: pg.Pool): Promise<string[]> {
 export async function migrateDown(pool: pg.Pool): Promise<string | null> {
   const migrations = await listMigrations();
   const applied = await getAppliedVersions(pool);
-  const appliedList = migrations.filter((m) => applied.has(m.version));
+  const appliedList = migrations.filter((m) =>
+    applied.has(migrationVersionNumber(m.version)),
+  );
   const latest = appliedList[appliedList.length - 1];
   if (!latest) return null;
   if (!latest.downPath) {
@@ -131,7 +137,7 @@ export async function migrateDown(pool: pg.Pool): Promise<string | null> {
     await client.query("BEGIN");
     await client.query(sql);
     await client.query(`DELETE FROM schema_migrations WHERE version = $1`, [
-      latest.version,
+      migrationVersionNumber(latest.version),
     ]);
     await client.query("COMMIT");
     logger.info(

@@ -2,6 +2,7 @@
 
 import { Leaf } from "lucide-react";
 import { HeroCard } from "@/components/layout/HeroCard";
+import { LoadingState } from "@/components/ui/LoadingState";
 import { useDashboard } from "@/lib/dashboard-context";
 import {
   DATA_OPTIONAL_VIEWS,
@@ -17,7 +18,11 @@ export function DashboardDataGate({
   view: DashboardView;
   children: React.ReactNode;
 }) {
-  const { hasData, fetchError, refresh } = useDashboard();
+  const { hasData, fetchError, fetching, refresh } = useDashboard();
+
+  if (fetching && !hasData && !DATA_OPTIONAL_VIEWS.includes(view)) {
+    return <LoadingState text="Loading dashboard" variant="skeleton" />;
+  }
 
   if (fetchError) {
     return (

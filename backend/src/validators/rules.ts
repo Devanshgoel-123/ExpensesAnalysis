@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TX_TYPES } from "../enums/index.js";
 
 export const createRuleBodySchema = z
   .object({
@@ -10,7 +11,7 @@ export const createRuleBodySchema = z
     matchMerchantAlias: z.string().max(200).nullable().optional(),
     matchAmountMin: z.coerce.number().nonnegative().nullable().optional(),
     matchAmountMax: z.coerce.number().nonnegative().nullable().optional(),
-    matchType: z.enum(["debit", "credit"]).nullable().optional(),
+    matchType: z.enum(TX_TYPES).nullable().optional(),
     setProviderId: z.string().uuid().nullable().optional(),
     setPayeeName: z.string().max(200).nullable().optional(),
     setCategorySlug: z.string().max(64).nullable().optional(),

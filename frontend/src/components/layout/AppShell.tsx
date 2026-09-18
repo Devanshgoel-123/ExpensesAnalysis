@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { DashboardHeader } from "@/components/layout/DashboardHeader";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { MobileNav } from "@/components/layout/MobileNav";
+import { AppSurfaceBackdrop } from "@/components/effects/AppSurfaceBackdrop";
 import type { DashboardView } from "@/lib/dashboardViews";
 
 interface AppShellProps {
@@ -50,6 +51,7 @@ export function AppShell({
 
   return (
     <div className="app-shell">
+      <AppSurfaceBackdrop offsetSidebar />
       <Sidebar
         open={sidebarOpen}
         current={view}

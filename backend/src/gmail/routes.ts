@@ -6,6 +6,7 @@ import { encryptSecret } from "../crypto/secrets.js";
 import { getStore } from "../db/index.js";
 import { AppError } from "../errors/AppError.js";
 import { validate } from "../middleware/validate.js";
+import { asyncHandler } from "../middleware/asyncHandler.js";
 import {
   enablePoolingBodySchema,
   gmailBackfillBodySchema,
@@ -30,8 +31,19 @@ import {
 import { persistGoogleConnection } from "./service.js";
 
 export const gmailRouter = Router();
-gmailRouter.get("/status", requireAuth, getGmailStatusController);
-gmailRouter.get("/connect", requireAuth, getGmailConnectController);
+
+const PUBLIC_GMAIL_PATHS = new Set(["/callback", "/push"]);
+
+gmailRouter.use((req, res, next) => {
+  if (PUBLIC_GMAIL_PATHS.has(req.path)) {
+    next();
+    return;
+  }
+  requireAuth(req, res, next);
+});
+
+gmailRouter.get("/status", asyncHandler(getGmailStatusController));
+gmailRouter.get("/connect", asyncHandler(getGmailConnectController));
 
 function redirectAuthError(res: Response, message: string): void {
   const url = new URL(config.frontendUrl);
@@ -161,25 +173,23 @@ export async function handleGmailOAuthCallback(
 
 gmailRouter.get("/callback", handleGmailOAuthCallback);
 
-gmailRouter.post("/disconnect", requireAuth, disconnectGmailController);
+gmailRouter.post("/disconnect", asyncHandler(disconnectGmailController));
 
 gmailRouter.post(
   "/backfill",
-  requireAuth,
   validate(gmailBackfillBodySchema),
-  gmailBackfillController,
+  asyncHandler(gmailBackfillController),
 );
 
 gmailRouter.post(
   "/pooling/enable",
-  requireAuth,
   validate(enablePoolingBodySchema),
-  enablePoolingController,
+  asyncHandler(enablePoolingController),
 );
 
-gmailRouter.post("/pooling/disable", requireAuth, disablePoolingController);
+gmailRouter.post("/pooling/disable", asyncHandler(disablePoolingController));
 
-gmailRouter.post("/sync", requireAuth, syncGmailController);
+gmailRouter.post("/sync", asyncHandler(syncGmailController));
 
 /** Pub/Sub push endpoint for Gmail watch notifications. */
 gmailRouter.post("/push", gmailPushController);

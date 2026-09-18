@@ -10,17 +10,11 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
+import type { DashboardView } from "@/enums/dashboard";
+import { DASHBOARD_VIEWS } from "@/enums/dashboard";
 
-export type DashboardView =
-  | "overview"
-  | "insights"
-  | "categories"
-  | "people"
-  | "upi"
-  | "habits"
-  | "transactions"
-  | "import"
-  | "settings";
+export type { DashboardView };
+export { DASHBOARD_VIEWS };
 
 export interface DashboardNavItem {
   id: DashboardView;

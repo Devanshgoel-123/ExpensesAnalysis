@@ -1,4 +1,5 @@
 import http from "node:http";
+import { BACKFILL_DEFAULT_MAX_MESSAGES } from "../constants/index.js";
 import { config } from "../config.js";
 import { closeStore, getStore } from "../db/index.js";
 import { gmailConfigured } from "../gmail/client.js";
@@ -14,6 +15,26 @@ const log = childLogger({ service: "ledgerline-pooling-worker", module: "worker"
 const HOST = config.poolingWorker.host;
 const PORT = config.poolingWorker.port;
 const INTERVAL_MS = config.poolingWorker.intervalMs;
+const TICK_TIMEOUT_MS = Math.min(Math.max(INTERVAL_MS - 5_000, 60_000), 120_000);
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`${label} timed out after ${ms}ms`)),
+      ms,
+    );
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
 
 let pollInFlight = false;
 let lastTickAt: string | null = null;
@@ -88,7 +109,11 @@ async function runTick(source: "boot" | "interval" | "manual"): Promise<{
 
   try {
     await diagnoseBeforeTick();
-    const result = await triggerPoolingDispatcher();
+    const result = await withTimeout(
+      triggerPoolingDispatcher(),
+      TICK_TIMEOUT_MS,
+      "pooling tick",
+    );
     lastTickResult = result;
     log.info(
       { source, tickCount, ...result },
@@ -181,7 +206,10 @@ async function runBackfill(month?: string): Promise<Record<string, unknown>> {
   log.info({ month: month ?? "current" }, "▶ query backfill started");
   try {
     await diagnoseBeforeTick();
-    const result = await runAllPoolingBackfills({ month, maxMessages: 200 });
+    const result = await runAllPoolingBackfills({
+      month,
+      maxMessages: BACKFILL_DEFAULT_MAX_MESSAGES,
+    });
     lastBackfill = { finishedAt: new Date().toISOString(), ...result };
     log.info(
       {

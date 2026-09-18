@@ -1,7 +1,12 @@
 import { z } from "zod";
 
+const optionalBank = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+  z.string().trim().min(1).max(40).optional(),
+);
+
 export const patchAccountBodySchema = z.object({
-  bank: z.string().trim().min(1).max(40).optional(),
+  bank: optionalBank,
   label: z.string().trim().min(1).max(80).optional(),
   statementSenderEmails: z
     .array(z.string().trim().min(1).max(200))

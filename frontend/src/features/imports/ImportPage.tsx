@@ -16,7 +16,7 @@ function resolveStep(loading: boolean, hasData: boolean, error: string | null): 
 }
 
 export function ImportPage() {
-  const { loading, parseError, hasData, parseStatement, refresh, month } =
+  const { loading, parseError, hasData, parseStatement, refresh } =
     useDashboard();
   const step = resolveStep(loading, hasData, parseError);
 
@@ -79,7 +79,7 @@ export function ImportPage() {
       </div>
 
       <LedgerlineFadeContent delay={160}>
-        <BankPoolingPanel onChanged={refresh} defaultMonth={month} />
+        <BankPoolingPanel onChanged={refresh} />
       </LedgerlineFadeContent>
     </div>
   );

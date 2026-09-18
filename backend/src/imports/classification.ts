@@ -4,6 +4,7 @@ import type {
   TransactionRow,
   UserRuleRow,
 } from "../db/types.js";
+import { CategorySlug, ClassificationSource } from "../enums/index.js";
 import {
   applyRules,
   detectFromProviders,
@@ -39,10 +40,10 @@ export function classifyTransaction(
       merchant: providerMatch.merchant ?? defaults.merchant ?? tx.merchant ?? null,
       payee: defaults.payee ?? tx.payee ?? null,
       providerId: providerMatch.providerId ?? defaults.providerId ?? null,
-      categorySlug: providerMatch.categorySlug ?? defaults.categorySlug ?? "other",
+      categorySlug: providerMatch.categorySlug ?? defaults.categorySlug ?? CategorySlug.Other,
       counterparty,
       confidence: defaults.confidence ?? 0.8,
-      classificationSource: "provider_registry",
+      classificationSource: ClassificationSource.ProviderRegistry,
     };
   }
 
@@ -57,13 +58,13 @@ export function classifyTransaction(
       categorySlug: defaults.categorySlug ?? null,
       counterparty: defaults.counterparty ?? null,
       confidence: defaults.confidence ?? 0.5,
-      classificationSource: defaults.classificationSource ?? "parser",
+      classificationSource: defaults.classificationSource ?? ClassificationSource.Parser,
     },
     context.categories,
   );
 
   return {
     ...classification,
-    categorySlug: classification.categorySlug ?? "other",
+    categorySlug: classification.categorySlug ?? CategorySlug.Other,
   };
 }

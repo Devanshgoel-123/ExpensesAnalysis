@@ -3,12 +3,11 @@ import { randomBytes } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { config } from "../config.js";
+import { SESSION_TTL } from "../constants/index.js";
 import { getStore } from "../db/index.js";
 import { AppError } from "../errors/AppError.js";
 
-/** Session JWTs last 7 days, then they are rejected and the client drops them. */
-export const SESSION_TTL = "7d" as const;
-export const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+export { SESSION_TTL, SESSION_TTL_SECONDS } from "../constants/index.js";
 
 export interface AuthUser {
   id: string;

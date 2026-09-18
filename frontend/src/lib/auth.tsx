@@ -8,7 +8,8 @@ import {
   useMemo,
   useState,
 } from "react";
-import { deleteAccount, fetchMe, type AuthUser } from "@/lib/api";
+import { createApiClient } from "@/lib/api/client";
+import type { AuthUser } from "@/lib/api/types";
 
 const TOKEN_KEY = "ledgerline_token";
 const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -118,7 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       persistToken(candidate);
       try {
-        const me = await fetchMe(candidate);
+        const me = await createApiClient(candidate).fetchMe();
         if (cancelled) return;
         setToken(candidate);
         setUser(me);
@@ -151,7 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const destroyAccount = useCallback(async () => {
     if (!token) return;
-    await deleteAccount(token);
+    await createApiClient(token).deleteAccount();
     logout();
   }, [token, logout]);
 

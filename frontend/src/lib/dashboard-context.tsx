@@ -10,9 +10,10 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-import { fetchDashboard, parseStatement } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
-import { currentMonth, monthBounds, monthFromDate } from "@/lib/month";
+import { useApi } from "@/lib/useApi";
+import { currentMonth, monthBounds, monthFromDate, normalizeMonth } from "@/lib/month";
+import { formatPeriodRange } from "@/lib/dates";
+import { formatMonthTitle } from "@/lib/finance";
 import type { AmountBand, DailyInsights, ParseResult } from "@/lib/types";
 import { pathForView } from "@/lib/dashboardViews";
 
@@ -39,6 +40,8 @@ const EMPTY_INSIGHTS: DailyInsights = {
 interface DashboardContextValue {
   data: ParseResult | null;
   loading: boolean;
+  /** True while the dashboard analytics fetch is in flight. */
+  fetching: boolean;
   fetchError: string | null;
   parseError: string | null;
   month: string;
@@ -54,15 +57,21 @@ interface DashboardContextValue {
 
 const DashboardContext = createContext<DashboardContextValue | null>(null);
 
+/** Shared dashboard data, month selection, and import actions for all routes. */
 export function DashboardProvider({ children }: { children: ReactNode }) {
-  const { token } = useAuth();
+  const api = useApi();
   const router = useRouter();
   const [data, setData] = useState<ParseResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [month, setMonth] = useState(currentMonth);
+  const [month, setMonthState] = useState(() => currentMonth());
+
+  const setMonth = useCallback((next: string) => {
+    setMonthState(normalizeMonth(next) ?? currentMonth());
+  }, []);
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
   const range = useMemo(() => monthBounds(month), [month]);
@@ -70,14 +79,15 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     void Promise.resolve().then(async () => {
-      if (!token || cancelled) return;
+      if (!api || cancelled) return;
       setFetchError(null);
+      setFetching(true);
       try {
-        const result = await fetchDashboard(token, range);
+        const result = await api.fetchDashboard(range);
         if (cancelled) return;
 
         if (result.transactions.length === 0) {
-          const all = await fetchDashboard(token);
+          const all = await api.fetchDashboard();
           if (cancelled) return;
           const latestMonth = monthFromDate(all.summary.dateTo);
           if (
@@ -100,20 +110,22 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             err instanceof Error ? err.message : "Could not load dashboard",
           );
         }
+      } finally {
+        if (!cancelled) setFetching(false);
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [token, refreshKey, range, month]);
+  }, [api, refreshKey, range, month, setMonth]);
 
   const handleParse = useCallback(
     async (file: File, password: string) => {
-      if (!token) return;
+      if (!api) return;
       setLoading(true);
       setParseError(null);
       try {
-        const result = await parseStatement(file, password, token);
+        const result = await api.parseStatement(file, password);
         const parsedMonth = monthFromDate(result.summary.dateTo);
         if (parsedMonth) setMonth(parsedMonth);
         setData(result);
@@ -124,7 +136,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }
     },
-    [token, router],
+    [api, router, setMonth],
   );
 
   const goToImport = useCallback(() => {
@@ -133,13 +145,14 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const periodLabel =
     data?.summary.dateFrom && data?.summary.dateTo
-      ? `${data.summary.dateFrom} → ${data.summary.dateTo}`
-      : `Month ${month}`;
+      ? formatPeriodRange(data.summary.dateFrom, data.summary.dateTo)
+      : formatMonthTitle(month);
 
   const value = useMemo(
     (): DashboardContextValue => ({
       data,
       loading,
+      fetching,
       fetchError,
       parseError,
       month,
@@ -155,9 +168,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     [
       data,
       loading,
+      fetching,
       fetchError,
       parseError,
       month,
+      setMonth,
       refresh,
       periodLabel,
       goToImport,
@@ -170,6 +185,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/** Access dashboard state from any page under `(dashboard)`. */
 export function useDashboard(): DashboardContextValue {
   const ctx = useContext(DashboardContext);
   if (!ctx) {
