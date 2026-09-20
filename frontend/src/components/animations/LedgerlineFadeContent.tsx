@@ -1,22 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { cn } from "@/lib/cn";
+import { cn } from "@/helpers/cn";
 
 interface LedgerlineFadeContentProps {
   children: ReactNode;
   className?: string;
-  /** Delay before reveal in ms */
   delay?: number;
-  /** Slide distance in px */
   distance?: number;
 }
 
-/**
- * Threshold-based fade/slide reveal inspired by React Bits Fade Content.
- * Respects prefers-reduced-motion.
- * @see docs/react-bits.md
- */
 export function LedgerlineFadeContent({
   children,
   className,

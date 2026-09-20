@@ -15,7 +15,7 @@ interface GmailBackfillButtonProps {
   connected?: boolean;
   className?: string;
   variant?: "primary" | "ghost";
-  onComplete?: () => void;
+  onComplete?: (imported?: number) => void;
 }
 
 function formatCutoffLabel(isoDate: string): string {
@@ -80,6 +80,7 @@ export function GmailBackfillButton({
         : null;
 
   async function handleBackfill() {
+    if (!api) return;
     setBusy(true);
     setError(null);
     setMessage(null);
@@ -100,7 +101,7 @@ export function GmailBackfillButton({
         );
       }
       refresh();
-      onComplete?.();
+      onComplete?.(imported);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Backfill failed");
     } finally {

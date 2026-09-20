@@ -2,8 +2,8 @@
 
 import { ActivityHeatmap } from "@/components/ActivityHeatmap";
 import { Panel, PanelHead } from "@/components/ui/Panel";
-import { dailySpendMap } from "@/lib/finance";
-import type { DailySpend } from "@/lib/types";
+import { dailySpendMap } from "@/helpers/finance";
+import type { DailySpend } from "@/types";
 
 export interface SpendingHeatmapProps {
   daily: DailySpend[];

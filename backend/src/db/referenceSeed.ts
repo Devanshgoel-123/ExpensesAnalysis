@@ -3,7 +3,6 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CategoryMeta } from "./types.js";
 import type { MemoryStore } from "./memory.js";
-import type { Store } from "./types.js";
 
 const MIGRATION_SQL = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -114,11 +113,5 @@ export async function seedMemoryReferenceData(store: MemoryStore): Promise<void>
       categorySlug: "food",
       isGlobal: true,
     });
-  }
-}
-
-export async function ensureReferenceData(store: Store): Promise<void> {
-  if (store instanceof (await import("./memory.js")).MemoryStore) {
-    await seedMemoryReferenceData(store);
   }
 }

@@ -2,8 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import type { CategorySummary, Transaction } from "@/lib/types";
-import { formatInrExact, formatShortDate } from "@/lib/api";
+import type { CategorySummary, Transaction } from "@/types";
+import { formatInrExact } from "@/helpers/currency";
+import { formatShortDate } from "@/helpers/dates";
+
 import { BrandMark } from "@/components/BrandMark";
 import { SpotlightCard } from "@/components/SpotlightCard";
 

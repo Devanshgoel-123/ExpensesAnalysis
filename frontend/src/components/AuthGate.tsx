@@ -5,7 +5,7 @@ import { LoginPage } from "@/components/LoginPage";
 import { useAuth } from "@/lib/auth";
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
-  const { user, loading, authError } = useAuth();
+  const { user, loading, authError, clearAuthError } = useAuth();
 
   if (loading) {
     return <LoginLoading />;
@@ -13,5 +13,5 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (user) return <>{children}</>;
 
-  return <LoginPage authError={authError} />;
+  return <LoginPage authError={authError} onContinue={clearAuthError} />;
 }

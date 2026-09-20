@@ -1,6 +1,5 @@
 import type {
   AccountRow,
-  CategoryMeta,
   GmailConnectionRow,
   ImportRow,
   MailMessageRow,
@@ -12,10 +11,6 @@ import type {
   TransactionRow,
 } from "../types.js";
 import { ClassificationSource } from "../../enums/index.js";
-
-export function mapCategoryMeta(row: Record<string, unknown>): CategoryMeta {
-  return (row.meta as CategoryMeta | null) ?? {};
-}
 
 export function mapAccount(row: Record<string, unknown>): AccountRow {
   return {

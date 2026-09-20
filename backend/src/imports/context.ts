@@ -1,9 +1,5 @@
 import { getStore } from "../db/index.js";
-import type {
-  CategoryRow,
-  ProviderRow,
-  UserRuleRow,
-} from "../db/types.js";
+import type { UserRuleRow } from "../db/types.js";
 import type { ClassificationContext } from "./classification.js";
 
 export async function loadClassificationContext(
@@ -27,9 +23,3 @@ export function buildTrackedPayees(rules: UserRuleRow[]): string[] {
     ),
   ];
 }
-
-export type AnalyticsContext = {
-  providers: ProviderRow[];
-  categories: CategoryRow[];
-  rules: UserRuleRow[];
-};

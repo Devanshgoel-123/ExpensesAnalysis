@@ -1,8 +1,8 @@
 "use client";
 
 import { motion } from "framer-motion";
-import type { DailyInsights, Summary } from "@/lib/types";
-import { formatInr } from "@/lib/api";
+import type { DailyInsights, Summary } from "@/types";
+import { formatInr } from "@/helpers/currency";
 import { LedgerlineCountUp } from "@/components/animations/LedgerlineCountUp";
 import { SpotlightCard } from "@/components/SpotlightCard";
 import { fadeUp, stagger } from "@/lib/motion";

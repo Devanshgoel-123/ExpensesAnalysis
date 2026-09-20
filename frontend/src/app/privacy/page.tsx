@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { GlowBackdrop } from "@/components/GlowBackdrop";
+import { AppSurfaceBackdrop } from "@/components/effects/AppSurfaceBackdrop";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteNav } from "@/components/SiteNav";
 
@@ -47,7 +47,7 @@ const SECTIONS = [
 export default function PrivacyPage() {
   return (
     <main className="shell privacy-page">
-      <GlowBackdrop />
+      <AppSurfaceBackdrop />
       <SiteNav />
       <article className="legal-doc">
         <header className="arch-hero">

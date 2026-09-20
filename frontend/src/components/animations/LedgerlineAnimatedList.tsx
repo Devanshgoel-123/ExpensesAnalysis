@@ -2,7 +2,7 @@
 
 import { type ReactNode } from "react";
 import { motion } from "framer-motion";
-import { cn } from "@/lib/cn";
+import { cn } from "@/helpers/cn";
 
 interface LedgerlineAnimatedListProps<T> {
   items: T[];
@@ -11,10 +11,6 @@ interface LedgerlineAnimatedListProps<T> {
   className?: string;
 }
 
-/**
- * Staggered list entrance inspired by React Bits Animated List.
- * @see docs/react-bits.md
- */
 export function LedgerlineAnimatedList<T>({
   items,
   renderItem,

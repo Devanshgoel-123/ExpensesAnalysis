@@ -1,4 +1,3 @@
-import type multer from "multer";
 import { AppError } from "../errors/AppError.js";
 
 export function assertPdfUpload(
@@ -23,12 +22,4 @@ export function mapPdfImportError(error: unknown): never {
     throw AppError.badRequest(message);
   }
   throw AppError.internal(`Failed to parse PDF: ${message}`, error);
-}
-
-export function mapMulterError(error: multer.MulterError): AppError {
-  const message =
-    error.code === "LIMIT_FILE_SIZE" ? "File too large (max 25MB)" : error.message;
-  return new AppError(message, {
-    statusCode: error.code === "LIMIT_FILE_SIZE" ? 413 : 400,
-  });
 }

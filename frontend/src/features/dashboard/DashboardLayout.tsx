@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AuthGate } from "@/components/AuthGate";
 import { AppShell } from "@/components/layout/AppShell";
 import { DashboardProvider, useDashboard } from "@/lib/dashboard-context";
-import { currentMonth } from "@/lib/month";
+import { currentMonth } from "@/helpers/month";
 import {
+  DATA_OPTIONAL_VIEWS,
   pathForView,
   viewFromPath,
   type DashboardView,
@@ -21,19 +22,34 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     month,
     setMonth,
     periodLabel,
-    hasData,
+    hasAnyData,
+    hasMonthData,
     refresh,
     goToImport,
     fetchError,
+    importStatus,
+    fetching,
   } = useDashboard();
 
   const view = viewFromPath(pathname) ?? "overview";
 
+  // First-run: keep empty accounts on Import (and Settings / Daily Limit).
+  useEffect(() => {
+    if (fetching && importStatus === null) return;
+    if (hasAnyData) return;
+    if (DATA_OPTIONAL_VIEWS.includes(view)) return;
+    router.replace(pathForView("import"));
+  }, [fetching, importStatus, hasAnyData, view, router]);
+
   const navigate = useCallback(
     (next: DashboardView) => {
+      if (!hasAnyData && !DATA_OPTIONAL_VIEWS.includes(next)) {
+        router.push(pathForView("import"));
+        return;
+      }
       router.push(pathForView(next));
     },
-    [router],
+    [router, hasAnyData],
   );
 
   const monthControl = (
@@ -53,9 +69,10 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       onNavigate={navigate}
       periodLabel={periodLabel}
       monthControl={monthControl}
-      hasData={hasData}
+      hasData={hasMonthData}
+      hasAnyData={hasAnyData}
       userEmail={user?.email}
-      fetchError={fetchError}
+      fetchError={DATA_OPTIONAL_VIEWS.includes(view) ? fetchError : null}
       onImportAnother={goToImport}
       onRefresh={refresh}
       onLogout={logout}

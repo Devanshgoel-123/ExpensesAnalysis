@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useApi } from "@/lib/useApi";
 import type { BankPreset, AccountSummary, GmailStatus } from "@/lib/api/types";
-import { formatTimestamp } from "@/lib/month";
+import { formatTimestamp } from "@/helpers/month";
 import { SpotlightCard } from "@/components/SpotlightCard";
 import { GmailBackfillButton } from "@/components/gmail/GmailBackfillButton";
 import {
@@ -18,12 +18,13 @@ function poolingScanMessage(
     backfill: { scanned: number; imported: number; skipped: number };
   },
   alreadyOn: boolean,
-): { ok: boolean; text: string } {
+): { ok: boolean; text: string; imported: number } {
   const scanned = result.alerts.scanned + result.statements.scanned;
   const imported = result.alerts.imported + result.statements.imported;
   if (scanned === 0) {
     return {
       ok: false,
+      imported: 0,
       text: alreadyOn
         ? `Pooling is already on, but Gmail matched 0 bank emails from ${POOLING_EARLIEST_LABEL}. Confirm senders (hdfcbank.net), then click Backfill.`
         : `Pooling is now on, but Gmail matched 0 bank emails from ${POOLING_EARLIEST_LABEL}. Confirm senders (hdfcbank.net), then click Backfill.`,
@@ -31,6 +32,7 @@ function poolingScanMessage(
   }
   return {
     ok: true,
+    imported,
     text: `Pooling ${alreadyOn ? "rescanned" : "active"} from ${POOLING_EARLIEST_LABEL}, 00:00 IST — alerts +${result.alerts.imported}, PDF +${result.statements.imported} (${imported} imported from ${scanned} mail).`,
   };
 }
@@ -54,8 +56,15 @@ function healthLabel(health: string | undefined): string {
 
 export function BankPoolingPanel({
   onChanged,
+  onImported,
+  onScanningChange,
+  onGmailStatus,
 }: {
   onChanged?: () => void;
+  /** Called after a scan finishes with the imported count (0 stays on Import). */
+  onImported?: (imported: number) => void;
+  onScanningChange?: (scanning: boolean) => void;
+  onGmailStatus?: (status: GmailStatus | null) => void;
 }) {
   const api = useApi();
   const [presets, setPresets] = useState<BankPreset[]>([]);
@@ -68,6 +77,14 @@ export function BankPoolingPanel({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const applyGmail = useCallback(
+    (next: GmailStatus | null) => {
+      setGmail(next);
+      onGmailStatus?.(next);
+    },
+    [onGmailStatus],
+  );
+
   const refresh = useCallback(async () => {
     if (!api) return;
     try {
@@ -76,25 +93,25 @@ export function BankPoolingPanel({
         api.fetchAccounts().catch(() => ({ accounts: [] as AccountSummary[] })),
         api.gmailStatus().catch(() => null),
       ]);
-    setPresets(presetRes.presets);
-    setAccounts(accountRes.accounts);
-    setGmail(gmailRes);
-    const primary =
-      accountRes.accounts.find((a) => a.poolingEnabled) ??
-      accountRes.accounts[0];
-    if (primary) {
-      setBank(primary.bank);
-      setSendersText(primary.statementSenderEmails.join(", "));
-    } else if (presetRes.presets[0]) {
-      const defaultPreset =
-        presetRes.presets.find((p) => p.pdfAdapterReady) ?? presetRes.presets[0];
-      setBank(defaultPreset.id);
-      setSendersText(defaultPreset.defaultSenderEmails.join(", "));
-    }
+      setPresets(presetRes.presets);
+      setAccounts(accountRes.accounts);
+      applyGmail(gmailRes);
+      const primary =
+        accountRes.accounts.find((a) => a.poolingEnabled) ??
+        accountRes.accounts[0];
+      if (primary) {
+        setBank(primary.bank);
+        setSendersText(primary.statementSenderEmails.join(", "));
+      } else if (presetRes.presets[0]) {
+        const defaultPreset =
+          presetRes.presets.find((p) => p.pdfAdapterReady) ?? presetRes.presets[0];
+        setBank(defaultPreset.id);
+        setSendersText(defaultPreset.defaultSenderEmails.join(", "));
+      }
     } catch {
       setError("Could not load bank setup. Refresh the page and try again.");
     }
-  }, [api]);
+  }, [api, applyGmail]);
 
   useEffect(() => {
     let cancelled = false;
@@ -107,14 +124,34 @@ export function BankPoolingPanel({
     };
   }, [api, refresh]);
 
-  // Poll status while a run is active so the monitor stays live.
+  // Poll status while a run is active; also refresh dashboard.
   useEffect(() => {
     if (!api || gmail?.latestRun?.status !== "running") return;
+    onScanningChange?.(true);
     const id = window.setInterval(() => {
       void refresh();
+      onChanged?.();
     }, 4000);
-    return () => window.clearInterval(id);
-  }, [api, gmail?.latestRun?.status, refresh]);
+    return () => {
+      window.clearInterval(id);
+      onScanningChange?.(false);
+    };
+  }, [api, gmail?.latestRun?.status, refresh, onChanged, onScanningChange]);
+
+  // Refresh dashboard when returning to the tab if pooling is on.
+  useEffect(() => {
+    if (!gmail?.poolingEnabled) return;
+    function onFocus() {
+      onChanged?.();
+      void refresh();
+    }
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [gmail?.poolingEnabled, onChanged, refresh]);
+
+  useEffect(() => {
+    onScanningChange?.(busy);
+  }, [busy, onScanningChange]);
 
   if (!api) return null;
 
@@ -193,13 +230,14 @@ export function BankPoolingPanel({
             "Gmail OAuth is not configured on the API. Set GOOGLE_CLIENT_ID / SECRET.",
           );
         }
+        setMessage("Redirecting to Google to connect Gmail…");
         const { url } = await client.gmailConnectUrl();
         window.location.href = url;
         return;
       }
 
-      setGmail((prev) =>
-        prev ? { ...prev, poolingEnabled: true } : prev,
+      applyGmail(
+        gmail ? { ...gmail, poolingEnabled: true } : gmail,
       );
 
       const result = await client.enablePooling({
@@ -211,6 +249,7 @@ export function BankPoolingPanel({
       else setError(outcome.text);
       await refresh();
       onChanged?.();
+      onImported?.(outcome.imported);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not enable pooling");
     } finally {
@@ -229,6 +268,7 @@ export function BankPoolingPanel({
       );
       await refresh();
       onChanged?.();
+      onImported?.(result.run.imported);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sync failed");
     } finally {
@@ -262,6 +302,16 @@ export function BankPoolingPanel({
           are a secondary backfill. An hourly dispatcher keeps pooling alive.
         </p>
       </header>
+
+      {busy ? (
+        <p className="meta" style={{ marginBottom: "0.85rem" }} role="status">
+          {gmail?.poolingEnabled
+            ? "Scanning bank mail… please wait."
+            : gmail?.connected
+              ? "Enabling pooling and scanning…"
+              : "Preparing Gmail connection…"}
+        </p>
+      ) : null}
 
       <section
         className="settings-section"
@@ -363,9 +413,10 @@ export function BankPoolingPanel({
         <div className="sort-bar">
           <GmailBackfillButton
             connected={gmail ? gmail.connected : undefined}
-            onComplete={() => {
+            onComplete={(imported) => {
               void refresh();
               onChanged?.();
+              if (typeof imported === "number") onImported?.(imported);
             }}
           />
           <button

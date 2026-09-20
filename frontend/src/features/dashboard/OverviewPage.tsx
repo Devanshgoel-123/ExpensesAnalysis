@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useDashboard } from "@/lib/dashboard-context";
-import { formatMonthTitle, aggregateMonthlySpend, buildCategorySpendRows } from "@/lib/finance";
+import { formatMonthTitle, aggregateMonthlySpend, buildCategorySpendRows } from "@/helpers/finance";
 import { pathForView } from "@/lib/dashboardViews";
-import { formatInr } from "@/lib/api";
+import { formatInr } from "@/helpers/currency";
+
 import { StatsRow } from "@/components/StatsRow";
 import { GmailBackfillButton } from "@/components/gmail/GmailBackfillButton";
 import { DailySpendChart } from "@/components/charts/DailySpendChart";

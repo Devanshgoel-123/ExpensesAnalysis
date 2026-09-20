@@ -66,3 +66,9 @@ export type GmailBackfillResult = {
 };
 
 export type ParseStatementResult = ParseResult & { importId?: string };
+
+export type ImportStatus = {
+  hasTransactions: boolean;
+  latestMonth: string | null;
+  transactionCount: number;
+};

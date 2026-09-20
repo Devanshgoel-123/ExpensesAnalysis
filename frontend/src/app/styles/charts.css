@@ -1,0 +1,194 @@
+/* ── Charts ── */
+.bar-chart {
+  position: relative;
+  height: 280px;
+}
+
+.bar-chart-plot {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.35rem;
+  height: 100%;
+  padding-bottom: 1.6rem;
+}
+
+.bar-col {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  cursor: crosshair;
+}
+
+.bar-fill {
+  width: 70%;
+  max-width: 36px;
+  border-radius: 3px 3px 1px 1px;
+  background: var(--primary);
+  opacity: 0.88;
+}
+
+.bar-fill.over-limit {
+  background: var(--danger);
+  opacity: 0.85;
+}
+
+.bar-fill.today {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+.bar-label.over-limit {
+  color: var(--danger);
+}
+
+.limit-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed color-mix(in srgb, var(--danger) 70%, transparent);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.over-limit-text {
+  color: var(--danger);
+}
+
+.over-limit-row .upi-rank.over {
+  color: var(--danger);
+}
+
+.bar-col:hover .bar-fill {
+  filter: brightness(1.08);
+}
+
+.bar-label {
+  position: absolute;
+  bottom: 0;
+  font-size: 0.65rem;
+  color: var(--muted-2);
+  white-space: nowrap;
+}
+
+.bar-label.ghost {
+  opacity: 0;
+}
+
+.chart-tooltip {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  min-width: 110px;
+  padding: 0.65rem 0.75rem;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+}
+
+.chart-tooltip .meta {
+  margin-bottom: 0.2rem;
+}
+
+/* Heatmap */
+.heatmap-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.heat-cell {
+  display: block;
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--bg-muted);
+  border: 1px solid transparent;
+  transition: background var(--ease), transform var(--ease);
+}
+
+.heat-cell.level-1 {
+  background: color-mix(in srgb, var(--primary) 28%, var(--bg-muted));
+}
+
+.heat-cell.level-2 {
+  background: color-mix(in srgb, var(--primary) 48%, var(--bg-muted));
+}
+
+.heat-cell.level-3 {
+  background: color-mix(in srgb, var(--primary) 70%, transparent);
+}
+
+.heat-cell.level-4 {
+  background: var(--primary);
+}
+
+.heatmap-grid .heat-cell:hover {
+  transform: scale(1.15);
+}
+
+.heatmap-footer {
+  margin-top: 0.7rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.heatmap-scale {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.band-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.9rem 1rem;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.band-stats.health {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.band-stats strong {
+  display: block;
+  margin-top: 0.2rem;
+}
+
+.health-hero {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.health-metric {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-muted);
+}
+
+.health-metric .display-num {
+  margin: 0.35rem 0 0.2rem;
+}
+
+.health-metric.delta-up .display-num {
+  color: var(--danger);
+}
+
+.health-metric.delta-down .display-num {
+  color: var(--success);
+}

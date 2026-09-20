@@ -6,7 +6,7 @@ import { logger } from "../logger/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-export interface MigrationFile {
+interface MigrationFile {
   version: string;
   name: string;
   upPath: string;
@@ -30,7 +30,7 @@ async function resolveMigrationsDir(): Promise<string> {
   throw new Error("Could not find db/migrations directory");
 }
 
-export async function listMigrations(): Promise<MigrationFile[]> {
+async function listMigrations(): Promise<MigrationFile[]> {
   const dir = await resolveMigrationsDir();
   const files = await readdir(dir);
   const ups = files

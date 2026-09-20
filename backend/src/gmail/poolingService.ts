@@ -29,7 +29,6 @@ import {
   currentMonth,
   gmailFromClause,
   isOnOrAfterPoolingCutoff,
-  monthBounds,
   poolingDateWindow,
   statementScanBudget,
   toGmailQueryAfter,
@@ -47,14 +46,7 @@ import {
   syncHistory,
 } from "./client.js";
 
-export {
-  POOLING_EARLIEST_DATE,
-  currentMonth,
-  monthBounds,
-  poolingDateWindow,
-  statementScanBudget,
-};
-export type { PoolingBounds } from "../types/index.js";
+export { poolingDateWindow };
 
 /** Statement PDF mail — handled by the secondary statement path, not alert storage. */
 function isStatementLikeEmail(subject: string, snippet: string): boolean {

@@ -25,8 +25,7 @@ export const logger = pino({
     ],
     censor: "[Redacted]",
   },
-  ...(config.env === "development" &&
-  config.logPretty
+  ...(config.logPretty
     ? {
         transport: {
           target: "pino-pretty",

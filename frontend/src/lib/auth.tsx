@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { createApiClient } from "@/lib/api/client";
+import { SESSION_EXPIRED_EVENT } from "@/lib/api/http";
 import type { AuthUser } from "@/lib/api/types";
 
 const TOKEN_KEY = "ledgerline_token";
@@ -19,6 +20,7 @@ interface AuthContextValue {
   token: string | null;
   loading: boolean;
   authError: string | null;
+  clearAuthError: () => void;
   logout: () => void;
   destroyAccount: () => Promise<void>;
 }
@@ -103,6 +105,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
+  const clearAuthError = useCallback(() => {
+    setAuthError(null);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     void Promise.resolve().then(async () => {
@@ -140,6 +146,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    function onExpired() {
+      logout();
+      setAuthError("Session expired — sign in again.");
+    }
+    window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
+  }, [logout]);
+
+  useEffect(() => {
     if (!token) return;
     const until = sessionValidUntil(token);
     if (!until) {
@@ -162,10 +177,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       token,
       loading,
       authError,
+      clearAuthError,
       logout,
       destroyAccount,
     }),
-    [user, token, loading, authError, logout, destroyAccount],
+    [user, token, loading, authError, clearAuthError, logout, destroyAccount],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

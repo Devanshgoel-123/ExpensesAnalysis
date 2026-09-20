@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { cn } from "@/lib/cn";
+import { cn } from "@/helpers/cn";
 
 const LightTunnelBackdrop = dynamic(
   () =>

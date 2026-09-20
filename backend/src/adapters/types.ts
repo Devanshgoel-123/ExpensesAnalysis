@@ -1,4 +1,4 @@
-import type { Transaction } from "../types.js";
+import type { Transaction } from "../types/index.js";
 
 export interface BankAdapter {
   id: string;

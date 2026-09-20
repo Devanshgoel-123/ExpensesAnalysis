@@ -1,5 +1,5 @@
-import type { ParseResult } from "../types";
-import { normalizeMonth } from "../month";
+import type { ParseResult } from "@/types";
+import { normalizeMonth } from "@/helpers/month";
 import { requestJson, requestVoid } from "./http";
 import type {
   AccountSummary,
@@ -48,6 +48,10 @@ export function createApiClient(token: string) {
         auth,
       );
     },
+
+    /** Lightweight bootstrap — whether the account has any transactions. */
+    fetchImportStatus: (): Promise<import("./types").ImportStatus> =>
+      requestJson<import("./types").ImportStatus>("/api/imports/status", auth),
 
     fetchBankPresets: () =>
       requestJson<{ presets: import("./types").BankPreset[]; notice: string }>(
@@ -135,25 +139,6 @@ export function createApiClient(token: string) {
         suggestions: Array<{ label: string; count: number; sample: string }>;
       }>("/api/rules/suggestions", auth),
 
-    correctTransaction: (id: string, body: Record<string, unknown>) =>
-      requestJson<Record<string, unknown>>(`/api/imports/transactions/${id}`, {
-        method: "PATCH",
-        ...auth,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }),
-
-    listProviders: () =>
-      requestJson<{
-        providers: Array<{
-          id: string;
-          canonicalName: string;
-          logoUrl: string | null;
-          websiteDomain: string | null;
-          categorySlug: string | null;
-        }>;
-      }>("/api/providers", auth),
-
     fetchPreferences: () =>
       requestJson<{ dailySpendLimit: number | null }>("/api/preferences", auth),
 
@@ -169,19 +154,7 @@ export function createApiClient(token: string) {
 
     gmailConnectUrl: () =>
       requestJson<{ url: string }>("/api/gmail/connect", auth),
-
-    gmailDisconnect: () =>
-      requestVoid("/api/gmail/disconnect", { method: "POST", ...auth }),
   };
 }
 
 export type ApiClient = ReturnType<typeof createApiClient>;
-
-/** @deprecated Use `createApiClient(token).parseStatement` — kept for legacy imports. */
-export async function parseStatement(
-  file: File,
-  password: string,
-  token: string,
-): Promise<ParseStatementResult> {
-  return createApiClient(token).parseStatement(file, password);
-}

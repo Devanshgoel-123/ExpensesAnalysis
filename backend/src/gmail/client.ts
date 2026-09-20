@@ -143,8 +143,7 @@ export function buildAlertQuery(
   return parts.join(" ");
 }
 
-/** @deprecated Prefer buildStatementQuery with account senders. */
-export const STATEMENT_QUERY = buildStatementQuery([...DEFAULT_HDFC_SENDERS]);
+const STATEMENT_QUERY = buildStatementQuery([...DEFAULT_HDFC_SENDERS]);
 
 export async function listStatementMessageIds(
   connection: GmailConnectionRow,

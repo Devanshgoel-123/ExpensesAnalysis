@@ -1,0 +1,153 @@
+/* ── Responsive & motion-preference overrides ── */
+@media (min-width: 1024px) {
+  .app-sidebar {
+    transform: translateX(0);
+  }
+
+  .sidebar-backdrop,
+  .sidebar-close,
+  .app-header .menu-btn {
+    display: none;
+  }
+
+  .app-main {
+    margin-left: var(--sidebar-width);
+    padding: 1.5rem 2rem 3rem;
+  }
+
+  .mobile-nav {
+    display: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .spin {
+    animation: none !important;
+  }
+}
+
+@media (max-width: 1023px) {
+  .mobile-nav {
+    display: flex;
+  }
+}
+
+@media (max-width: 900px) {
+  .login-frame {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    max-width: 28rem;
+  }
+
+  .login-preview {
+    max-width: 100%;
+  }
+
+  .login-headline {
+    font-size: 2.1rem;
+  }
+
+  .login-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-row,
+  .stats-row.hero-metrics,
+  .grid-main,
+  .merchant-grid,
+  .category-grid,
+  .import-paths,
+  .health-hero,
+  .metric-support-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .txn-head {
+    flex-direction: column;
+  }
+
+  .sort-bar {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .shell {
+    width: calc(100% - 1.5rem);
+    margin: 0 auto;
+    padding: 1.25rem 0 3rem;
+  }
+
+  .login-screen {
+    padding: 1rem;
+    align-items: flex-start;
+    padding-top: 2rem;
+  }
+
+  .landing {
+    text-align: left;
+    padding-top: 1.5rem;
+  }
+
+  .stats-row,
+  .stats-row.hero-metrics,
+  .grid-main,
+  .merchant-grid,
+  .category-grid,
+  .import-paths,
+  .health-hero,
+  .metric-support-grid,
+  .band-stats,
+  .band-stats.health {
+    grid-template-columns: 1fr;
+  }
+
+  .dash-top,
+  .app-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .header-search {
+    display: inline-flex;
+    max-width: none;
+    width: 100%;
+  }
+
+  .app-header-actions {
+    justify-content: flex-start;
+  }
+
+  .display-num {
+    font-size: 1.65rem;
+  }
+
+  .display-num.lg {
+    font-size: 2.2rem;
+  }
+
+  td.desc {
+    max-width: 150px;
+  }
+
+  .table-scroll {
+    display: none;
+  }
+
+  .txn-cards {
+    display: grid;
+  }
+
+  .sidebar-link-copy .meta {
+    display: none;
+  }
+}

@@ -1,0 +1,181 @@
+/* ── Surfaces ── */
+.spotlight-card,
+.panel,
+.stat,
+.merchant-card,
+.category-card,
+.payee-card {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  transition:
+    border-color var(--ease),
+    box-shadow var(--ease),
+    background var(--ease),
+    transform var(--ease);
+}
+
+.spotlight-card:hover,
+.panel:hover,
+.stat:hover,
+.merchant-card:hover,
+.category-card:hover,
+.payee-card:hover {
+  border-color: var(--border-strong);
+  box-shadow:
+    var(--shadow-card),
+    0 0 0 1px color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.spotlight-glow {
+  display: none;
+}
+
+.panel {
+  padding: 1.35rem 1.45rem 1.5rem;
+  margin-bottom: 0;
+}
+
+.stat {
+  padding: 1.2rem 1.25rem;
+}
+
+.stat-kicker {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.stat .display-num {
+  display: block;
+  margin: 0.55rem 0 0.3rem;
+}
+
+/* Soft neon pulse for CTAs / active signals */
+@keyframes soft-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--glow);
+  }
+  50% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+}
+
+.animate-soft-pulse {
+  animation: soft-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes loading-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+.loading-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  display: inline-block;
+  animation: loading-dot 1s ease-in-out infinite;
+}
+
+.loading-matter-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: min(280px, 90vw);
+  min-height: 200px;
+  padding: 2rem 2.5rem;
+  border-radius: 1rem;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: #0a0c0b;
+  box-shadow: var(--shadow-card);
+  color: var(--foreground);
+  font-size: 0.9375rem;
+}
+
+[data-theme="light"] .loading-matter-panel {
+  background: #0a0c0b;
+  color: #e9efea;
+}
+
+.loading-panel-wrap {
+  display: flex;
+  width: 100%;
+  min-height: min(50vh, calc(100dvh - 6rem));
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg) 40%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.skeleton {
+  border-radius: var(--radius);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--surface-elevated) 70%, transparent) 0%,
+    color-mix(in srgb, var(--primary) 8%, var(--surface-elevated)) 50%,
+    color-mix(in srgb, var(--surface-elevated) 70%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  border: 1px solid var(--border);
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.skeleton-hero {
+  height: 4.5rem;
+}
+
+.skeleton-metric {
+  min-height: 9rem;
+}
+
+.skeleton-stat {
+  min-height: 5.5rem;
+}
+
+.skeleton-chart {
+  min-height: 16rem;
+}
+
+/* ── Surface glow handled by AppSurfaceBackdrop ── */
+.glow-backdrop {
+  display: none;
+}

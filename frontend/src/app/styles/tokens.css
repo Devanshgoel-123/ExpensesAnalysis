@@ -1,0 +1,109 @@
+/* ── Tailwind theme bridge ── */
+@theme {
+  --color-bg: var(--bg);
+  --color-bg-muted: var(--bg-muted);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-border: var(--border);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
+  --radius-lg: var(--radius-lg);
+  --radius-md: var(--radius);
+  --radius-sm: var(--radius-sm);
+}
+
+/* ── Ledgerline semantic tokens ── */
+:root,
+[data-theme="light"] {
+  --bg: #f5f8f6;
+  --bg-muted: #eef2ee;
+  --surface: #ffffff;
+  --surface-elevated: #ffffff;
+  --foreground: #0e1611;
+  --muted: #5c665d;
+  --muted-2: #8a9288;
+  --border: rgb(9 20 12 / 9%);
+  --border-strong: rgb(9 20 12 / 16%);
+  --primary: #17b061;
+  --primary-hover: #0d5a31;
+  --primary-soft: rgba(23, 176, 97, 0.12);
+  --primary-foreground: #ffffff;
+  --success: #17b061;
+  --success-soft: rgba(23, 176, 97, 0.12);
+  --warning: #b57b16;
+  --warning-soft: rgba(181, 123, 22, 0.12);
+  --danger: #d5493f;
+  --danger-soft: rgba(213, 73, 63, 0.1);
+  --info: #0f5f73;
+  --info-soft: rgba(15, 95, 115, 0.12);
+  --credit: #17b061;
+  --debit: #d5493f;
+  --chart-1: #17b061;
+  --chart-2: #0d5a31;
+  --chart-3: #7fe6a6;
+  --chart-4: #b57b16;
+  --chart-5: #5c665d;
+  --chart-grid: rgba(14, 22, 17, 0.08);
+  --cat-food: #17b061;
+  --cat-shopping: #0f5f73;
+  --cat-travel: #2f6b8a;
+  --cat-outing: #5b6b4f;
+  --cat-investments: #0d5a31;
+  --cat-cigarettes: #8a6a3d;
+  --cat-other: #6b7368;
+  --shadow-sm: 0 1px 2px rgba(9, 20, 12, 0.04);
+  --shadow-md: 0 12px 32px rgba(9, 20, 12, 0.06);
+  --shadow-card: 0 1px 3px rgba(9, 20, 12, 0.04), 0 12px 32px rgba(9, 20, 12, 0.05);
+  --glow: rgb(23 176 97 / 0.18);
+  --surface-glow: radial-gradient(
+      700px 280px at 6% -8%,
+      rgb(23 176 97 / 0.08),
+      transparent 55%
+    ),
+    radial-gradient(
+      520px 240px at 94% 0%,
+      rgb(245 248 246 / 0.8),
+      transparent 50%
+    );
+  --ring: rgba(23, 176, 97, 0.35);
+  --sidebar-bg: #ffffff;
+  --sidebar-active: #17b061;
+  --header-bg: rgba(255, 255, 255, 0.82);
+  --overlay: rgba(14, 22, 17, 0.45);
+  --ledger-line: rgba(23, 176, 97, 0.08);
+  --radius: 0.9rem;
+  --radius-sm: 0.6rem;
+  --radius-lg: 1.15rem;
+  --font-sans: var(--font-inter), Inter, system-ui, sans-serif;
+  --font-display: var(--font-bricolage), "Bricolage Grotesque", system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), "JetBrains Mono", ui-monospace, monospace;
+  --ease: 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-8: 3rem;
+  --content-max: 1400px;
+  --sidebar-width: 264px;
+
+  /* Legacy aliases used across components */
+  --text: var(--foreground);
+  --line: var(--border);
+  --glass: var(--surface);
+  --glass-2: var(--surface-elevated);
+  --purple: var(--primary);
+  --purple-2: var(--primary);
+  --purple-soft: var(--primary-soft);
+  --cyan: var(--info);
+  --zinc: var(--bg-muted);
+}

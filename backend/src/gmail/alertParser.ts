@@ -1,4 +1,4 @@
-import { DEFAULT_CURRENCY, TxType } from "../lib/index.js";
+import { DEFAULT_CURRENCY, TxType, pad2 } from "../lib/index.js";
 
 export type AlertParseResult = {
   amount: number | null;
@@ -59,10 +59,6 @@ const MONTHS: Record<string, number> = {
   december: 12,
 };
 
-function pad2(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
 function toIsoDate(year: number, month: number, day: number): string | null {
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
   const dt = new Date(Date.UTC(year, month - 1, day));
@@ -82,7 +78,7 @@ function expandTwoDigitYear(yy: number): number {
 }
 
 /** Extract a transaction date from alert text when present. */
-export function parseAlertTransactionDate(text: string): string | null {
+function parseAlertTransactionDate(text: string): string | null {
   const normalized = text.replace(/\s+/g, " ");
 
   const numeric = normalized.match(

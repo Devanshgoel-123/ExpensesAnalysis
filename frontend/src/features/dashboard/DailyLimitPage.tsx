@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useDashboard } from "@/lib/dashboard-context";
 import { DailyInsightsPanel } from "@/components/DailyInsightsPanel";
 import { DailySpendChart } from "@/components/charts/DailySpendChart";
-import { normalizeDailySpend } from "@/lib/finance";
+import { normalizeDailySpend } from "@/helpers/finance";
 import { LedgerlineFadeContent } from "@/components/animations/LedgerlineFadeContent";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { pathForView } from "@/lib/dashboardViews";

@@ -8,8 +8,9 @@ import {
   formatMonthTitle,
   normalizeDailySpend,
   aggregateMonthlySpend,
-} from "@/lib/finance";
-import { formatInr } from "@/lib/api";
+} from "@/helpers/finance";
+import { formatInr } from "@/helpers/currency";
+
 import { pathForView } from "@/lib/dashboardViews";
 import { CategorySpendChart } from "@/components/charts/CategorySpendChart";
 import { MerchantSpendChart } from "@/components/charts/MerchantSpendChart";

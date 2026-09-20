@@ -158,7 +158,7 @@ export async function handleGmailOAuthCallback(
       return;
     }
     await persistGoogleConnection({ userId: payload.sub, tokens });
-    res.redirect(`${config.frontendUrl}?gmail=connected`);
+    res.redirect(`${config.frontendUrl}/import?gmail=connected`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "OAuth failed";
     if (purpose === "google_login") {
@@ -166,7 +166,7 @@ export async function handleGmailOAuthCallback(
       return;
     }
     res.redirect(
-      `${config.frontendUrl}?gmail=error&detail=${encodeURIComponent(message)}`,
+      `${config.frontendUrl}/import?gmail=error&detail=${encodeURIComponent(message)}`,
     );
   }
 }

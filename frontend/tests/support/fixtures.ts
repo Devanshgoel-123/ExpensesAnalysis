@@ -1,4 +1,4 @@
-import type { AmountBand, DailyInsights, Summary, UpiRanking } from "@/lib/types";
+import type { AmountBand, DailyInsights, Summary, UpiRanking } from "@/types";
 
 export const sampleSummary: Summary = {
   totalSpent: 4200,

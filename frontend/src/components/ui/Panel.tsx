@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { cn } from "@/lib/cn";
+import { cn } from "@/helpers/cn";
 import { SpotlightCard } from "@/components/SpotlightCard";
 
 interface PanelProps {

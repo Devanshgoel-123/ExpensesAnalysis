@@ -7,7 +7,6 @@ export const IST_TIME_ZONE = "Asia/Kolkata";
  */
 export const POOLING_EARLIEST_IST = "2026-01-01T00:00:00+05:30";
 export const POOLING_EARLIEST_MS = Date.parse(POOLING_EARLIEST_IST);
-export const POOLING_EARLIEST_UNIX = Math.floor(POOLING_EARLIEST_MS / 1000);
 /** IST calendar date of the pooling floor. */
 export const POOLING_EARLIEST_DATE = "2026-01-01";
 export const POOLING_EARLIEST_MONTH = POOLING_EARLIEST_DATE.slice(0, 7);

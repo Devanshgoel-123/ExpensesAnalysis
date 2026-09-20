@@ -3,8 +3,9 @@
 import { useDashboard } from "@/lib/dashboard-context";
 import { AmountBandPanel } from "@/components/AmountBandPanel";
 import { SpendingHeatmap } from "@/components/charts/SpendingHeatmap";
-import { weekendInsight } from "@/lib/finance";
-import { formatInr } from "@/lib/api";
+import { weekendInsight } from "@/helpers/finance";
+import { formatInr } from "@/helpers/currency";
+
 import { LedgerlineFadeContent } from "@/components/animations/LedgerlineFadeContent";
 import { Panel, PanelHead } from "@/components/ui/Panel";
 

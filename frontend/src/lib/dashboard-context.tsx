@@ -6,16 +6,17 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
 import { useApi } from "@/lib/useApi";
-import { currentMonth, monthBounds, monthFromDate, normalizeMonth } from "@/lib/month";
-import { formatPeriodRange } from "@/lib/dates";
-import { formatMonthTitle } from "@/lib/finance";
-import type { AmountBand, DailyInsights, ParseResult } from "@/lib/types";
+import { currentMonth, monthBounds, monthFromDate, normalizeMonth } from "@/helpers/month";
+import { formatMonthTitle } from "@/helpers/finance";
+import type { AmountBand, DailyInsights, ParseResult } from "@/types";
 import { pathForView } from "@/lib/dashboardViews";
+import type { ImportStatus } from "@/lib/api/types";
 
 const EMPTY_BAND: AmountBand = {
   label: "",
@@ -48,11 +49,21 @@ interface DashboardContextValue {
   setMonth: (month: string) => void;
   refresh: () => void;
   parseStatement: (file: File, password: string) => Promise<void>;
+  /** @deprecated Prefer hasMonthData / hasAnyData. */
   hasData: boolean;
+  /** Selected month has transactions. */
+  hasMonthData: boolean;
+  /** Account has any transactions (any month). */
+  hasAnyData: boolean;
+  /** Bootstrap status from GET /api/imports/status. */
+  importStatus: ImportStatus | null;
+  /** Refresh bootstrap status (after import/pooling). */
+  refreshStatus: () => Promise<void>;
   dailyInsights: DailyInsights;
   amountBand: AmountBand;
   periodLabel: string;
   goToImport: () => void;
+  goToOverview: () => void;
 }
 
 const DashboardContext = createContext<DashboardContextValue | null>(null);
@@ -68,6 +79,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [parseError, setParseError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [month, setMonthState] = useState(() => currentMonth());
+  const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
+  const autoMonthDone = useRef(false);
 
   const setMonth = useCallback((next: string) => {
     setMonthState(normalizeMonth(next) ?? currentMonth());
@@ -75,6 +88,57 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
   const range = useMemo(() => monthBounds(month), [month]);
+
+  const refreshStatus = useCallback(async () => {
+    if (!api) return;
+    try {
+      const status = await api.fetchImportStatus();
+      setImportStatus(status);
+    } catch {
+      // Status is best-effort; dashboard fetch surfaces errors.
+    }
+  }, [api]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.resolve().then(async () => {
+      if (!api || cancelled) return;
+      try {
+        const status = await api.fetchImportStatus();
+        if (!cancelled) setImportStatus(status);
+      } catch {
+        if (!cancelled) setImportStatus(null);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, refreshKey]);
+
+  // Refresh analytics when returning to the tab if bank-mail pooling is active.
+  useEffect(() => {
+    if (!api) return;
+    const client = api;
+    let poolingOn = false;
+    let cancelled = false;
+    void client
+      .gmailStatus()
+      .then((s) => {
+        if (!cancelled) poolingOn = Boolean(s.poolingEnabled);
+      })
+      .catch(() => undefined);
+
+    function onFocus() {
+      if (!poolingOn) return;
+      void client.fetchImportStatus().then(setImportStatus).catch(() => undefined);
+      setRefreshKey((k) => k + 1);
+    }
+    window.addEventListener("focus", onFocus);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [api]);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,21 +150,24 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         const result = await api.fetchDashboard(range);
         if (cancelled) return;
 
-        if (result.transactions.length === 0) {
-          const all = await api.fetchDashboard();
+        if (
+          result.transactions.length === 0 &&
+          !autoMonthDone.current &&
+          month === currentMonth()
+        ) {
+          const status = await api.fetchImportStatus();
           if (cancelled) return;
-          const latestMonth = monthFromDate(all.summary.dateTo);
+          setImportStatus(status);
           if (
-            all.transactions.length > 0 &&
-            latestMonth &&
-            latestMonth !== month &&
-            month === currentMonth()
+            status.hasTransactions &&
+            status.latestMonth &&
+            status.latestMonth !== month
           ) {
-            setMonth(latestMonth);
+            autoMonthDone.current = true;
+            setMonth(status.latestMonth);
             return;
           }
-          setData(all.transactions.length > 0 ? all : result);
-          return;
+          autoMonthDone.current = true;
         }
 
         setData(result);
@@ -127,8 +194,13 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       try {
         const result = await api.parseStatement(file, password);
         const parsedMonth = monthFromDate(result.summary.dateTo);
-        if (parsedMonth) setMonth(parsedMonth);
-        setData(result);
+        const targetMonth = parsedMonth ?? currentMonth();
+        autoMonthDone.current = true;
+        setMonth(targetMonth);
+        const monthResult = await api.fetchDashboard(monthBounds(targetMonth));
+        setData(monthResult);
+        const status = await api.fetchImportStatus();
+        setImportStatus(status);
         router.push(pathForView("overview"));
       } catch (err) {
         setParseError(err instanceof Error ? err.message : "Something went wrong");
@@ -143,10 +215,15 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     router.push(pathForView("import"));
   }, [router]);
 
-  const periodLabel =
-    data?.summary.dateFrom && data?.summary.dateTo
-      ? formatPeriodRange(data.summary.dateFrom, data.summary.dateTo)
-      : formatMonthTitle(month);
+  const goToOverview = useCallback(() => {
+    router.push(pathForView("overview"));
+  }, [router]);
+
+  const hasMonthData = Boolean(data && data.transactions.length > 0);
+  const hasAnyData =
+    Boolean(importStatus?.hasTransactions) || hasMonthData;
+
+  const periodLabel = formatMonthTitle(month);
 
   const value = useMemo(
     (): DashboardContextValue => ({
@@ -159,11 +236,16 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       setMonth,
       refresh,
       parseStatement: handleParse,
-      hasData: Boolean(data && data.transactions.length > 0),
+      hasData: hasMonthData,
+      hasMonthData,
+      hasAnyData,
+      importStatus,
+      refreshStatus,
       dailyInsights: data?.dailyInsights ?? EMPTY_INSIGHTS,
       amountBand: data?.amountBand25to60 ?? EMPTY_BAND,
       periodLabel,
       goToImport,
+      goToOverview,
     }),
     [
       data,
@@ -176,7 +258,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       refresh,
       periodLabel,
       goToImport,
+      goToOverview,
       handleParse,
+      hasMonthData,
+      hasAnyData,
+      importStatus,
+      refreshStatus,
     ],
   );
 

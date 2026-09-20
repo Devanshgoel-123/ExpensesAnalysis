@@ -1,14 +1,4 @@
 /** Keep in sync with backend `enums/category`. */
-export const CATEGORY_SLUGS = [
-  "food",
-  "shopping",
-  "travel",
-  "outing",
-  "investments",
-  "cigarettes",
-  "other",
-] as const;
-
 export const CategorySlug = {
   Food: "food",
   Shopping: "shopping",
@@ -19,7 +9,4 @@ export const CategorySlug = {
   Other: "other",
 } as const;
 
-export type CategorySlug = (typeof CATEGORY_SLUGS)[number];
-
-/** @deprecated Prefer `CategorySlug`. */
-export type LifestyleCategory = CategorySlug;
+export type CategorySlug = (typeof CategorySlug)[keyof typeof CategorySlug];

@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/useApi";
 import type { GmailStatus } from "@/lib/api/types";
 import { pathForView } from "@/lib/dashboardViews";
-import { formatTimestamp } from "@/lib/month";
+import { formatTimestamp } from "@/helpers/month";
 
 function buildRuleMatchFields(matchText: string): {
   matchNarrationRe?: string;

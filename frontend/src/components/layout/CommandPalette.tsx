@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import {
   DASHBOARD_NAV,
+  DATA_OPTIONAL_VIEWS,
   pathForView,
   type DashboardView,
 } from "@/lib/dashboardViews";
 import { easeOut } from "@/lib/motion";
+import { useDashboard } from "@/lib/dashboard-context";
 
 interface CommandItem {
   id: string;
@@ -58,11 +60,14 @@ function PaletteDialog({
   onClose: () => void;
 }) {
   const router = useRouter();
+  const { hasAnyData } = useDashboard();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
 
   const items = useMemo(() => {
-    const viewItems: CommandItem[] = DASHBOARD_NAV.map((item) => ({
+    const viewItems: CommandItem[] = DASHBOARD_NAV.filter(
+      (item) => hasAnyData || DATA_OPTIONAL_VIEWS.includes(item.id),
+    ).map((item) => ({
       id: item.id,
       label: item.label,
       description: item.description,
@@ -77,7 +82,7 @@ function PaletteDialog({
         item.label.toLowerCase().includes(q) ||
         item.description.toLowerCase().includes(q),
     );
-  }, [query]);
+  }, [query, hasAnyData]);
 
   function run(item: CommandItem) {
     if (item.kind === "view" && item.view) {

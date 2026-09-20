@@ -1,7 +1,8 @@
 "use client";
 
-import type { CategorySummary, MerchantSpend } from "@/lib/types";
-import { formatInr } from "@/lib/api";
+import type { CategorySummary, MerchantSpend } from "@/types";
+import { formatInr } from "@/helpers/currency";
+
 import { BrandMark } from "@/components/BrandMark";
 import { LedgerlineCountUp } from "@/components/animations/LedgerlineCountUp";
 import { LedgerlineAnimatedList } from "@/components/animations/LedgerlineAnimatedList";

@@ -13,7 +13,7 @@ import { ClassificationSource, ImportSource, ImportStatus, ruleClassificationSou
 import { AppError } from "../errors/AppError.js";
 import { extractTextFromPdf } from "../parser.js";
 import { buildMatchFieldsFromText, matchRule } from "../rules/engine.js";
-import type { ParseResult } from "../types.js";
+import type { ParseResult } from "../types/index.js";
 import {
   classifyTransaction,
   type ClassificationContext,
@@ -239,6 +239,31 @@ export async function getDashboardForUser(
   });
   const { providers, categories, rules } = await loadClassificationContext(userId);
   return loadAnalyticsResult({ userId, rows, providers, categories, rules });
+}
+
+/** Lightweight bootstrap status — no analytics rebuild. */
+export async function getImportStatusForUser(userId: string): Promise<{
+  hasTransactions: boolean;
+  latestMonth: string | null;
+  transactionCount: number;
+}> {
+  const store = await getStore();
+  const rows = await store.listTransactions(userId);
+  if (rows.length === 0) {
+    return {
+      hasTransactions: false,
+      latestMonth: null,
+      transactionCount: 0,
+    };
+  }
+  const latestDate = rows[0]?.date ?? null;
+  const latestMonth =
+    latestDate && latestDate.length >= 7 ? latestDate.slice(0, 7) : null;
+  return {
+    hasTransactions: true,
+    latestMonth,
+    transactionCount: rows.length,
+  };
 }
 
 export async function listImportsForUser(userId: string) {

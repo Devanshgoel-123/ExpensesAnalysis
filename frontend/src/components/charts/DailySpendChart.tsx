@@ -2,10 +2,11 @@
 
 import { useMemo, useState, useCallback } from "react";
 import { motion } from "framer-motion";
-import type { DailyInsights, DailySpend } from "@/lib/types";
-import { formatInr } from "@/lib/api";
-import { formatChartDay, formatShortDate } from "@/lib/dates";
-import { normalizeDailySpend } from "@/lib/finance";
+import type { DailyInsights, DailySpend } from "@/types";
+import { formatInr } from "@/helpers/currency";
+
+import { formatChartDay, formatShortDate } from "@/helpers/dates";
+import { normalizeDailySpend } from "@/helpers/finance";
 import { LedgerlineCountUp } from "@/components/animations/LedgerlineCountUp";
 import { Panel, PanelHead } from "@/components/ui/Panel";
 

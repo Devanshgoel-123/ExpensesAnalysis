@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, type MouseEvent, type ReactNode } from "react";
-import { cn } from "@/lib/cn";
+import { cn } from "@/helpers/cn";
 import "./SpotlightCard.css";
 
 interface SpotlightCardProps {

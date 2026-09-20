@@ -8,12 +8,3 @@ export const PoolingRunStatus = {
 } as const;
 
 export type PoolingRunStatus = (typeof POOLING_RUN_STATUSES)[number];
-
-export const POOLING_RUN_MODES = ["poll", "backfill"] as const;
-
-export const PoolingRunMode = {
-  Poll: "poll",
-  Backfill: "backfill",
-} as const;
-
-export type PoolingRunMode = (typeof POOLING_RUN_MODES)[number];

@@ -1,6 +1,5 @@
 import {
   ISO_DATE_RE,
-  ISO_MONTH_RE,
   IST_TIME_ZONE,
   POOLING_EARLIEST_DATE,
   POOLING_EARLIEST_MONTH,
@@ -74,14 +73,6 @@ export function toGmailQueryAfter(isoDate: string): string {
   return `${prev.getUTCFullYear()}/${pad2(prev.getUTCMonth() + 1)}/${pad2(prev.getUTCDate())}`;
 }
 
-export function isOnOrAfterDate(
-  isoDate: string | null | undefined,
-  cutoff: string,
-): boolean {
-  if (!isoDate) return false;
-  return isoDate.slice(0, 10) >= cutoff;
-}
-
 export function isOnOrAfterPoolingCutoff(
   isoDate: string | null | undefined,
 ): boolean {
@@ -107,10 +98,6 @@ export function poolingDateWindow(month?: string | null): {
 export function clampPoolingAfter(after?: string): string {
   if (after && after > POOLING_EARLIEST_DATE) return after;
   return POOLING_EARLIEST_DATE;
-}
-
-export function isIsoMonth(value: string): boolean {
-  return ISO_MONTH_RE.test(value);
 }
 
 /** Statement PDF mail uses a smaller secondary cap than alert mail. */

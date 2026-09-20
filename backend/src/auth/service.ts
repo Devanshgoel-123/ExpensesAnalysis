@@ -7,8 +7,6 @@ import { SESSION_TTL } from "../constants/index.js";
 import { getStore } from "../db/index.js";
 import { AppError } from "../errors/AppError.js";
 
-export { SESSION_TTL, SESSION_TTL_SECONDS } from "../constants/index.js";
-
 export interface AuthUser {
   id: string;
   email: string;

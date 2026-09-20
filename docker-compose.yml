@@ -1,36 +1,71 @@
+# Full local/staging stack: Postgres + API + web.
+# Usage:
+#   cp .env.example .env   # set JWT_SECRET + ENCRYPTION_KEY
+#   ./scripts/docker-prod-check.sh
+#   docker compose up --build
+#
+# Optional separate Gmail pooling worker:
+#   docker compose --profile worker up --build
+
+name: ledgerline
+
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     environment:
-      POSTGRES_USER: ledgerline
-      POSTGRES_PASSWORD: ledgerline
-      POSTGRES_DB: ledgerline
+      POSTGRES_USER: ${POSTGRES_USER:-ledgerline}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ledgerline}
+      POSTGRES_DB: ${POSTGRES_DB:-ledgerline}
     volumes:
       - ledgerline_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ledgerline -d ledgerline"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-ledgerline} -d ${POSTGRES_DB:-ledgerline}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   api:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    restart: unless-stopped
     ports:
-      - "4000:4000"
+      - "${API_PORT:-4000}:4000"
+    env_file:
+      - .env
     environment:
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-production}
       PORT: 4000
-      DATABASE_URL: postgres://ledgerline:ledgerline@postgres:5432/ledgerline
-      CORS_ORIGINS: http://localhost:3000
-      FRONTEND_URL: http://localhost:3000
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY}
-      INVITE_CODES: ${INVITE_CODES:-beta-ledgerline}
-      LOG_LEVEL: info
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_PRETTY: "0"
+      DATABASE_URL: postgres://${POSTGRES_USER:-ledgerline}:${POSTGRES_PASSWORD:-ledgerline}@postgres:5432/${POSTGRES_DB:-ledgerline}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
+      ALLOW_ANON_PARSE: ${ALLOW_ANON_PARSE:-0}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:4000/api/v1/auth/google/callback}
+      GOOGLE_ALLOWED_EMAILS: ${GOOGLE_ALLOWED_EMAILS:-}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      GMAIL_PUBSUB_TOPIC: ${GMAIL_PUBSUB_TOPIC:-}
+      POOLING_WORKER_SEPARATE: ${POOLING_WORKER_SEPARATE:-0}
+      POOLING_WORKER_HOST: ${POOLING_WORKER_HOST:-worker}
+      POOLING_WORKER_PORT: ${POOLING_WORKER_PORT:-5473}
     depends_on:
       postgres:
         condition: service_healthy
@@ -39,7 +74,86 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 20s
+      start_period: 25s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  worker:
+    profiles: ["worker"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["node", "dist/worker/poolingServer.js"]
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_PRETTY: "0"
+      DATABASE_URL: postgres://${POSTGRES_USER:-ledgerline}:${POSTGRES_PASSWORD:-ledgerline}@postgres:5432/${POSTGRES_DB:-ledgerline}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:4000/api/v1/auth/google/callback}
+      POOLING_WORKER_HOST: 0.0.0.0
+      POOLING_WORKER_PORT: ${POOLING_WORKER_PORT:-5473}
+      POOLING_WORKER_INTERVAL_MS: ${POOLING_WORKER_INTERVAL_MS:-120000}
+      POOLING_WORKER_SEPARATE: "1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:${POOLING_WORKER_PORT:-5473}/health || exit 1",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
 volumes:
   ledgerline_pg:

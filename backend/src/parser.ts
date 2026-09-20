@@ -9,7 +9,7 @@ import type {
   Transaction,
   TransactionType,
   UpiRanking,
-} from "./types.js";
+} from "./lib/index.js";
 
 /**
  * HDFC-style statement columns:

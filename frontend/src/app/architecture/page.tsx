@@ -1,6 +1,6 @@
 import { SiteNav } from "@/components/SiteNav";
 import { SiteFooter } from "@/components/SiteFooter";
-import { GlowBackdrop } from "@/components/GlowBackdrop";
+import { AppSurfaceBackdrop } from "@/components/effects/AppSurfaceBackdrop";
 
 const NODES = [
   {
@@ -33,7 +33,7 @@ const NODES = [
 export default function ArchitecturePage() {
   return (
     <main className="shell architecture-page">
-      <GlowBackdrop />
+      <AppSurfaceBackdrop />
       <SiteNav />
 
       <header className="arch-hero">
@@ -42,7 +42,7 @@ export default function ArchitecturePage() {
         <p className="lede">
           Bank-mail pooling and PDF uploads land in Postgres, get classified under
           lifestyle categories, and surface as month-scoped spends and top UPI
-          handles. Full schema and pooling design live in the repo docs.
+          handles.
         </p>
       </header>
 
@@ -84,17 +84,15 @@ Dashboard
       <section className="grid-main arch-grid">
         <article className="panel">
           <header className="panel-head">
-            <h2>Docs</h2>
-            <p>Canonical write-up</p>
+            <h2>Store</h2>
+            <p>Postgres + SQL migrations</p>
           </header>
           <ul className="arch-file-list">
             <li>
-              <code>docs/ARCHITECTURE.md</code> — schema ERD, pooling sequence,
-              category model, setup checklist
+              <code>backend/src/db/migrations/</code> — versioned up/down SQL
             </li>
             <li>
-              <code>backend/src/db/migrations/</code> — 001 initial · 002 bank
-              mail + pooling
+              <code>backend/src/db/types.ts</code> — Store contract
             </li>
           </ul>
         </article>

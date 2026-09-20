@@ -14,6 +14,7 @@ interface AppShellProps {
   periodLabel: string;
   monthControl: React.ReactNode;
   hasData: boolean;
+  hasAnyData: boolean;
   userEmail?: string | null;
   fetchError?: string | null;
   onImportAnother: () => void;
@@ -28,6 +29,7 @@ export function AppShell({
   periodLabel,
   monthControl,
   hasData,
+  hasAnyData,
   userEmail,
   fetchError,
   onImportAnother,
@@ -61,6 +63,7 @@ export function AppShell({
         }}
         onClose={() => setSidebarOpen(false)}
         userEmail={userEmail}
+        hasAnyData={hasAnyData}
       />
       <div className="app-main">
         <DashboardHeader
@@ -84,7 +87,11 @@ export function AppShell({
           {children}
         </main>
       </div>
-      <MobileNav current={view} onNavigate={onNavigate} />
+      <MobileNav
+        current={view}
+        onNavigate={onNavigate}
+        hasAnyData={hasAnyData}
+      />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
   );

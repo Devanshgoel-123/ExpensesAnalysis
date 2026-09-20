@@ -1,8 +1,9 @@
 "use client";
 
 import { motion } from "framer-motion";
-import type { CategorySpendRow } from "@/lib/finance";
-import { formatInr } from "@/lib/api";
+import type { CategorySpendRow } from "@/helpers/finance";
+import { formatInr } from "@/helpers/currency";
+
 import { LedgerlineCountUp } from "@/components/animations/LedgerlineCountUp";
 import { Panel, PanelHead } from "@/components/ui/Panel";
 

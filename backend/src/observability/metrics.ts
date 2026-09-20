@@ -57,18 +57,4 @@ function serialize(labels: Labels): string {
 export const metrics = {
   httpRequests: new MemoryCounter(),
   httpDurationMs: new MemoryHistogram(),
-  pdfImports: new MemoryCounter(),
-  authAttempts: new MemoryCounter(),
-  dbErrors: new MemoryCounter(),
 };
-
-/** Optional debug snapshot — not exposed publicly by default. */
-export function metricsSnapshot() {
-  return {
-    httpRequests: metrics.httpRequests.snapshot(),
-    httpDurationMs: metrics.httpDurationMs.snapshot(),
-    pdfImports: metrics.pdfImports.snapshot(),
-    authAttempts: metrics.authAttempts.snapshot(),
-    dbErrors: metrics.dbErrors.snapshot(),
-  };
-}

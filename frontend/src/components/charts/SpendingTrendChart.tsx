@@ -1,9 +1,10 @@
 "use client";
 
 import { motion } from "framer-motion";
-import type { MonthlySpendRow } from "@/lib/finance";
-import { monthOverMonthDelta } from "@/lib/finance";
-import { formatInr } from "@/lib/api";
+import type { MonthlySpendRow } from "@/helpers/finance";
+import { monthOverMonthDelta } from "@/helpers/finance";
+import { formatInr } from "@/helpers/currency";
+
 import { LedgerlineCountUp } from "@/components/animations/LedgerlineCountUp";
 import { Panel, PanelHead } from "@/components/ui/Panel";
 

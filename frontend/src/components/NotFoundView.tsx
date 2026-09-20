@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { GlowBackdrop } from "@/components/GlowBackdrop";
+import { AppSurfaceBackdrop } from "@/components/effects/AppSurfaceBackdrop";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteNav } from "@/components/SiteNav";
 import { easeOut } from "@/lib/motion";
@@ -10,7 +10,7 @@ import { easeOut } from "@/lib/motion";
 export function NotFoundView() {
   return (
     <main className="shell not-found-page">
-      <GlowBackdrop />
+      <AppSurfaceBackdrop />
       <SiteNav />
       <div className="landing-content not-found-content">
         <motion.p

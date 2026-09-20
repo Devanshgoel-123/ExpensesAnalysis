@@ -12,6 +12,18 @@ import { childLogger } from "../logger/index.js";
 
 const log = childLogger({ service: "ledgerline-pooling-worker", module: "worker" });
 
+process.on("uncaughtException", (error) => {
+  log.fatal({ err: error }, "Uncaught exception — worker will exit");
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  log.error({ err: reason }, "Unhandled promise rejection in worker");
+  if (config.isProduction) {
+    process.exit(1);
+  }
+});
+
 const HOST = config.poolingWorker.host;
 const PORT = config.poolingWorker.port;
 const INTERVAL_MS = config.poolingWorker.intervalMs;
@@ -425,6 +437,6 @@ async function boot(): Promise<void> {
 }
 
 boot().catch((error) => {
-  log.error({ err: error }, "pooling worker failed to start");
+  log.fatal({ err: error }, "pooling worker failed to start");
   process.exit(1);
 });

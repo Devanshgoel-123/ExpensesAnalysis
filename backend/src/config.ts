@@ -156,6 +156,16 @@ function loadConfig(): AppConfig {
         "DATABASE_URL=memory is not allowed in production. Use PostgreSQL.",
       );
     }
+    if (env.ALLOW_ANON_PARSE === "1") {
+      throw new Error(
+        "ALLOW_ANON_PARSE=1 is not allowed in production.",
+      );
+    }
+    if (!env.DATABASE_URL.startsWith("postgres")) {
+      throw new Error(
+        "DATABASE_URL must be a postgres:// or postgresql:// URL in production.",
+      );
+    }
   }
 
   const corsOrigins = env.CORS_ORIGINS.split(",")
@@ -166,13 +176,21 @@ function loadConfig(): AppConfig {
     throw new Error("CORS_ORIGINS must include at least one origin");
   }
 
+  if (env.NODE_ENV === "production" && corsOrigins.includes("*")) {
+    throw new Error("CORS_ORIGINS=* is not allowed in production");
+  }
+
+  // JSON logs only in production/test containers — pretty transport is a crash risk without pino-pretty.
+  const logPretty =
+    env.NODE_ENV === "development" && env.LOG_PRETTY === "1";
+
   return {
     env: env.NODE_ENV,
     isProduction: env.NODE_ENV === "production",
     isTest: env.NODE_ENV === "test",
     port: env.PORT,
     logLevel: env.LOG_LEVEL,
-    logPretty: env.LOG_PRETTY === "1",
+    logPretty,
     corsOrigins,
     databaseUrl: env.DATABASE_URL,
     useMemoryStore: env.DATABASE_URL === "memory",

@@ -7,12 +7,13 @@ import { Moon, Sun, X } from "lucide-react";
 import {
   DASHBOARD_NAV,
   DASHBOARD_NAV_GROUPS,
+  DATA_OPTIONAL_VIEWS,
   type DashboardView,
 } from "@/lib/dashboardViews";
 import { UserAvatar } from "@/components/layout/UserAvatar";
-import { userInitials } from "@/lib/userInitials";
+import { userInitials } from "@/helpers/userInitials";
 import { useTheme } from "@/lib/theme";
-import { cn } from "@/lib/cn";
+import { cn } from "@/helpers/cn";
 
 interface SidebarProps {
   open: boolean;
@@ -20,6 +21,7 @@ interface SidebarProps {
   onNavigate: (view: DashboardView) => void;
   onClose: () => void;
   userEmail?: string | null;
+  hasAnyData?: boolean;
 }
 
 export function Sidebar({
@@ -28,6 +30,7 @@ export function Sidebar({
   onNavigate,
   onClose,
   userEmail,
+  hasAnyData = true,
 }: SidebarProps) {
   const navById = new Map(DASHBOARD_NAV.map((item) => [item.id, item]));
   const { theme, toggleTheme } = useTheme();
@@ -83,6 +86,27 @@ export function Sidebar({
                 if (!item) return null;
                 const Icon = item.icon;
                 const active = item.id === current || pathname === item.path;
+                const locked =
+                  !hasAnyData && !DATA_OPTIONAL_VIEWS.includes(item.id);
+                if (locked) {
+                  return (
+                    <span
+                      key={item.id}
+                      className="sidebar-link sidebar-link-disabled"
+                      title="Import transactions first"
+                      aria-disabled="true"
+                    >
+                      <span className="sidebar-link-marker" aria-hidden />
+                      <span className="sidebar-link-icon" aria-hidden>
+                        <Icon size={16} />
+                      </span>
+                      <span className="sidebar-link-copy">
+                        <strong>{item.label}</strong>
+                        <span className="meta">Needs import</span>
+                      </span>
+                    </span>
+                  );
+                }
                 return (
                   <Link
                     key={item.id}

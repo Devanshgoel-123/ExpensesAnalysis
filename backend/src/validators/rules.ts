@@ -33,5 +33,3 @@ export const createRuleBodySchema = z
     (body) => Boolean(body.setPayeeName || body.setCategorySlug || body.setProviderId),
     { message: "Set payee name, category, or provider" },
   );
-
-export type CreateRuleBody = z.infer<typeof createRuleBodySchema>;

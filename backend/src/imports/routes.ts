@@ -12,6 +12,7 @@ import {
 import {
   correctTransactionController,
   getDashboardController,
+  getImportStatusController,
   listImportsController,
   uploadImportController,
 } from "./controller.js";
@@ -26,6 +27,8 @@ export const importRouter = Router();
 importRouter.use(requireAuth);
 
 importRouter.get("/dashboard", validate(dashboardQuerySchema, "query"), getDashboardController);
+
+importRouter.get("/status", getImportStatusController);
 
 importRouter.get("/", listImportsController);
 

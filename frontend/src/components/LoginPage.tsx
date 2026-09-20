@@ -25,8 +25,9 @@ const FEATURES = [
   },
   {
     icon: Mail,
-    title: "Private bank-mail import",
-    detail: "Gmail is read-only. Only allowlisted bank senders are searched.",
+    title: "Bank mail with Google",
+    detail:
+      "Sign-in already requests read-only Gmail so we can find allowlisted bank senders — not your whole inbox.",
   },
 ];
 
@@ -82,9 +83,11 @@ function PreviewCard() {
 
 interface LoginPageProps {
   authError?: string | null;
+  /** Called when the user starts Google login (clears stale errors). */
+  onContinue?: () => void;
 }
 
-export function LoginPage({ authError }: LoginPageProps) {
+export function LoginPage({ authError, onContinue }: LoginPageProps) {
   return (
     <main className="login-screen">
       <div className="login-screen-bg" aria-hidden />
@@ -143,13 +146,18 @@ export function LoginPage({ authError }: LoginPageProps) {
           <p className="brand compact login-card-brand">Ledgerline</p>
           <h2 className="login-card-title">Welcome</h2>
           <p className="meta login-card-lede">
-            Connect Google, import your first statement, set a daily limit, and
-            see your month clearly.
+            Continue with Google, then import a bank PDF or turn on bank-mail
+            pooling. You&apos;ll land on setup until your first transactions
+            arrive.
           </p>
 
           {authError ? <p className="form-error">{authError}</p> : null}
 
-          <a className="cta google-cta login-google-btn" href={googleLoginUrl()}>
+          <a
+            className="cta google-cta login-google-btn"
+            href={googleLoginUrl()}
+            onClick={() => onContinue?.()}
+          >
             <GoogleMark />
             Continue with Google
             <ArrowRight size={18} className="login-google-arrow" />
@@ -158,7 +166,7 @@ export function LoginPage({ authError }: LoginPageProps) {
           <ul className="login-trust">
             <li>
               <ShieldCheck size={16} />
-              Gmail read-only — bank senders you allow only
+              Google sign-in includes Gmail read-only for bank senders you allow
             </li>
             <li>
               <ShieldCheck size={16} />

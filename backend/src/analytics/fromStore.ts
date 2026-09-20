@@ -10,9 +10,9 @@ import type {
   Summary,
   Transaction,
   UpiRanking,
-} from "../types.js";
+} from "../types/index.js";
 
-export function rowToApiTransaction(
+function rowToApiTransaction(
   row: TransactionRow,
   providers: ProviderRow[],
   categories: CategoryRow[] = [],
@@ -44,7 +44,7 @@ export function rowToApiTransaction(
   };
 }
 
-export function buildAmountBand(
+function buildAmountBand(
   rows: TransactionRow[],
   categories: CategoryRow[],
 ): AmountBand | null {

@@ -4,21 +4,28 @@ import Link from "next/link";
 import {
   DASHBOARD_NAV,
   MOBILE_NAV_IDS,
+  MOBILE_NAV_SETUP_IDS,
   type DashboardView,
 } from "@/lib/dashboardViews";
-import { cn } from "@/lib/cn";
+import { cn } from "@/helpers/cn";
 
 interface MobileNavProps {
   current: DashboardView;
   onNavigate: (view: DashboardView) => void;
+  hasAnyData?: boolean;
 }
 
-export function MobileNav({ current, onNavigate }: MobileNavProps) {
+export function MobileNav({
+  current,
+  onNavigate,
+  hasAnyData = true,
+}: MobileNavProps) {
   const byId = new Map(DASHBOARD_NAV.map((item) => [item.id, item]));
+  const ids = hasAnyData ? MOBILE_NAV_IDS : MOBILE_NAV_SETUP_IDS;
 
   return (
     <nav className="mobile-nav" aria-label="Primary">
-      {MOBILE_NAV_IDS.map((id) => {
+      {ids.map((id) => {
         const item = byId.get(id);
         if (!item) return null;
         const Icon = item.icon;

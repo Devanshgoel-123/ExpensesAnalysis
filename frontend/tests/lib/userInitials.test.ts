@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { userInitials } from "@/lib/userInitials";
+import { userInitials } from "@/helpers/userInitials";
 
 describe("userInitials", () => {
   it("uses display name when present", () => {

@@ -11,6 +11,7 @@ import { assertPdfUpload, mapPdfImportError } from "./pdfErrors.js";
 import {
   correctTransactionForUser,
   getDashboardForUser,
+  getImportStatusForUser,
   listImportsForUser,
   processPdfImport,
 } from "./service.js";
@@ -22,6 +23,11 @@ export const getDashboardController: RequestHandler = async (req, res) => {
     to: query.to,
   });
   res.json(result);
+};
+
+export const getImportStatusController: RequestHandler = async (req, res) => {
+  const status = await getImportStatusForUser(req.user!.id);
+  res.json(status);
 };
 
 export const listImportsController: RequestHandler = async (req, res) => {

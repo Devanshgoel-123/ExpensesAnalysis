@@ -6,6 +6,18 @@ import { logger } from "./logger/index.js";
 
 const app = createApp();
 
+process.on("uncaughtException", (error) => {
+  logger.fatal({ err: error }, "Uncaught exception — process will exit");
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  logger.error({ err: reason }, "Unhandled promise rejection");
+  if (config.isProduction) {
+    process.exit(1);
+  }
+});
+
 async function boot() {
   await getStore();
   if (!config.google.inlineJobsEnabled) {
@@ -17,14 +29,14 @@ async function boot() {
     startGmailJobs();
   }
 
-  const server = app.listen(config.port, () => {
+  const server = app.listen(config.port, "0.0.0.0", () => {
     logger.info(
       {
         port: config.port,
         env: config.env,
         database: config.useMemoryStore ? "memory" : "postgres",
       },
-      `Ledgerline API listening on http://localhost:${config.port}`,
+      `Ledgerline API listening on http://0.0.0.0:${config.port}`,
     );
   });
 
@@ -48,6 +60,6 @@ async function boot() {
 }
 
 boot().catch((error) => {
-  logger.error({ err: error }, "Failed to start API");
+  logger.fatal({ err: error }, "Failed to start API");
   process.exit(1);
 });

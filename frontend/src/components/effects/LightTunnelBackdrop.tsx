@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useSyncExternalStore } from "react";
 import { useTheme } from "@/lib/theme";
-import { cn } from "@/lib/cn";
+import { cn } from "@/helpers/cn";
 
 const LightTunnel = dynamic(() => import("@/components/effects/LightTunnel"), {
   ssr: false,

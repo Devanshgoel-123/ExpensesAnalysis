@@ -9,5 +9,3 @@ export const createProviderBodySchema = z.object({
   logoUrl: z.string().max(500).nullable().optional(),
   categorySlug: z.string().max(64).nullable().optional(),
 });
-
-export type CreateProviderBody = z.infer<typeof createProviderBodySchema>;

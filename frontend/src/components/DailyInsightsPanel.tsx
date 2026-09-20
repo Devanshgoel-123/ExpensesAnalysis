@@ -1,8 +1,10 @@
 "use client";
 
 import { motion } from "framer-motion";
-import type { DailyInsights } from "@/lib/types";
-import { formatInr, formatShortDate } from "@/lib/api";
+import type { DailyInsights } from "@/types";
+import { formatInr } from "@/helpers/currency";
+import { formatShortDate } from "@/helpers/dates";
+
 import { LiveCounter } from "@/components/LiveCounter";
 import { SpotlightCard } from "@/components/SpotlightCard";
 

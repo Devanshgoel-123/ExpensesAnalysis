@@ -112,13 +112,20 @@ export const DASHBOARD_NAV_GROUPS: { label: string; ids: DashboardView[] }[] = [
   { label: "System", ids: ["settings"] },
 ];
 
-/** Primary destinations shown in the mobile bottom bar. */
+/** Primary destinations shown in the mobile bottom bar (with data). */
 export const MOBILE_NAV_IDS: DashboardView[] = [
   "overview",
   "insights",
   "categories",
   "transactions",
   "import",
+];
+
+/** Mobile bar while the account has no transactions yet. */
+export const MOBILE_NAV_SETUP_IDS: DashboardView[] = [
+  "import",
+  "insights",
+  "settings",
 ];
 
 /** Views accessible without imported transaction data. */

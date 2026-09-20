@@ -1,4 +1,4 @@
-import type { DailyInsights, DailyLimitDay, DailySpend } from "../types.js";
+import type { DailyInsights, DailyLimitDay, DailySpend } from "../types/index.js";
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;

@@ -1,0 +1,68 @@
+/* ── Dark theme token overrides ── */
+[data-theme="dark"] {
+  --bg: #0a0c0b;
+  --bg-muted: #10130f;
+  --surface: #10130f;
+  --surface-elevated: #171b16;
+  --foreground: #e9efea;
+  --muted: #8b948c;
+  --muted-2: #6b7368;
+  --border: rgb(255 255 255 / 7%);
+  --border-strong: rgb(255 255 255 / 13%);
+  --primary: #7fe6a6;
+  --primary-hover: #a9f0c2;
+  --primary-soft: rgb(127 230 166 / 0.12);
+  --primary-foreground: #06110a;
+  --success: #7fe6a6;
+  --success-soft: rgb(127 230 166 / 0.12);
+  --warning: #e6b667;
+  --warning-soft: rgba(230, 182, 103, 0.16);
+  --danger: #f26d6d;
+  --danger-soft: rgba(242, 109, 109, 0.14);
+  --info: #5db8cc;
+  --info-soft: rgba(93, 184, 204, 0.14);
+  --credit: #7fe6a6;
+  --debit: #f26d6d;
+  --chart-1: #7fe6a6;
+  --chart-2: #a9f0c2;
+  --chart-3: #17b061;
+  --chart-4: #e6b667;
+  --chart-5: #8b948c;
+  --chart-grid: rgba(233, 239, 234, 0.07);
+  --cat-food: #7fe6a6;
+  --cat-shopping: #5db8cc;
+  --cat-travel: #6aa8c2;
+  --cat-outing: #a9f0c2;
+  --cat-investments: #17b061;
+  --cat-cigarettes: #e6b667;
+  --cat-other: #8b948c;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 16px 40px rgba(0, 0, 0, 0.45);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.35), 0 16px 40px rgba(0, 0, 0, 0.4);
+  --glow: rgb(127 230 166 / 0.18);
+  --surface-glow: radial-gradient(
+      700px 280px at 6% -8%,
+      rgb(127 230 166 / 0.08),
+      transparent 55%
+    ),
+    radial-gradient(
+      520px 240px at 94% 0%,
+      rgb(23 176 97 / 0.05),
+      transparent 50%
+    );
+  --ring: rgba(127, 230, 166, 0.4);
+  --sidebar-bg: #10130f;
+  --sidebar-active: #7fe6a6;
+  --header-bg: rgba(16, 19, 15, 0.82);
+  --overlay: rgba(0, 0, 0, 0.6);
+  --ledger-line: rgba(127, 230, 166, 0.1);
+  --text: var(--foreground);
+  --line: var(--border);
+  --glass: var(--surface);
+  --glass-2: var(--surface-elevated);
+  --purple: var(--primary);
+  --purple-2: var(--primary);
+  --purple-soft: var(--primary-soft);
+  --cyan: var(--info);
+  --zinc: var(--bg-muted);
+}

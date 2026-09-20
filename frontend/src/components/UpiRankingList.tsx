@@ -1,8 +1,9 @@
 "use client";
 
 import { motion } from "framer-motion";
-import type { UpiRanking } from "@/lib/types";
-import { formatInr } from "@/lib/api";
+import type { UpiRanking } from "@/types";
+import { formatInr } from "@/helpers/currency";
+
 import { LiveCounter } from "@/components/LiveCounter";
 import { SpotlightCard } from "@/components/SpotlightCard";
 

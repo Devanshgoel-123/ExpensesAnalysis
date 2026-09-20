@@ -3,7 +3,7 @@
 import { ArrowLeft, LogOut, Menu, Moon, RefreshCw, Search, Sun } from "lucide-react";
 import { viewLabel, type DashboardView } from "@/lib/dashboardViews";
 import { UserAvatar } from "@/components/layout/UserAvatar";
-import { userInitials } from "@/lib/userInitials";
+import { userInitials } from "@/helpers/userInitials";
 import { useTheme } from "@/lib/theme";
 
 interface DashboardHeaderProps {
@@ -67,15 +67,13 @@ export function DashboardHeader({
           {theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
         </button>
         {hasData ? (
-          <>
-            <button type="button" className="ghost" onClick={onRefresh}>
-              <RefreshCw size={16} /> Refresh
-            </button>
-            <button type="button" className="ghost" onClick={onImportAnother}>
-              <ArrowLeft size={16} /> Import
-            </button>
-          </>
+          <button type="button" className="ghost" onClick={onRefresh}>
+            <RefreshCw size={16} /> Refresh
+          </button>
         ) : null}
+        <button type="button" className="ghost" onClick={onImportAnother}>
+          <ArrowLeft size={16} /> Import
+        </button>
         <button type="button" className="ghost" onClick={onLogout}>
           <LogOut size={16} /> Log out
         </button>
