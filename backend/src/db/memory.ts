@@ -394,6 +394,17 @@ export class MemoryStore implements Store {
     return { inserted, skipped, ids };
   }
 
+  async findTransactionByFingerprint(
+    userId: string,
+    fingerprint: string,
+  ): Promise<TransactionRow | null> {
+    return (
+      this.transactions.find(
+        (tx) => tx.userId === userId && tx.fingerprint === fingerprint,
+      ) ?? null
+    );
+  }
+
   async listTransactions(
     userId: string,
     options?: ListTransactionsOptions,

@@ -490,6 +490,9 @@ export class PostgresStore implements Store {
   insertTransactions(u: string, r: NewTransactionInput[]) {
     return this.imports.insertTransactions(u, r);
   }
+  findTransactionByFingerprint(u: string, fingerprint: string) {
+    return this.imports.findTransactionByFingerprint(u, fingerprint);
+  }
   listTransactions(u: string, o?: ListTransactionsOptions) {
     return this.imports.listTransactions(u, o);
   }

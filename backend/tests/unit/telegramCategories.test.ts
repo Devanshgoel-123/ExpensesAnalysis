@@ -12,6 +12,8 @@ describe("parseCategoryReply", () => {
     assert.equal(parseCategoryReply("that's shopping"), "shopping");
     assert.equal(parseCategoryReply("cigs"), "cigarettes");
     assert.equal(parseCategoryReply("invest"), "investments");
+    assert.equal(parseCategoryReply("pharmacy"), "healthcare");
+    assert.equal(parseCategoryReply("parents"), "family");
   });
 
   it("returns null when no category is mentioned", () => {

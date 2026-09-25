@@ -3,6 +3,8 @@ export const CategorySlug = {
   Food: "food",
   Shopping: "shopping",
   Travel: "travel",
+  Healthcare: "healthcare",
+  Family: "family",
   Outing: "outing",
   Investments: "investments",
   Cigarettes: "cigarettes",

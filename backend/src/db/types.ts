@@ -336,6 +336,10 @@ export interface Store {
     userId: string,
     rows: NewTransactionInput[],
   ): Promise<{ inserted: number; skipped: number; ids: string[] }>;
+  findTransactionByFingerprint(
+    userId: string,
+    fingerprint: string,
+  ): Promise<TransactionRow | null>;
   listTransactions(
     userId: string,
     options?: ListTransactionsOptions,
@@ -357,6 +361,7 @@ export interface Store {
         | "counterparty"
         | "confidence"
         | "classificationSource"
+        | "upiId"
       >
     >,
   ): Promise<TransactionRow | null>;

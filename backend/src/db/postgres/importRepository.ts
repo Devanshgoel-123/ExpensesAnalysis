@@ -132,6 +132,20 @@ export class PostgresImportRepository {
     return { inserted, skipped: rows.length - inserted, ids };
   }
 
+  async findTransactionByFingerprint(
+    userId: string,
+    fingerprint: string,
+  ): Promise<TransactionRow | null> {
+    const [row] = await this.db
+      .select()
+      .from(transactions)
+      .where(
+        and(eq(transactions.userId, userId), eq(transactions.fingerprint, fingerprint)),
+      )
+      .limit(1);
+    return row ? mapTransaction(row) : null;
+  }
+
   async listTransactions(
     userId: string,
     options?: ListTransactionsOptions,
@@ -176,10 +190,11 @@ export class PostgresImportRepository {
       "counterparty",
       "confidence",
       "classificationSource",
+      "upiId",
     ] as const;
-    for (const key of keys)
-      if (patch[key] != null)
-        (set as Record<string, unknown>)[key] = patch[key];
+    for (const key of keys) {
+      if (key in patch) (set as Record<string, unknown>)[key] = patch[key];
+    }
     if (!Object.keys(set).length) return this.getTransaction(userId, id);
     const [row] = await this.db
       .update(transactions)

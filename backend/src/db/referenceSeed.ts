@@ -98,20 +98,4 @@ export async function seedMemoryReferenceData(store: MemoryStore): Promise<void>
     }
   }
 
-  const ayodhya = (await store.listProviders("seed-check")).find(
-    (p) => p.canonicalName === "Ayodhya",
-  );
-  if (!ayodhya) {
-    await store.upsertProvider({
-      userId: null,
-      canonicalName: "Ayodhya",
-      aliases: ["Ayodhya"],
-      upiHandles: [],
-      senderDomains: [],
-      websiteDomain: null,
-      logoUrl: "/providers/ayodhya.svg",
-      categorySlug: "food",
-      isGlobal: true,
-    });
-  }
 }

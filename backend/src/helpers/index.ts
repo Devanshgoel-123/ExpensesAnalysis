@@ -3,3 +3,4 @@
  */
 export * from "./dates.js";
 export * from "./gmailSenders.js";
+export * from "./slug.js";
