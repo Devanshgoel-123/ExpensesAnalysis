@@ -22,8 +22,23 @@ export interface UserRow {
   passwordHash: string;
   displayName: string | null;
   dailySpendLimit: number | null;
+  telegramChatId: string | null;
+  telegramLinkToken: string | null;
   createdAt: string;
   deletedAt: string | null;
+}
+
+export type TelegramPromptStatus = "pending" | "answered" | "expired";
+
+export interface TelegramPromptRow {
+  id: string;
+  userId: string;
+  transactionId: string;
+  chatId: string;
+  status: TelegramPromptStatus;
+  categorySlug: string | null;
+  createdAt: string;
+  answeredAt: string | null;
 }
 
 export interface UserPreferences {
@@ -157,6 +172,8 @@ export interface GmailConnectionRow {
   historyId: string | null;
   watchExpiration: string | null;
   lastSyncAt: string | null;
+  /** Inclusive IST calendar day already query-scanned. Null until the first full scan. */
+  lastScannedOn: string | null;
   disconnectedAt: string | null;
 }
 
@@ -318,7 +335,7 @@ export interface Store {
   insertTransactions(
     userId: string,
     rows: NewTransactionInput[],
-  ): Promise<{ inserted: number; skipped: number }>;
+  ): Promise<{ inserted: number; skipped: number; ids: string[] }>;
   listTransactions(
     userId: string,
     options?: ListTransactionsOptions,
@@ -402,6 +419,23 @@ export interface Store {
   getLatestPoolingRun(userId: string): Promise<PoolingRunRow | null>;
   listPoolingRuns(userId: string, limit?: number): Promise<PoolingRunRow[]>;
   hasRunningPoolingRun(userId: string): Promise<boolean>;
+
+  findUserByTelegramChatId(chatId: string): Promise<UserRow | null>;
+  findUserByTelegramLinkToken(token: string): Promise<UserRow | null>;
+  setTelegramLinkToken(userId: string, token: string | null): Promise<UserRow | null>;
+  linkTelegramChat(userId: string, chatId: string): Promise<UserRow | null>;
+  unlinkTelegram(userId: string): Promise<void>;
+  createTelegramPrompt(input: {
+    userId: string;
+    transactionId: string;
+    chatId: string;
+  }): Promise<TelegramPromptRow>;
+  getOldestPendingTelegramPrompt(chatId: string): Promise<TelegramPromptRow | null>;
+  answerTelegramPrompt(
+    promptId: string,
+    categorySlug: string,
+  ): Promise<TelegramPromptRow | null>;
+  expireTelegramPrompt(promptId: string): Promise<TelegramPromptRow | null>;
 
   audit(userId: string | null, action: string, meta?: Record<string, unknown>): Promise<void>;
   /** Wipe imported mail/transactions. Keeps the user, Gmail, and bank setup. */

@@ -13,6 +13,7 @@ import type {
   ProviderRow,
   Store,
   ClearedUserRecords,
+  TelegramPromptRow,
   TransactionOverrideRow,
   TransactionRow,
   UserRow,
@@ -37,6 +38,7 @@ export class MemoryStore implements Store {
   gmail: GmailConnectionRow[] = [];
   mailMessages: MailMessageRow[] = [];
   poolingRuns: PoolingRunRow[] = [];
+  telegramPrompts: TelegramPromptRow[] = [];
   audits: Array<{ userId: string | null; action: string; meta: Record<string, unknown> }> =
     [];
 
@@ -68,6 +70,8 @@ export class MemoryStore implements Store {
       passwordHash: input.passwordHash,
       displayName: input.displayName ?? null,
       dailySpendLimit: null,
+      telegramChatId: null,
+      telegramLinkToken: null,
       createdAt: nowIso(),
       deletedAt: null,
     };
@@ -369,22 +373,25 @@ export class MemoryStore implements Store {
   async insertTransactions(
     userId: string,
     rows: NewTransactionInput[],
-  ): Promise<{ inserted: number; skipped: number }> {
+  ): Promise<{ inserted: number; skipped: number; ids: string[] }> {
     let inserted = 0;
     let skipped = 0;
+    const ids: string[] = [];
     for (const row of rows) {
       if (this.transactions.some((t) => t.userId === userId && t.fingerprint === row.fingerprint)) {
         skipped += 1;
         continue;
       }
+      const id = randomUUID();
       this.transactions.push({
-        id: randomUUID(),
+        id,
         userId,
         ...row,
       });
+      ids.push(id);
       inserted += 1;
     }
-    return { inserted, skipped };
+    return { inserted, skipped, ids };
   }
 
   async listTransactions(
@@ -597,6 +604,101 @@ export class MemoryStore implements Store {
     );
   }
 
+  async findUserByTelegramChatId(chatId: string): Promise<UserRow | null> {
+    return (
+      [...this.users.values()].find(
+        (u) => u.telegramChatId === chatId && !u.deletedAt,
+      ) ?? null
+    );
+  }
+
+  async findUserByTelegramLinkToken(token: string): Promise<UserRow | null> {
+    return (
+      [...this.users.values()].find(
+        (u) => u.telegramLinkToken === token && !u.deletedAt,
+      ) ?? null
+    );
+  }
+
+  async setTelegramLinkToken(
+    userId: string,
+    token: string | null,
+  ): Promise<UserRow | null> {
+    const user = await this.findUserById(userId);
+    if (!user) return null;
+    user.telegramLinkToken = token;
+    return user;
+  }
+
+  async linkTelegramChat(userId: string, chatId: string): Promise<UserRow | null> {
+    const user = await this.findUserById(userId);
+    if (!user) return null;
+    user.telegramChatId = chatId;
+    user.telegramLinkToken = null;
+    return user;
+  }
+
+  async unlinkTelegram(userId: string): Promise<void> {
+    const user = this.users.get(userId);
+    if (!user) return;
+    user.telegramChatId = null;
+    user.telegramLinkToken = null;
+    this.telegramPrompts = this.telegramPrompts.filter((p) => p.userId !== userId);
+  }
+
+  async createTelegramPrompt(input: {
+    userId: string;
+    transactionId: string;
+    chatId: string;
+  }): Promise<TelegramPromptRow> {
+    const existing = this.telegramPrompts.find(
+      (p) => p.transactionId === input.transactionId,
+    );
+    if (existing) return existing;
+    const row: TelegramPromptRow = {
+      id: randomUUID(),
+      userId: input.userId,
+      transactionId: input.transactionId,
+      chatId: input.chatId,
+      status: "pending",
+      categorySlug: null,
+      createdAt: nowIso(),
+      answeredAt: null,
+    };
+    this.telegramPrompts.push(row);
+    return row;
+  }
+
+  async getOldestPendingTelegramPrompt(
+    chatId: string,
+  ): Promise<TelegramPromptRow | null> {
+    return (
+      this.telegramPrompts
+        .filter((p) => p.chatId === chatId && p.status === "pending")
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0] ?? null
+    );
+  }
+
+  async answerTelegramPrompt(
+    promptId: string,
+    categorySlug: string,
+  ): Promise<TelegramPromptRow | null> {
+    const row = this.telegramPrompts.find((p) => p.id === promptId);
+    if (!row) return null;
+    row.status = "answered";
+    row.categorySlug = categorySlug;
+    row.answeredAt = nowIso();
+    return row;
+  }
+
+  async expireTelegramPrompt(promptId: string): Promise<TelegramPromptRow | null> {
+    const row = this.telegramPrompts.find((p) => p.id === promptId);
+    if (!row) return null;
+    row.status = "expired";
+    row.answeredAt = nowIso();
+    return row;
+  }
+
   async audit(
     userId: string | null,
     action: string,
@@ -618,11 +720,15 @@ export class MemoryStore implements Store {
     this.overrides = this.overrides.filter((o) => o.userId !== userId);
     this.mailMessages = this.mailMessages.filter((m) => m.userId !== userId);
     this.poolingRuns = this.poolingRuns.filter((r) => r.userId !== userId);
+    this.telegramPrompts = this.telegramPrompts.filter((p) => p.userId !== userId);
     for (const account of this.accounts) {
       if (account.userId === userId) {
         account.poolingEnabled = false;
         account.poolingStartedAt = null;
       }
+    }
+    for (const connection of this.gmail) {
+      if (connection.userId === userId) connection.lastScannedOn = null;
     }
     return {
       transactions: before.transactions - this.transactions.length,
@@ -644,6 +750,7 @@ export class MemoryStore implements Store {
     this.gmail = this.gmail.filter((g) => g.userId !== userId);
     this.mailMessages = this.mailMessages.filter((m) => m.userId !== userId);
     this.poolingRuns = this.poolingRuns.filter((r) => r.userId !== userId);
+    this.telegramPrompts = this.telegramPrompts.filter((p) => p.userId !== userId);
     await this.softDeleteUser(userId);
   }
 }

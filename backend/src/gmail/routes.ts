@@ -114,6 +114,7 @@ export async function handleGmailOAuthCallback(
           historyId: existing?.historyId ?? null,
           watchExpiration: existing?.watchExpiration ?? null,
           lastSyncAt: existing?.lastSyncAt ?? null,
+          lastScannedOn: existing?.lastScannedOn ?? null,
           disconnectedAt: null,
         });
         const connection = await store.getGmailConnection(result.user.id);

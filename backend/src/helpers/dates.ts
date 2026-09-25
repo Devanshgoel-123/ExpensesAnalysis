@@ -146,6 +146,35 @@ export function poolingDateWindow(month?: string | null): {
   return { after, before: addIsoDays(last, 1) };
 }
 
+/**
+ * Next Gmail query window for a user.
+ * `lastScannedOn` is the last IST day that was fully scanned. The next
+ * search starts the following day so that day is not listed again.
+ * `covered` means that day is already today — nothing new to query.
+ */
+export function nextScanWindow(
+  lastScannedOn: string | null | undefined,
+  now: Date = new Date(),
+): { after: string; before: string; covered: boolean; through: string } {
+  const scan = poolingScanWindow(now);
+  const through = scan.to;
+  const before = addIsoDays(scan.to, 1);
+  const last = toIstCalendarDate(lastScannedOn);
+  if (!last) {
+    return { after: scan.from, before, covered: false, through };
+  }
+  const start = addIsoDays(last, 1);
+  if (start > scan.to) {
+    return { after: scan.to, before: scan.to, covered: true, through };
+  }
+  return {
+    after: start < scan.from ? scan.from : start,
+    before,
+    covered: false,
+    through,
+  };
+}
+
 export function clampPoolingAfter(after?: string): string {
   const from = poolingScanWindow().from;
   if (after && after > from) return after;

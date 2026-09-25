@@ -9,6 +9,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
   date,
 } from "drizzle-orm/pg-core";
@@ -23,10 +24,16 @@ export const users = pgTable(
     passwordHash: text("password_hash").notNull(),
     displayName: text("display_name"),
     dailySpendLimit: numeric("daily_spend_limit"),
+    telegramChatId: text("telegram_chat_id"),
+    telegramLinkToken: text("telegram_link_token"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
-  (t) => [index("users_deleted_idx").on(t.deletedAt)],
+  (t) => [
+    index("users_deleted_idx").on(t.deletedAt),
+    uniqueIndex("users_telegram_chat_idx").on(t.telegramChatId),
+    uniqueIndex("users_telegram_link_token_idx").on(t.telegramLinkToken),
+  ],
 );
 
 export const invites = pgTable("invites", {
@@ -234,6 +241,8 @@ export const gmailConnections = pgTable("gmail_connections", {
   historyId: text("history_id"),
   watchExpiration: timestamp("watch_expiration", { withTimezone: true }),
   lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+  /** Inclusive IST day (YYYY-MM-DD) the mailbox was fully query-scanned through. */
+  lastScannedOn: date("last_scanned_on"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   disconnectedAt: timestamp("disconnected_at", { withTimezone: true }),
 });
@@ -290,6 +299,28 @@ export const poolingRuns = pgTable(
   (t) => [
     index("pooling_runs_user_started_idx").on(t.userId, t.startedAt),
     index("pooling_runs_status_idx").on(t.status),
+  ],
+);
+
+export const telegramPrompts = pgTable(
+  "telegram_prompts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    transactionId: uuid("transaction_id")
+      .notNull()
+      .references(() => transactions.id, { onDelete: "cascade" }),
+    chatId: text("chat_id").notNull(),
+    status: text("status").notNull().default("pending"),
+    categorySlug: text("category_slug"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    answeredAt: timestamp("answered_at", { withTimezone: true }),
+  },
+  (t) => [
+    unique("telegram_prompts_txn_uidx").on(t.transactionId),
+    index("telegram_prompts_chat_pending_idx").on(t.chatId, t.status, t.createdAt),
   ],
 );
 

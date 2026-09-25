@@ -7,6 +7,7 @@ import {
   isOnOrAfterPoolingCutoff,
   isWithinPoolingWindow,
   monthBounds,
+  nextScanWindow,
   monthsInPoolingWindow,
   pad2,
   parsePoolingInstant,
@@ -139,6 +140,24 @@ describe("date helpers", () => {
     assert.equal(clampPoolingAfter(undefined), from);
     assert.equal(clampPoolingAfter("2000-01-01"), from);
     assert.equal(clampPoolingAfter(addIsoDays(from, 3)), addIsoDays(from, 3));
+  });
+
+  it("starts the next scan the day after the last fully scanned date", () => {
+    const now = new Date("2026-09-26T12:00:00+05:30");
+    assert.deepEqual(nextScanWindow(null, now), {
+      after: "2026-07-01",
+      before: "2026-09-27",
+      covered: false,
+      through: "2026-09-26",
+    });
+    assert.deepEqual(nextScanWindow("2026-09-20", now), {
+      after: "2026-09-21",
+      before: "2026-09-27",
+      covered: false,
+      through: "2026-09-26",
+    });
+    assert.deepEqual(nextScanWindow("2026-09-26", now).covered, true);
+    assert.deepEqual(nextScanWindow("2026-06-01", now).after, "2026-07-01");
   });
 
   it("caps statement scans between the minimum and maximum budget", () => {

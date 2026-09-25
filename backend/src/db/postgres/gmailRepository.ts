@@ -40,6 +40,7 @@ export class PostgresGmailRepository {
         historyId: input.historyId,
         watchExpiration: date(input.watchExpiration),
         lastSyncAt: date(input.lastSyncAt),
+        lastScannedOn: input.lastScannedOn,
         disconnectedAt: null,
       })
       .onConflictDoUpdate({
@@ -52,6 +53,7 @@ export class PostgresGmailRepository {
           historyId: sql`COALESCE(excluded.history_id, ${gmailConnections.historyId})`,
           watchExpiration: sql`COALESCE(excluded.watch_expiration, ${gmailConnections.watchExpiration})`,
           lastSyncAt: sql`COALESCE(excluded.last_sync_at, ${gmailConnections.lastSyncAt})`,
+          lastScannedOn: input.lastScannedOn,
           disconnectedAt: null,
         },
       })

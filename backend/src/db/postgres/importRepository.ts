@@ -115,8 +115,9 @@ export class PostgresImportRepository {
   async insertTransactions(
     userId: string,
     rows: NewTransactionInput[],
-  ): Promise<{ inserted: number; skipped: number }> {
+  ): Promise<{ inserted: number; skipped: number; ids: string[] }> {
     let inserted = 0;
+    const ids: string[] = [];
     for (const row of rows) {
       const result = await this.db
         .insert(transactions)
@@ -126,8 +127,9 @@ export class PostgresImportRepository {
         })
         .returning({ id: transactions.id });
       inserted += result.length;
+      ids.push(...result.map((r) => r.id));
     }
-    return { inserted, skipped: rows.length - inserted };
+    return { inserted, skipped: rows.length - inserted, ids };
   }
 
   async listTransactions(

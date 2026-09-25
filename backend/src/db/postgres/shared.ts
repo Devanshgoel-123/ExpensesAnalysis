@@ -101,6 +101,9 @@ export function mapGmailConnection(
     lastSyncAt: row.lastSyncAt
       ? new Date(row.lastSyncAt as Date | string).toISOString()
       : null,
+    lastScannedOn: row.lastScannedOn
+      ? String(row.lastScannedOn).slice(0, 10)
+      : null,
     disconnectedAt: row.disconnectedAt
       ? new Date(row.disconnectedAt as Date | string).toISOString()
       : null,

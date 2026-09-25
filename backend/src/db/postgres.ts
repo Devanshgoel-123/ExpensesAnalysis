@@ -22,6 +22,8 @@ import type {
   ProviderRow,
   Store,
   ClearedUserRecords,
+  TelegramPromptRow,
+  TelegramPromptStatus,
   TransactionOverrideRow,
   TransactionRow,
   UserRow,
@@ -32,8 +34,20 @@ const iso = (v: Date | string) => new Date(v).toISOString();
 const mapUser = (r: typeof s.users.$inferSelect): UserRow => ({
   ...r,
   dailySpendLimit: r.dailySpendLimit == null ? null : Number(r.dailySpendLimit),
+  telegramChatId: r.telegramChatId ?? null,
+  telegramLinkToken: r.telegramLinkToken ?? null,
   createdAt: iso(r.createdAt),
   deletedAt: r.deletedAt ? iso(r.deletedAt) : null,
+});
+const mapPrompt = (r: typeof s.telegramPrompts.$inferSelect): TelegramPromptRow => ({
+  id: r.id,
+  userId: r.userId,
+  transactionId: r.transactionId,
+  chatId: r.chatId,
+  status: r.status as TelegramPromptStatus,
+  categorySlug: r.categorySlug,
+  createdAt: iso(r.createdAt),
+  answeredAt: r.answeredAt ? iso(r.answeredAt) : null,
 });
 const mapCategory = (r: typeof s.categories.$inferSelect): CategoryRow => ({
   id: r.id,
@@ -538,6 +552,113 @@ export class PostgresStore implements Store {
   hasRunningPoolingRun(u: string) {
     return this.gmail.hasRunningPoolingRun(u);
   }
+  async findUserByTelegramChatId(chatId: string) {
+    const [r] = await this.db
+      .select()
+      .from(s.users)
+      .where(
+        and(eq(s.users.telegramChatId, chatId), isNull(s.users.deletedAt)),
+      )
+      .limit(1);
+    return r ? mapUser(r) : null;
+  }
+  async findUserByTelegramLinkToken(token: string) {
+    const [r] = await this.db
+      .select()
+      .from(s.users)
+      .where(
+        and(eq(s.users.telegramLinkToken, token), isNull(s.users.deletedAt)),
+      )
+      .limit(1);
+    return r ? mapUser(r) : null;
+  }
+  async setTelegramLinkToken(userId: string, token: string | null) {
+    const [r] = await this.db
+      .update(s.users)
+      .set({ telegramLinkToken: token })
+      .where(and(eq(s.users.id, userId), isNull(s.users.deletedAt)))
+      .returning();
+    return r ? mapUser(r) : null;
+  }
+  async linkTelegramChat(userId: string, chatId: string) {
+    const [r] = await this.db
+      .update(s.users)
+      .set({ telegramChatId: chatId, telegramLinkToken: null })
+      .where(and(eq(s.users.id, userId), isNull(s.users.deletedAt)))
+      .returning();
+    return r ? mapUser(r) : null;
+  }
+  async unlinkTelegram(userId: string) {
+    await this.db
+      .update(s.users)
+      .set({ telegramChatId: null, telegramLinkToken: null })
+      .where(eq(s.users.id, userId));
+    await this.db
+      .delete(s.telegramPrompts)
+      .where(eq(s.telegramPrompts.userId, userId));
+  }
+  async createTelegramPrompt(input: {
+    userId: string;
+    transactionId: string;
+    chatId: string;
+  }): Promise<TelegramPromptRow> {
+    const [row] = await this.db
+      .insert(s.telegramPrompts)
+      .values({
+        userId: input.userId,
+        transactionId: input.transactionId,
+        chatId: input.chatId,
+      })
+      .onConflictDoNothing({ target: s.telegramPrompts.transactionId })
+      .returning();
+    if (row) return mapPrompt(row);
+    const [existing] = await this.db
+      .select()
+      .from(s.telegramPrompts)
+      .where(eq(s.telegramPrompts.transactionId, input.transactionId))
+      .limit(1);
+    if (!existing) {
+      throw new Error("telegram prompt insert failed");
+    }
+    return mapPrompt(existing);
+  }
+  async getOldestPendingTelegramPrompt(chatId: string) {
+    const [row] = await this.db
+      .select()
+      .from(s.telegramPrompts)
+      .where(
+        and(
+          eq(s.telegramPrompts.chatId, chatId),
+          eq(s.telegramPrompts.status, "pending"),
+        ),
+      )
+      .orderBy(asc(s.telegramPrompts.createdAt))
+      .limit(1);
+    return row ? mapPrompt(row) : null;
+  }
+  async answerTelegramPrompt(promptId: string, categorySlug: string) {
+    const [row] = await this.db
+      .update(s.telegramPrompts)
+      .set({
+        status: "answered",
+        categorySlug,
+        answeredAt: new Date(),
+      })
+      .where(eq(s.telegramPrompts.id, promptId))
+      .returning();
+    return row ? mapPrompt(row) : null;
+  }
+  async expireTelegramPrompt(promptId: string) {
+    const [row] = await this.db
+      .update(s.telegramPrompts)
+      .set({
+        status: "expired",
+        answeredAt: new Date(),
+      })
+      .where(eq(s.telegramPrompts.id, promptId))
+      .returning();
+    return row ? mapPrompt(row) : null;
+  }
   async audit(
     userId: string | null,
     action: string,
@@ -547,6 +668,9 @@ export class PostgresStore implements Store {
   }
   async clearUserRecords(userId: string): Promise<ClearedUserRecords> {
     return this.db.transaction(async (tx) => {
+      await tx
+        .delete(s.telegramPrompts)
+        .where(eq(s.telegramPrompts.userId, userId));
       const overrides = await tx
         .delete(s.transactionOverrides)
         .where(eq(s.transactionOverrides.userId, userId))
@@ -571,6 +695,10 @@ export class PostgresStore implements Store {
         .update(s.accounts)
         .set({ poolingEnabled: false, poolingStartedAt: null })
         .where(eq(s.accounts.userId, userId));
+      await tx
+        .update(s.gmailConnections)
+        .set({ lastScannedOn: null })
+        .where(eq(s.gmailConnections.userId, userId));
       return {
         transactions: transactions.length,
         imports: imports.length,
@@ -582,6 +710,9 @@ export class PostgresStore implements Store {
   }
   async deleteUserData(userId: string) {
     await this.db.transaction(async (tx) => {
+      await tx
+        .delete(s.telegramPrompts)
+        .where(eq(s.telegramPrompts.userId, userId));
       await tx
         .delete(s.transactionOverrides)
         .where(eq(s.transactionOverrides.userId, userId));

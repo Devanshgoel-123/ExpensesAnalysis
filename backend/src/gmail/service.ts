@@ -17,7 +17,7 @@ import {
   gmailConfigured,
   renewWatch,
 } from "./client.js";
-import { poolingScanWindow } from "../helpers/index.js";
+import { nextScanWindow, poolingScanWindow } from "../helpers/index.js";
 import {
   failStaleRunningRuns,
   runPoolingPoll,
@@ -105,6 +105,7 @@ export async function getGmailStatusForUser(userId: string) {
     connected: Boolean(connection),
     email: connection?.googleEmail ?? null,
     scanWindow: poolingScanWindow(),
+    lastScannedOn: connection?.lastScannedOn ?? null,
     poolingEnabled: primary?.poolingEnabled ?? false,
     latestRun: latestRun
       ? {
@@ -203,6 +204,11 @@ export async function enablePoolingForUser(
   const account = await resolveAccountForPooling(userId, body.accountId);
   const updated = await store.setPoolingEnabled(userId, account.id, true);
   const ready = await ensureHistoryId(connection);
+  if (!month && nextScanWindow(ready.lastScannedOn).covered) {
+    throw AppError.badRequest(
+      `Already scanned through ${ready.lastScannedOn}. Clear imported data to scan that range again.`,
+    );
+  }
   gmailLog.enabled(userId, month ?? "from-cutoff");
   const runId = await beginPoolingSync(
     {
@@ -285,6 +291,7 @@ export async function persistGoogleConnection(input: {
     historyId: existing?.historyId ?? null,
     watchExpiration: existing?.watchExpiration ?? null,
     lastSyncAt: existing?.lastSyncAt ?? null,
+    lastScannedOn: existing?.lastScannedOn ?? null,
     disconnectedAt: null,
   });
   await ensureHistoryId(connection);
