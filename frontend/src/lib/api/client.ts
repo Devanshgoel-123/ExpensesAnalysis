@@ -1,10 +1,8 @@
 import type { ParseResult } from "@/types";
-import { normalizeMonth } from "@/helpers/month";
 import { requestJson, requestVoid } from "./http";
 import type {
   AccountSummary,
   AuthUser,
-  GmailBackfillResult,
   GmailStatus,
   ParseStatementResult,
 } from "./types";
@@ -24,6 +22,10 @@ export function createApiClient(token: string) {
     /** Permanently delete the signed-in account. */
     deleteAccount: (): Promise<void> =>
       requestVoid("/api/auth/me", { method: "DELETE", ...auth }),
+
+    /** Wipe imported mail and transactions. Keeps the account and Gmail. */
+    clearImportedData: (): Promise<import("./types").ClearedImportedData> =>
+      requestJson("/api/imports/data", { method: "DELETE", ...auth }),
 
     /** Parse and import a bank statement PDF. */
     parseStatement: (file: File, password: string): Promise<ParseStatementResult> => {
@@ -79,48 +81,12 @@ export function createApiClient(token: string) {
       ),
 
     enablePooling: (body: { month?: string; password?: string; maxMessages?: number } = {}) =>
-      requestJson<{
-        month: string | null;
-        status?: "running" | "completed";
-        runId?: string;
-        statements: { scanned: number; imported: number; skipped: number };
-        alerts: { scanned: number; imported: number; skipped: number };
-        backfill: { imported: number; skipped: number; scanned: number };
-        notice: string;
-      }>("/api/gmail/pooling/enable", {
+      requestJson<{ status: "running"; runId: string }>("/api/gmail/pooling/enable", {
         method: "POST",
         ...auth,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       }),
-
-    disablePooling: () =>
-      requestJson<{ ok: boolean }>("/api/gmail/pooling/disable", {
-        method: "POST",
-        ...auth,
-      }),
-
-    gmailSyncNow: () =>
-      requestJson<{
-        ok: boolean;
-        lastSyncAt: string;
-        run: { scanned: number; imported: number; skipped: number; runId: string };
-      }>("/api/gmail/sync", { method: "POST", ...auth }),
-
-    /** Query-scan Gmail from the pooling cutoff (omit month for the full window). */
-    gmailBackfill: (body: { month?: string; password?: string; maxMessages?: number } = {}) => {
-      const month = normalizeMonth(body.month);
-      return requestJson<GmailBackfillResult>("/api/gmail/backfill", {
-        method: "POST",
-        ...auth,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          password: body.password ?? "",
-          maxMessages: body.maxMessages ?? 200,
-          ...(month ? { month } : {}),
-        }),
-      });
-    },
 
     listRules: () =>
       requestJson<{ rules: Array<Record<string, unknown>> }>("/api/rules", auth),

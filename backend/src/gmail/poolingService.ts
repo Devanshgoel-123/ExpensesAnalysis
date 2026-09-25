@@ -21,16 +21,16 @@ import {
 import {
   BACKFILL_DEFAULT_MAX_MESSAGES,
   POOLING_DISPATCHER_CONCURRENCY,
-  POOLING_EARLIEST_DATE,
-  POOLING_EARLIEST_MONTH,
   POOLING_PROGRESS_EVERY,
   SCAN_SUCCESS_BATCH,
 } from "../constants/index.js";
 import {
   currentMonth,
   gmailFromClause,
-  isOnOrAfterPoolingCutoff,
+  isWithinPoolingWindow,
+  sendersForBank,
   poolingDateWindow,
+  poolingScanWindow,
   statementScanBudget,
   toGmailQueryAfter,
   toIstCalendarDate,
@@ -87,6 +87,11 @@ function releaseScan(userId: string, runId: string): void {
   if (activeScans.get(userId) === runId) activeScans.delete(userId);
 }
 
+/** Stop an in-flight scan so a wipe or newer run can take over. */
+export function cancelActiveScan(userId: string): void {
+  activeScans.delete(userId);
+}
+
 function runLastActivityMs(run: PoolingRunRow): number {
   const progressAt = run.meta.progressAt;
   const raw = typeof progressAt === "string" ? progressAt : run.startedAt;
@@ -110,7 +115,7 @@ async function processAlertMessage(input: {
   }
 
   const details = await fetchMessageDetails(input.connection, input.messageId);
-  if (!isOnOrAfterPoolingCutoff(details.receivedAt)) {
+  if (!isWithinPoolingWindow(details.receivedAt)) {
     return "skipped";
   }
   if (isStatementLikeEmail(details.subject, details.snippet)) {
@@ -121,10 +126,10 @@ async function processAlertMessage(input: {
   const parsed = parseBankAlertEmail(details.subject, details.bodyText);
   const fingerprint = sha256Hex(`mail:${input.messageId}`);
   const txDate =
-    (parsed.date && isOnOrAfterPoolingCutoff(parsed.date) ? parsed.date : null) ??
+    (parsed.date && isWithinPoolingWindow(parsed.date) ? parsed.date : null) ??
     toIstCalendarDate(details.receivedAt);
 
-  if (!txDate || !isOnOrAfterPoolingCutoff(txDate)) {
+  if (!txDate || !isWithinPoolingWindow(txDate)) {
     return "skipped";
   }
 
@@ -201,7 +206,6 @@ async function processAlertMessage(input: {
       confidence: classification.confidence,
       classificationSource: classification.classificationSource,
       fingerprint: txFingerprint,
-      raw: null,
     },
   ]);
 
@@ -222,7 +226,7 @@ async function processStatementMessage(input: {
   if (existing?.status === ImportStatus.Completed) return MailProcessResult.Skipped;
 
   const details = await fetchMessageDetails(input.connection, input.messageId);
-  if (!isOnOrAfterPoolingCutoff(details.receivedAt)) {
+  if (!isWithinPoolingWindow(details.receivedAt)) {
     return "skipped";
   }
 
@@ -238,7 +242,7 @@ async function processStatementMessage(input: {
       password: input.password,
       source: ImportSource.Gmail,
       gmailMessageId: input.messageId,
-      earliestDate: POOLING_EARLIEST_DATE,
+      earliestDate: poolingScanWindow().from,
     });
     if (result.inserted > 0) imported += 1;
   }
@@ -425,13 +429,12 @@ export async function runPoolingSync(input: {
     );
   }
 
-  // Always clamp to POOLING_EARLIEST_DATE; never scan earlier mail.
   const month = input.month ?? null;
   const dateWindow = poolingDateWindow(month);
   const maxMessages = input.maxMessages ?? BACKFILL_DEFAULT_MAX_MESSAGES;
   const password = input.password ?? "";
   const trigger = input.trigger ?? PoolingRunTrigger.Backfill;
-  const monthLabel = month ?? `from-${POOLING_EARLIEST_DATE}`;
+  const monthLabel = month ?? `from-${dateWindow.after}`;
 
   await failStaleRunningRuns(input.userId, 0);
 
@@ -440,10 +443,7 @@ export async function runPoolingSync(input: {
     accountId: input.account.id,
     trigger,
     mode: PoolingRunMode.Backfill,
-    month:
-      month && month >= POOLING_EARLIEST_MONTH
-        ? month
-        : POOLING_EARLIEST_MONTH,
+    month: month ?? dateWindow.after.slice(0, 7),
   });
 
   claimScan(input.userId, run.id);
@@ -508,21 +508,19 @@ export async function runPoolingSync(input: {
   try {
     input.onStarted?.(run.id);
 
-    const statementQuery = buildStatementQuery(
+    const senders = sendersForBank(
+      input.account.bank,
       input.account.statementSenderEmails,
-      dateWindow,
     );
-    const alertQuery = buildAlertQuery(
-      input.account.statementSenderEmails,
-      dateWindow,
-    );
+    const statementQuery = buildStatementQuery(senders, dateWindow);
+    const alertQuery = buildAlertQuery(senders, dateWindow);
 
     // Alert emails are primary; PDF statements are a secondary backfill.
     parts.alerts = await scanQuery({
       userId: input.userId,
       accountId: input.account.id,
       connection,
-      senders: input.account.statementSenderEmails,
+      senders,
       query: alertQuery,
       password,
       maxMessages,
@@ -547,7 +545,7 @@ export async function runPoolingSync(input: {
       userId: input.userId,
       accountId: input.account.id,
       connection,
-      senders: input.account.statementSenderEmails,
+      senders,
       query: statementQuery,
       password,
       maxMessages: statementScanBudget(maxMessages),
@@ -775,7 +773,7 @@ export async function probeGmailQueries(input: {
   const statementQuery = buildStatementQuery(input.senders, dateWindow);
   // Broader probe: any mail from configured senders on/after the cutoff.
   const fromClause = gmailFromClause(input.senders);
-  const broadQuery = `${fromClause} after:${toGmailQueryAfter(POOLING_EARLIEST_DATE)}`;
+  const broadQuery = `${fromClause} after:${toGmailQueryAfter(dateWindow.after)}`;
 
   const [alertPage, statementPage, broadPage] = await Promise.all([
     listStatementMessageIds(input.connection, undefined, alertQuery),
@@ -806,7 +804,7 @@ export async function probeGmailQueries(input: {
   });
 
   return {
-    month: month ?? `from-${POOLING_EARLIEST_DATE}`,
+    month: month ?? `from-${dateWindow.after}`,
     alert: {
       query: alertQuery,
       ids: alertPage.ids.length,

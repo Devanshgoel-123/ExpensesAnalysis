@@ -379,7 +379,6 @@ export function parseTransactions(text: string): Transaction[] {
       upiId: parsed.upiId,
       merchant: null,
       payee: null,
-      raw: parsed.raw,
       closingBalance: parsed.closingBalance,
       order: internals.length,
     });
@@ -397,9 +396,9 @@ export function parseTransactions(text: string): Transaction[] {
     .map(({ closingBalance: _c, order: _o, ...txn }) => txn)
     .sort((a, b) =>
       a.date === b.date
-        ? (a.time ?? "").localeCompare(b.time ?? "") ||
+        ? (b.time ?? "").localeCompare(a.time ?? "") ||
           a.description.localeCompare(b.description)
-        : a.date.localeCompare(b.date),
+        : b.date.localeCompare(a.date),
     );
 }
 

@@ -26,45 +26,19 @@ export interface AccountSummary {
   poolingStartedAt: string | null;
 }
 
-export type PoolingRunSummary = {
-  id: string;
-  trigger: string;
-  status: PoolingRunStatus | string;
-  mode: string;
-  month: string | null;
-  scanned: number;
-  imported: number;
-  skipped: number;
-  errorMessage: string | null;
-  startedAt: string;
-  finishedAt: string | null;
-};
+export type ScanWindow = { from: string; to: string };
 
 export type GmailStatus = {
   configured: boolean;
   connected: boolean;
   email: string | null;
-  lastSyncAt: string | null;
-  notice: string;
+  scanWindow?: ScanWindow;
   poolingEnabled: boolean;
-  poolingStartedAt: string | null;
-  bank: string | null;
-  statementSenderEmails: string[];
-  dispatcher?: {
-    interval: string;
-    health: "idle" | "running" | "ok" | "degraded" | "pending" | string;
-  };
-  latestRun?: PoolingRunSummary | null;
-  recentRuns?: PoolingRunSummary[];
-};
-
-export type GmailBackfillResult = {
-  month: string | null;
-  window: { after: string; before?: string };
-  status?: "running" | "completed";
-  runId?: string;
-  statements: { scanned: number; imported: number; skipped: number };
-  alerts: { scanned: number; imported: number; skipped: number };
+  latestRun?: {
+    status: PoolingRunStatus | string;
+    imported: number;
+    errorMessage: string | null;
+  } | null;
 };
 
 export type ParseStatementResult = ParseResult & { importId?: string };
@@ -73,4 +47,17 @@ export type ImportStatus = {
   hasTransactions: boolean;
   latestMonth: string | null;
   transactionCount: number;
+  scanWindow: ScanWindow;
+};
+
+export type ClearedImportedData = {
+  ok: true;
+  scanWindow: ScanWindow;
+  deleted: {
+    transactions: number;
+    imports: number;
+    mailMessages: number;
+    poolingRuns: number;
+    overrides: number;
+  };
 };

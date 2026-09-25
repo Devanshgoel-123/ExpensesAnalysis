@@ -64,6 +64,7 @@ export type AppConfig = {
   logPretty: boolean;
   corsOrigins: string[];
   databaseUrl: string;
+  databaseHost: string;
   useMemoryStore: boolean;
   jwtSecret: string;
   encryptionKey: string;
@@ -96,6 +97,15 @@ export type AppConfig = {
     connectionTimeoutMillis: number;
   };
 };
+
+function databaseHost(url: string): string {
+  if (url === "memory") return "memory";
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "postgres";
+  }
+}
 
 function resolveJwtSecret(raw: string | undefined, nodeEnv: string): string {
   if (raw && raw.length >= 16) return raw;
@@ -193,6 +203,7 @@ function loadConfig(): AppConfig {
     logPretty,
     corsOrigins,
     databaseUrl: env.DATABASE_URL,
+    databaseHost: databaseHost(env.DATABASE_URL),
     useMemoryStore: env.DATABASE_URL === "memory",
     jwtSecret: env.JWT_SECRET,
     encryptionKey: env.ENCRYPTION_KEY,

@@ -74,12 +74,12 @@ SELECT NULL, 'District', ARRAY['District'], ARRAY['district'], ARRAY['district.i
 WHERE NOT EXISTS (SELECT 1 FROM providers WHERE is_global = TRUE AND lower(canonical_name) = 'district');
 
 INSERT INTO providers (user_id, canonical_name, aliases, upi_handles, sender_domains, website_domain, logo_url, category_slug, is_global)
-SELECT NULL, 'HDFC Bank', ARRAY['HDFC'], ARRAY[]::TEXT[], ARRAY['hdfcbank.net','hdfcbank.com'], 'hdfcbank.com', '/providers/hdfc.svg', NULL, TRUE
+SELECT NULL, 'HDFC Bank', ARRAY['HDFC'], ARRAY[]::TEXT[], ARRAY['hdfcbank.bank.in','hdfcbank.net','hdfcbank.com'], 'hdfcbank.com', '/providers/hdfc.svg', NULL, TRUE
 WHERE NOT EXISTS (SELECT 1 FROM providers WHERE is_global = TRUE AND lower(canonical_name) = 'hdfc bank');
 
 INSERT INTO bank_presets (id, label, adapter_id, pdf_adapter_ready, default_sender_emails, description, sort_order)
 VALUES
-  ('HDFC', 'HDFC Bank', 'hdfc', TRUE, ARRAY['hdfcbank.net','hdfcbank.com','alerts@hdfcbank'], 'e-Statements / account statements with PDF attachments.', 1),
+  ('HDFC', 'HDFC Bank', 'hdfc', TRUE, ARRAY['hdfcbank.bank.in','hdfcbank.net','hdfcbank.com'], 'InstaAlerts from hdfcbank.bank.in, plus legacy hdfcbank.net / hdfcbank.com.', 1),
   ('SBI', 'State Bank of India', NULL, FALSE, ARRAY['sbi.co.in','onlinesbi.com'], 'Mail allowlist only — PDF adapter not shipped yet.', 2),
   ('ICICI', 'ICICI Bank', NULL, FALSE, ARRAY['icicibank.com'], 'Mail allowlist only — PDF adapter not shipped yet.', 3),
   ('AXIS', 'Axis Bank', NULL, FALSE, ARRAY['axisbank.com'], 'Mail allowlist only — PDF adapter not shipped yet.', 4)

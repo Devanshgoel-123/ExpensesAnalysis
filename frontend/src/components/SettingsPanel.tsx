@@ -4,9 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/useApi";
-import type { GmailStatus } from "@/lib/api/types";
 import { pathForView } from "@/lib/dashboardViews";
-import { formatTimestamp } from "@/helpers/month";
 
 function buildRuleMatchFields(matchText: string): {
   matchNarrationRe?: string;
@@ -36,7 +34,6 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
   const [suggestions, setSuggestions] = useState<
     Array<{ label: string; count: number; sample: string }>
   >([]);
-  const [gmail, setGmail] = useState<GmailStatus | null>(null);
   const [payeeName, setPayeeName] = useState("");
   const [matchText, setMatchText] = useState("");
   const [dailyLimit, setDailyLimit] = useState("");
@@ -47,15 +44,13 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
   const refresh = useCallback(async () => {
     if (!api) return;
     try {
-      const [rulesRes, suggestionsRes, gmailRes, prefsRes] = await Promise.all([
+      const [rulesRes, suggestionsRes, prefsRes] = await Promise.all([
         api.listRules(),
         api.fetchSuggestions().catch(() => ({ suggestions: [] })),
-        api.gmailStatus().catch(() => null),
         api.fetchPreferences(),
       ]);
       setRules(rulesRes.rules);
       setSuggestions(suggestionsRes.suggestions);
-      setGmail(gmailRes);
       setDailyLimit(
         prefsRes.dailySpendLimit != null ? String(prefsRes.dailySpendLimit) : "",
       );
@@ -161,34 +156,8 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
       <section className="settings-section">
         <h3 className="ui-header">Gmail connection</h3>
         <p className="meta">
-          Read-only access for bank statement emails. Connect and manage pooling
-          on the Import screen — sender allowlist included.
+          Connect Gmail and scan bank mail on Import.
         </p>
-        <div className="band-stats" style={{ marginBottom: "0.85rem" }}>
-          <div>
-            <p className="meta">Status</p>
-            <strong>
-              {gmail?.connected
-                ? gmail.email
-                : gmail?.configured
-                  ? "Not connected"
-                  : "Not configured"}
-            </strong>
-          </div>
-          <div>
-            <p className="meta">Pooling</p>
-            <strong>{gmail?.poolingEnabled ? "Active" : "Off"}</strong>
-          </div>
-          <div>
-            <p className="meta">Last sync</p>
-            <strong>{formatTimestamp(gmail?.lastSyncAt)}</strong>
-          </div>
-        </div>
-        {gmail?.notice ? (
-          <p className="meta" style={{ marginBottom: "0.75rem" }}>
-            {gmail.notice}
-          </p>
-        ) : null}
         <Link href={pathForView("import")} className="cta inline-flex">
           Manage Gmail import
         </Link>
@@ -312,6 +281,33 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
         <h3 className="ui-header">Account</h3>
         <p className="meta">Session and privacy controls.</p>
         <div className="sort-bar">
+          <button
+            type="button"
+            className="ghost"
+            onClick={async () => {
+              if (
+                !confirm(
+                  "Delete every imported transaction and mail record? Your account and Gmail stay.",
+                )
+              ) {
+                return;
+              }
+              try {
+                setError(null);
+                const result = await api.clearImportedData();
+                setMessage(
+                  `Removed ${result.deleted.transactions} transactions from this account.`,
+                );
+                onChanged?.();
+              } catch (err) {
+                setError(
+                  err instanceof Error ? err.message : "Could not clear data",
+                );
+              }
+            }}
+          >
+            Clear imported data
+          </button>
           <button type="button" className="ghost" onClick={logout}>
             Log out
           </button>

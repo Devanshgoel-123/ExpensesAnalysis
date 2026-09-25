@@ -184,7 +184,6 @@ export const transactions = pgTable(
     confidence: real("confidence").notNull().default(1),
     classificationSource: text("classification_source").notNull().default("parser"),
     fingerprint: text("fingerprint").notNull(),
-    raw: text("raw"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

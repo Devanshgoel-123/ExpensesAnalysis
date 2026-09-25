@@ -21,6 +21,7 @@ import type {
   PoolingRunStatus,
   ProviderRow,
   Store,
+  ClearedUserRecords,
   TransactionOverrideRow,
   TransactionRow,
   UserRow,
@@ -543,6 +544,41 @@ export class PostgresStore implements Store {
     meta: Record<string, unknown> = {},
   ) {
     await this.db.insert(s.auditLogs).values({ userId, action, meta });
+  }
+  async clearUserRecords(userId: string): Promise<ClearedUserRecords> {
+    return this.db.transaction(async (tx) => {
+      const overrides = await tx
+        .delete(s.transactionOverrides)
+        .where(eq(s.transactionOverrides.userId, userId))
+        .returning({ id: s.transactionOverrides.id });
+      const transactions = await tx
+        .delete(s.transactions)
+        .where(eq(s.transactions.userId, userId))
+        .returning({ id: s.transactions.id });
+      const imports = await tx
+        .delete(s.imports)
+        .where(eq(s.imports.userId, userId))
+        .returning({ id: s.imports.id });
+      const poolingRuns = await tx
+        .delete(s.poolingRuns)
+        .where(eq(s.poolingRuns.userId, userId))
+        .returning({ id: s.poolingRuns.id });
+      const mailMessages = await tx
+        .delete(s.mailMessages)
+        .where(eq(s.mailMessages.userId, userId))
+        .returning({ id: s.mailMessages.id });
+      await tx
+        .update(s.accounts)
+        .set({ poolingEnabled: false, poolingStartedAt: null })
+        .where(eq(s.accounts.userId, userId));
+      return {
+        transactions: transactions.length,
+        imports: imports.length,
+        mailMessages: mailMessages.length,
+        poolingRuns: poolingRuns.length,
+        overrides: overrides.length,
+      };
+    });
   }
   async deleteUserData(userId: string) {
     await this.db.transaction(async (tx) => {

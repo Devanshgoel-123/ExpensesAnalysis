@@ -12,7 +12,6 @@ export interface Transaction {
   upiId: string | null;
   merchant: string | null;
   payee: string | null;
-  raw: string;
   providerId?: string | null;
   category?: string | null;
   logoUrl?: string | null;

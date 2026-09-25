@@ -2,6 +2,7 @@ import type { RequestHandler } from "express";
 import { config } from "../config.js";
 import { ImportSource } from "../enums/index.js";
 import { AppError } from "../errors/AppError.js";
+import { cancelActiveScan } from "../gmail/poolingService.js";
 import { parsePdf } from "../parser.js";
 import type {
   CorrectTransactionBody,
@@ -9,6 +10,7 @@ import type {
 } from "../validators/imports.js";
 import { assertPdfUpload, mapPdfImportError } from "./pdfErrors.js";
 import {
+  clearImportedDataForUser,
   correctTransactionForUser,
   getDashboardForUser,
   getImportStatusForUser,
@@ -28,6 +30,11 @@ export const getDashboardController: RequestHandler = async (req, res) => {
 export const getImportStatusController: RequestHandler = async (req, res) => {
   const status = await getImportStatusForUser(req.user!.id);
   res.json(status);
+};
+
+export const clearImportedDataController: RequestHandler = async (req, res) => {
+  cancelActiveScan(req.user!.id);
+  res.json(await clearImportedDataForUser(req.user!.id));
 };
 
 export const listImportsController: RequestHandler = async (req, res) => {

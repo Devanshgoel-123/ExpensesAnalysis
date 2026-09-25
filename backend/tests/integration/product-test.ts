@@ -144,7 +144,6 @@ async function main() {
     confidence: 0.6,
     classificationSource: "amount_band",
     fingerprint: fp,
-    raw: "UPI-SNACK",
   };
   const first = await store.insertTransactions(registered.user.id, [row]);
   const second = await store.insertTransactions(registered.user.id, [row]);
@@ -230,7 +229,6 @@ async function main() {
       confidence: 1,
       classificationSource: "parser",
       fingerprint: "fp-big",
-      raw: "UPI-BIG",
     },
   ];
   await store.insertTransactions(registered.user.id, dashboardRows);

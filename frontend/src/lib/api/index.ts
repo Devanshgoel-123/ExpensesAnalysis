@@ -3,11 +3,9 @@ export type {
   AccountSummary,
   AuthUser,
   BankPreset,
-  GmailBackfillResult,
   GmailStatus,
   ImportStatus,
   ParseStatementResult,
-  PoolingRunSummary,
 } from "./types";
 
 import { API_BASE } from "./http";

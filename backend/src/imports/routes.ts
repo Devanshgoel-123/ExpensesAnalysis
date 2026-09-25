@@ -10,6 +10,7 @@ import {
   parsePasswordBodySchema,
 } from "../validators/imports.js";
 import {
+  clearImportedDataController,
   correctTransactionController,
   getDashboardController,
   getImportStatusController,
@@ -29,6 +30,8 @@ importRouter.use(requireAuth);
 importRouter.get("/dashboard", validate(dashboardQuerySchema, "query"), getDashboardController);
 
 importRouter.get("/status", getImportStatusController);
+
+importRouter.delete("/data", clearImportedDataController);
 
 importRouter.get("/", listImportsController);
 

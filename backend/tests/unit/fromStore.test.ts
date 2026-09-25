@@ -22,7 +22,6 @@ const baseRow = (patch: Partial<TransactionRow>): TransactionRow => ({
   confidence: 1,
   classificationSource: "parser",
   fingerprint: "fp-1",
-  raw: "UPI-SWIGGY",
   ...patch,
 });
 

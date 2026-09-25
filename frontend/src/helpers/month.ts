@@ -1,6 +1,5 @@
 import { ISO_MONTH_RE } from "@/constants/dates";
-import { INR_LOCALE } from "@/constants/currency";
-import { monthKeyFromDate, toIsoDate } from "@/helpers/dates";
+import { monthKeyFromDate } from "@/helpers/dates";
 
 export function currentMonth(): string {
   const now = new Date();
@@ -26,16 +25,4 @@ export function monthBounds(month: string): { from: string; to: string } {
 
 export function monthFromDate(date: string | null | undefined): string | null {
   return monthKeyFromDate(date) ?? normalizeMonth(date);
-}
-
-export function formatTimestamp(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const normalized = toIsoDate(iso);
-  if (!normalized) return "—";
-  return new Date(`${normalized}T00:00:00Z`).toLocaleString(INR_LOCALE, {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }

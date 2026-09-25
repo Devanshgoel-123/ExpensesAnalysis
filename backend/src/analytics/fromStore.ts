@@ -36,7 +36,6 @@ function rowToApiTransaction(
     upiId: row.upiId,
     merchant: row.merchant,
     payee: row.payee,
-    raw: row.raw ?? row.description,
     providerId: row.providerId,
     category: row.categorySlug,
     categoryLabel: category?.label ?? null,

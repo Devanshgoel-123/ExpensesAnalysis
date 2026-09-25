@@ -1,9 +1,6 @@
 import jwt from "jsonwebtoken";
 import { config } from "../config.js";
-import {
-  BACKFILL_DEFAULT_MAX_MESSAGES,
-  SCAN_SUCCESS_BATCH,
-} from "../constants/index.js";
+import { BACKFILL_DEFAULT_MAX_MESSAGES } from "../constants/index.js";
 import { encryptSecret } from "../crypto/secrets.js";
 import { getStore } from "../db/index.js";
 import type { AccountRow } from "../db/types.js";
@@ -20,14 +17,12 @@ import {
   gmailConfigured,
   renewWatch,
 } from "./client.js";
+import { poolingScanWindow } from "../helpers/index.js";
 import {
-  poolingDateWindow,
   runPoolingPoll,
   runPoolingSync,
   type PoolingSyncResult,
 } from "./poolingService.js";
-
-const EMPTY_SCAN = { scanned: 0, imported: 0, skipped: 0 };
 
 /**
  * Start a query scan and return its run id. The scan keeps running after
@@ -95,69 +90,27 @@ export async function resolveAccountForPooling(
   return account;
 }
 
-/** Dashboard-facing Gmail connection, pooling health, and recent run history. */
+/** What the app needs to connect Gmail and know whether a scan is still running. */
 export async function getGmailStatusForUser(userId: string) {
   const store = await getStore();
   const connection = await store.getGmailConnection(userId);
   const accounts = await store.listAccounts(userId);
   const primary = accounts.find((account) => account.poolingEnabled) ?? accounts[0] ?? null;
   const latestRun = await store.getLatestPoolingRun(userId);
-  const recentRuns = await store.listPoolingRuns(userId, 8);
-  const running = await store.hasRunningPoolingRun(userId);
 
   return {
     configured: gmailConfigured(),
     connected: Boolean(connection),
     email: connection?.googleEmail ?? null,
-    lastSyncAt: connection?.lastSyncAt ?? null,
-    scope: "gmail.readonly",
+    scanWindow: poolingScanWindow(),
     poolingEnabled: primary?.poolingEnabled ?? false,
-    poolingStartedAt: primary?.poolingStartedAt ?? null,
-    bank: primary?.bank ?? null,
-    statementSenderEmails: primary?.statementSenderEmails ?? [],
-    dispatcher: {
-      interval: "hourly",
-      health:
-        !primary?.poolingEnabled
-          ? "idle"
-          : running
-            ? "running"
-            : latestRun?.status === "failed"
-              ? "degraded"
-              : connection?.lastSyncAt
-                ? "ok"
-                : "pending",
-    },
     latestRun: latestRun
       ? {
-          id: latestRun.id,
-          trigger: latestRun.trigger,
           status: latestRun.status,
-          mode: latestRun.mode,
-          month: latestRun.month,
-          scanned: latestRun.scanned,
           imported: latestRun.imported,
-          skipped: latestRun.skipped,
           errorMessage: latestRun.errorMessage,
-          startedAt: latestRun.startedAt,
-          finishedAt: latestRun.finishedAt,
         }
       : null,
-    recentRuns: recentRuns.map((run) => ({
-      id: run.id,
-      trigger: run.trigger,
-      status: run.status,
-      mode: run.mode,
-      month: run.month,
-      scanned: run.scanned,
-      imported: run.imported,
-      skipped: run.skipped,
-      errorMessage: run.errorMessage,
-      startedAt: run.startedAt,
-      finishedAt: run.finishedAt,
-    })),
-    notice:
-      "gmail.readonly is required for message list, but search is limited to your bank statement sender allowlist. We only store statement PDFs/transactions — never arbitrary mail.",
   };
 }
 
@@ -222,14 +175,7 @@ export async function runGmailBackfillForUser(
       });
     },
   );
-  return {
-    month: month ?? null,
-    window: poolingDateWindow(month),
-    status: "running" as const,
-    runId,
-    statements: EMPTY_SCAN,
-    alerts: EMPTY_SCAN,
-  };
+  return { status: "running" as const, runId };
 }
 
 /** Enable hourly pooling and run the initial alert + PDF sync. */
@@ -274,17 +220,7 @@ export async function enablePoolingForUser(
       });
     },
   );
-  return {
-    account: updated,
-    month: month ?? null,
-    window: poolingDateWindow(month),
-    status: "running" as const,
-    runId,
-    statements: EMPTY_SCAN,
-    alerts: EMPTY_SCAN,
-    backfill: EMPTY_SCAN,
-    notice: `Pooling is on. Scanning in batches of ${SCAN_SUCCESS_BATCH} — transactions show up as each batch finishes.`,
-  };
+  return { account: updated, status: "running" as const, runId };
 }
 
 export async function disablePoolingForUser(userId: string) {

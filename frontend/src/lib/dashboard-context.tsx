@@ -16,15 +16,13 @@ import { currentMonth, monthBounds, monthFromDate, normalizeMonth } from "@/help
 import { formatMonthTitle } from "@/helpers/finance";
 import type { AmountBand, DailyInsights, ParseResult } from "@/types";
 import { pathForView } from "@/lib/dashboardViews";
-import { SCAN_SUCCESS_BATCH } from "@/constants/pooling";
+import {
+  monthsInPoolingWindow,
+  poolingScanWindow,
+  SCAN_SUCCESS_BATCH,
+  type ScanWindow,
+} from "@/constants/pooling";
 import type { ImportStatus } from "@/lib/api/types";
-
-export type MailScanProgress = {
-  phase: "running" | "done" | "failed";
-  imported: number;
-  scanned: number;
-  error?: string | null;
-};
 
 const EMPTY_BAND: AmountBand = {
   label: "",
@@ -72,8 +70,11 @@ interface DashboardContextValue {
   periodLabel: string;
   goToImport: () => void;
   goToOverview: () => void;
-  /** Live bank-mail scan. Charts refresh every {@link SCAN_SUCCESS_BATCH} imports. */
-  mailScan: MailScanProgress | null;
+  /** True while a bank-mail scan is still running. */
+  scanning: boolean;
+  scanError: string | null;
+  /** Today back to the 1st of the month two months earlier. */
+  scanWindow: ScanWindow;
   /** Poll until the current pooling run finishes. Safe to call more than once. */
   watchActiveScan: () => void;
 }
@@ -92,14 +93,20 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [month, setMonthState] = useState(() => currentMonth());
   const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
-  const [mailScan, setMailScan] = useState<MailScanProgress | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
   const autoMonthDone = useRef(false);
   const scanWatching = useRef(false);
   const scanTimer = useRef<number | null>(null);
-  const scanDoneTimer = useRef<number | null>(null);
 
   const setMonth = useCallback((next: string) => {
-    setMonthState(normalizeMonth(next) ?? currentMonth());
+    const months = monthsInPoolingWindow();
+    const normalized = normalizeMonth(next);
+    if (normalized && months.includes(normalized)) {
+      setMonthState(normalized);
+      return;
+    }
+    setMonthState(months[months.length - 1] ?? currentMonth());
   }, []);
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
@@ -108,10 +115,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const watchActiveScan = useCallback(() => {
     if (!api || scanWatching.current) return;
     scanWatching.current = true;
-    if (scanDoneTimer.current) {
-      window.clearTimeout(scanDoneTimer.current);
-      scanDoneTimer.current = null;
-    }
+    setScanning(true);
+    setScanError(null);
     let lastBatch = 0;
 
     const tick = async () => {
@@ -122,43 +127,13 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         const run = status.latestRun;
         if (!run || run.status !== "running") {
           scanWatching.current = false;
+          setScanning(false);
           if (run?.status === "failed") {
-            setMailScan({
-              phase: "failed",
-              imported: run.imported,
-              scanned: run.scanned,
-              error: run.errorMessage,
-            });
-          } else if (run) {
-            setMailScan({
-              phase: "done",
-              imported: run.imported,
-              scanned: run.scanned,
-            });
-          } else {
-            setMailScan(null);
+            setScanError(run.errorMessage ?? "Could not finish the bank-mail scan.");
           }
           refresh();
-          scanDoneTimer.current = window.setTimeout(() => {
-            setMailScan(null);
-          }, 8000);
           return;
         }
-
-        setMailScan((prev) => {
-          if (
-            prev?.phase === "running" &&
-            prev.imported === run.imported &&
-            prev.scanned === run.scanned
-          ) {
-            return prev;
-          }
-          return {
-            phase: "running",
-            imported: run.imported,
-            scanned: run.scanned,
-          };
-        });
 
         const batch = Math.floor(run.imported / SCAN_SUCCESS_BATCH);
         if (batch > lastBatch) {
@@ -170,6 +145,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         }, 3000);
       } catch {
         scanWatching.current = false;
+        setScanning(false);
       }
     };
 
@@ -180,7 +156,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     return () => {
       scanWatching.current = false;
       if (scanTimer.current) window.clearTimeout(scanTimer.current);
-      if (scanDoneTimer.current) window.clearTimeout(scanDoneTimer.current);
     };
   }, []);
 
@@ -357,7 +332,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       periodLabel,
       goToImport,
       goToOverview,
-      mailScan,
+      scanning,
+      scanError,
+      scanWindow: importStatus?.scanWindow ?? poolingScanWindow(),
       watchActiveScan,
     }),
     [
@@ -377,7 +354,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       hasAnyData,
       importStatus,
       refreshStatus,
-      mailScan,
+      scanning,
+      scanError,
       watchActiveScan,
     ],
   );

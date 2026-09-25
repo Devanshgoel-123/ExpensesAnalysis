@@ -34,7 +34,7 @@ async function boot() {
       {
         port: config.port,
         env: config.env,
-        database: config.useMemoryStore ? "memory" : "postgres",
+        database: config.useMemoryStore ? "memory" : config.databaseHost,
       },
       `Ledgerline API listening on http://0.0.0.0:${config.port}`,
     );

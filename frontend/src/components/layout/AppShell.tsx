@@ -7,8 +7,6 @@ import { CommandPalette } from "@/components/layout/CommandPalette";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { AppSurfaceBackdrop } from "@/components/effects/AppSurfaceBackdrop";
 import type { DashboardView } from "@/lib/dashboardViews";
-import { SCAN_SUCCESS_BATCH } from "@/constants/pooling";
-import type { MailScanProgress } from "@/lib/dashboard-context";
 
 interface AppShellProps {
   view: DashboardView;
@@ -19,7 +17,6 @@ interface AppShellProps {
   hasAnyData: boolean;
   userEmail?: string | null;
   fetchError?: string | null;
-  mailScan?: MailScanProgress | null;
   onImportAnother: () => void;
   onRefresh: () => void;
   onLogout: () => void;
@@ -35,7 +32,6 @@ export function AppShell({
   hasAnyData,
   userEmail,
   fetchError,
-  mailScan,
   onImportAnother,
   onRefresh,
   onLogout,
@@ -85,24 +81,6 @@ export function AppShell({
         {fetchError ? (
           <p className="form-error mb-3 px-1" role="alert">
             {fetchError}
-          </p>
-        ) : null}
-        {mailScan?.phase === "running" ? (
-          <p className="meta mb-3 px-1" role="status">
-            Scanning bank mail — {mailScan.imported} imported from{" "}
-            {mailScan.scanned} messages. Charts update every{" "}
-            {SCAN_SUCCESS_BATCH} successful imports, then the scan continues.
-          </p>
-        ) : null}
-        {mailScan?.phase === "done" ? (
-          <p className="meta mb-3 px-1" role="status">
-            Scan finished — imported {mailScan.imported} from {mailScan.scanned}{" "}
-            messages.
-          </p>
-        ) : null}
-        {mailScan?.phase === "failed" ? (
-          <p className="form-error mb-3 px-1" role="alert">
-            {mailScan.error ?? "Bank-mail scan failed."}
           </p>
         ) : null}
         <main className="app-content" id="main-content">

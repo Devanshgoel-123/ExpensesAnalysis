@@ -1,3 +1,5 @@
+import { catalogSendersForBank } from "../constants/bankMail.js";
+
 /** Drop invalid handles and expand truncated HDFC alert senders. */
 export function normalizeGmailSender(raw: string): string | null {
   const trimmed = raw.trim().replace(/[()]/g, "");
@@ -26,6 +28,20 @@ export function normalizeGmailSenders(senders: readonly string[]): string[] {
     out.push(next);
   }
   return out;
+}
+
+/**
+ * Catalog senders for the bank, plus any extra addresses saved on the account.
+ * Catalog wins so a new vendor is searched even when the account row is stale.
+ */
+export function sendersForBank(
+  bankId: string,
+  accountSenders: readonly string[] = [],
+): string[] {
+  return normalizeGmailSenders([
+    ...catalogSendersForBank(bankId),
+    ...accountSenders,
+  ]);
 }
 
 export function gmailFromClause(senders: readonly string[]): string {

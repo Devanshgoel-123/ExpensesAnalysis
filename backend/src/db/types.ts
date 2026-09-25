@@ -134,7 +134,6 @@ export interface TransactionRow {
   confidence: number;
   classificationSource: string;
   fingerprint: string;
-  raw: string | null;
 }
 
 export interface TransactionOverrideRow {
@@ -210,7 +209,6 @@ export interface NewTransactionInput {
   confidence: number;
   classificationSource: string;
   fingerprint: string;
-  raw: string | null;
 }
 
 export interface ListTransactionsOptions {
@@ -406,5 +404,15 @@ export interface Store {
   hasRunningPoolingRun(userId: string): Promise<boolean>;
 
   audit(userId: string | null, action: string, meta?: Record<string, unknown>): Promise<void>;
+  /** Wipe imported mail/transactions. Keeps the user, Gmail, and bank setup. */
+  clearUserRecords(userId: string): Promise<ClearedUserRecords>;
   deleteUserData(userId: string): Promise<void>;
 }
+
+export type ClearedUserRecords = {
+  transactions: number;
+  imports: number;
+  mailMessages: number;
+  poolingRuns: number;
+  overrides: number;
+};

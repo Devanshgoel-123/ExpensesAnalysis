@@ -65,7 +65,6 @@ export function TransactionTable({ items, categories }: TransactionTableProps) {
         txn.description,
         txn.upiId,
         txn.categoryLabel,
-        txn.raw,
       ]
         .filter(Boolean)
         .join(" ")

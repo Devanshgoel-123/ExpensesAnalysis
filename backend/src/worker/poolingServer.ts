@@ -1,5 +1,6 @@
 import http from "node:http";
 import { BACKFILL_DEFAULT_MAX_MESSAGES } from "../constants/index.js";
+import { sendersForBank } from "../helpers/gmailSenders.js";
 import { config } from "../config.js";
 import { closeStore, getStore } from "../db/index.js";
 import { gmailConfigured } from "../gmail/client.js";
@@ -169,16 +170,17 @@ async function runProbe(): Promise<Record<string, unknown>> {
       continue;
     }
     try {
+      const senders = sendersForBank(account.bank, account.statementSenderEmails);
       const probe = await probeGmailQueries({
         userId: account.userId,
         connection,
-        senders: account.statementSenderEmails,
+        senders,
       });
       results.push({
         userId: account.userId,
         accountId: account.id,
         bank: account.bank,
-        senders: account.statementSenderEmails,
+        senders,
         ok: true,
         ...probe,
       });

@@ -11,6 +11,7 @@ import type {
 } from "../db/types.js";
 import { ClassificationSource, ImportSource, ImportStatus, ruleClassificationSource } from "../enums/index.js";
 import { AppError } from "../errors/AppError.js";
+import { poolingScanWindow } from "../helpers/index.js";
 import { extractTextFromPdf } from "../parser.js";
 import { buildMatchFieldsFromText, matchRule } from "../rules/engine.js";
 import type { ParseResult } from "../types/index.js";
@@ -180,7 +181,6 @@ export async function processPdfImport(input: {
             description: t.description,
             upiId: t.upiId,
           }),
-          raw: t.raw,
         };
       });
 
@@ -246,14 +246,17 @@ export async function getImportStatusForUser(userId: string): Promise<{
   hasTransactions: boolean;
   latestMonth: string | null;
   transactionCount: number;
+  scanWindow: { from: string; to: string };
 }> {
   const store = await getStore();
+  const scanWindow = poolingScanWindow();
   const rows = await store.listTransactions(userId);
   if (rows.length === 0) {
     return {
       hasTransactions: false,
       latestMonth: null,
       transactionCount: 0,
+      scanWindow,
     };
   }
   const latestDate = rows[0]?.date ?? null;
@@ -263,7 +266,15 @@ export async function getImportStatusForUser(userId: string): Promise<{
     hasTransactions: true,
     latestMonth,
     transactionCount: rows.length,
+    scanWindow,
   };
+}
+
+export async function clearImportedDataForUser(userId: string) {
+  const store = await getStore();
+  const deleted = await store.clearUserRecords(userId);
+  await store.audit(userId, "imports.cleared", deleted);
+  return { ok: true as const, scanWindow: poolingScanWindow(), deleted };
 }
 
 export async function listImportsForUser(userId: string) {

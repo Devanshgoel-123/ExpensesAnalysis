@@ -12,6 +12,7 @@ import type {
   PoolingRunStatus,
   ProviderRow,
   Store,
+  ClearedUserRecords,
   TransactionOverrideRow,
   TransactionRow,
   UserRow,
@@ -602,6 +603,34 @@ export class MemoryStore implements Store {
     meta: Record<string, unknown> = {},
   ): Promise<void> {
     this.audits.push({ userId, action, meta });
+  }
+
+  async clearUserRecords(userId: string): Promise<ClearedUserRecords> {
+    const before = {
+      transactions: this.transactions.length,
+      imports: this.imports.length,
+      mailMessages: this.mailMessages.length,
+      poolingRuns: this.poolingRuns.length,
+      overrides: this.overrides.length,
+    };
+    this.transactions = this.transactions.filter((t) => t.userId !== userId);
+    this.imports = this.imports.filter((i) => i.userId !== userId);
+    this.overrides = this.overrides.filter((o) => o.userId !== userId);
+    this.mailMessages = this.mailMessages.filter((m) => m.userId !== userId);
+    this.poolingRuns = this.poolingRuns.filter((r) => r.userId !== userId);
+    for (const account of this.accounts) {
+      if (account.userId === userId) {
+        account.poolingEnabled = false;
+        account.poolingStartedAt = null;
+      }
+    }
+    return {
+      transactions: before.transactions - this.transactions.length,
+      imports: before.imports - this.imports.length,
+      mailMessages: before.mailMessages - this.mailMessages.length,
+      poolingRuns: before.poolingRuns - this.poolingRuns.length,
+      overrides: before.overrides - this.overrides.length,
+    };
   }
 
   async deleteUserData(userId: string): Promise<void> {

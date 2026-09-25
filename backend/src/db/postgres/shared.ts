@@ -66,7 +66,6 @@ export function mapTransaction(row: Record<string, unknown>): TransactionRow {
       row.classificationSource ?? ClassificationSource.Parser,
     ),
     fingerprint: String(row.fingerprint),
-    raw: (row.raw as string | null) ?? null,
   };
 }
 

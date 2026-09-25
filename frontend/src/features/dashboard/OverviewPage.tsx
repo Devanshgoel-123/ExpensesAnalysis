@@ -7,7 +7,6 @@ import { pathForView } from "@/lib/dashboardViews";
 import { formatInr } from "@/helpers/currency";
 
 import { StatsRow } from "@/components/StatsRow";
-import { GmailBackfillButton } from "@/components/gmail/GmailBackfillButton";
 import { DailySpendChart } from "@/components/charts/DailySpendChart";
 import { CategorySpendChart } from "@/components/charts/CategorySpendChart";
 import { SpendingTrendChart } from "@/components/charts/SpendingTrendChart";
@@ -17,7 +16,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { LedgerlineFadeContent } from "@/components/animations/LedgerlineFadeContent";
 
 export function OverviewPage() {
-  const { data, dailyInsights, month, fetching, mailScan } = useDashboard();
+  const { data, dailyInsights, month, fetching } = useDashboard();
 
   if (fetching && !data) {
     return <LoadingState text="Loading overview" variant="skeleton" />;
@@ -56,7 +55,6 @@ export function OverviewPage() {
               </Link>
             </p>
           </div>
-          <GmailBackfillButton disabled={mailScan?.phase === "running"} />
         </header>
       </LedgerlineFadeContent>
 

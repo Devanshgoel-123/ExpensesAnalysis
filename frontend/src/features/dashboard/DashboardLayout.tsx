@@ -6,6 +6,7 @@ import { AuthGate } from "@/components/AuthGate";
 import { AppShell } from "@/components/layout/AppShell";
 import { DashboardProvider, useDashboard } from "@/lib/dashboard-context";
 import { currentMonth } from "@/helpers/month";
+import { monthsInPoolingWindow } from "@/constants/pooling";
 import {
   DATA_OPTIONAL_VIEWS,
   pathForView,
@@ -27,10 +28,14 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     refresh,
     goToImport,
     fetchError,
-    mailScan,
     importStatus,
     fetching,
+    scanWindow,
   } = useDashboard();
+  const windowMonths = monthsInPoolingWindow();
+  const monthMin = windowMonths[0] ?? scanWindow.from.slice(0, 7);
+  const monthMax =
+    windowMonths[windowMonths.length - 1] ?? scanWindow.to.slice(0, 7);
 
   const view = viewFromPath(pathname) ?? "overview";
 
@@ -58,6 +63,8 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       <span className="meta">Month</span>
       <input
         type="month"
+        min={monthMin}
+        max={monthMax}
         value={month}
         onChange={(e) => setMonth(e.target.value || currentMonth())}
       />
@@ -74,7 +81,6 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       hasAnyData={hasAnyData}
       userEmail={user?.email}
       fetchError={DATA_OPTIONAL_VIEWS.includes(view) ? fetchError : null}
-      mailScan={mailScan}
       onImportAnother={goToImport}
       onRefresh={refresh}
       onLogout={logout}

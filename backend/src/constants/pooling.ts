@@ -2,14 +2,10 @@
 export const IST_TIME_ZONE = "Asia/Kolkata";
 
 /**
- * Hard floor: never poll or store mail/transactions before this instant.
- * 1 Jan 2026, 00:00:00 IST (UTC+5:30) = 2025-12-31T18:30:00.000Z
+ * Scan starts at today (IST) and walks backward to the 1st of the month
+ * this many calendar months earlier. 26 Sep → 1 Jul.
  */
-export const POOLING_EARLIEST_IST = "2026-01-01T00:00:00+05:30";
-export const POOLING_EARLIEST_MS = Date.parse(POOLING_EARLIEST_IST);
-/** IST calendar date of the pooling floor. */
-export const POOLING_EARLIEST_DATE = "2026-01-01";
-export const POOLING_EARLIEST_MONTH = POOLING_EARLIEST_DATE.slice(0, 7);
+export const POOLING_LOOKBACK_MONTHS = 2;
 
 /** Log progress every N messages scanned. */
 export const POOLING_PROGRESS_EVERY = 50;
