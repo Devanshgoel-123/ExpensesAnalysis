@@ -51,6 +51,7 @@ export function LifestylePage() {
           rows={categoryRows}
           title="Category breakdown"
           subtitle="Where your money goes, ranked by spend"
+          spentTotal={data.summary.totalSpent}
         />
       </LedgerlineFadeContent>
 
@@ -67,6 +68,7 @@ export function LifestylePage() {
           title="Top merchants"
           subtitle="Where lifestyle spend concentrates"
           limit={8}
+          spentTotal={data.summary.totalSpent}
         />
       </LedgerlineFadeContent>
 

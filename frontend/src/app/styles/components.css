@@ -14,14 +14,15 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.8rem 1.1rem;
-  background: var(--primary);
-  color: var(--primary-foreground);
+  background: var(--surface-elevated);
+  color: var(--foreground);
+  border: 1px solid var(--border-strong);
   font-weight: 600;
   min-height: 2.75rem;
 }
 
 .cta:hover:not(:disabled) {
-  background: var(--primary-hover);
+  background: color-mix(in srgb, var(--foreground) 6%, var(--surface-elevated));
 }
 
 .cta:disabled:not(.is-loading) {
@@ -82,9 +83,9 @@
 }
 
 .sort-chip.active {
-  color: var(--primary-foreground);
-  background: var(--primary);
-  border-color: transparent;
+  color: var(--foreground);
+  background: var(--surface-elevated);
+  border-color: var(--border-strong);
 }
 
 /* ── Forms ── */
@@ -129,7 +130,7 @@
 .field input:focus,
 .field select:focus,
 .field textarea:focus {
-  border-color: var(--primary);
+  border-color: var(--border-strong);
   box-shadow: 0 0 0 3px var(--ring);
 }
 
@@ -144,6 +145,98 @@
   margin: 0;
   color: var(--danger);
   font-size: 0.88rem;
+}
+
+.limit-form:not(.compact) {
+  margin-top: 0.85rem;
+}
+
+.limit-form {
+  display: grid;
+  gap: 0.65rem;
+  max-width: 28rem;
+}
+
+.limit-form.compact {
+  max-width: none;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+}
+
+.limit-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.limit-field span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.limit-field input {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+
+.limit-form.compact .limit-field input {
+  padding: 0.5rem 0.65rem;
+  font-size: 0.9rem;
+}
+
+.limit-field input:focus {
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.limit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.limit-form .cta,
+.limit-form .ghost {
+  padding: 0.5rem 0.8rem;
+  font-size: 0.82rem;
+}
+
+.limit-notice {
+  margin: 0;
+  color: var(--primary);
+}
+
+.limit-stat {
+  position: relative;
+}
+
+.limit-edit {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.85rem;
+  padding: 0.28rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-elevated);
+  color: var(--foreground);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-decoration: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.limit-stat:hover .limit-edit,
+.limit-stat:focus-within .limit-edit {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* ── Upload / dropzone ── */

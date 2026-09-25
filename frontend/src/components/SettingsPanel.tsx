@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { DailyLimitForm, useSaveDailyLimit } from "@/components/DailyLimitForm";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/useApi";
 import { pathForView } from "@/lib/dashboardViews";
@@ -31,13 +32,14 @@ function ruleMatchLabel(rule: Record<string, unknown>): string {
 export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
   const api = useApi();
   const { logout, destroyAccount, user } = useAuth();
+  const saveLimit = useSaveDailyLimit();
   const [rules, setRules] = useState<Array<Record<string, unknown>>>([]);
   const [suggestions, setSuggestions] = useState<
     Array<{ label: string; count: number; sample: string }>
   >([]);
   const [payeeName, setPayeeName] = useState("");
   const [matchText, setMatchText] = useState("");
-  const [dailyLimit, setDailyLimit] = useState("");
+  const [dailyLimit, setDailyLimit] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showDanger, setShowDanger] = useState(false);
@@ -54,9 +56,7 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
       ]);
       setRules(rulesRes.rules);
       setSuggestions(suggestionsRes.suggestions);
-      setDailyLimit(
-        prefsRes.dailySpendLimit != null ? String(prefsRes.dailySpendLimit) : "",
-      );
+      setDailyLimit(prefsRes.dailySpendLimit);
       setTelegram(telegramRes);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load settings");
@@ -98,63 +98,14 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
           Cap debit spend per day. Overview and Daily Limit use this as a calm
           health signal.
         </p>
-        <div className="upload-panel" style={{ maxWidth: "100%" }}>
-          <label className="field">
-            <span>Max debit per day (₹)</span>
-            <input
-              type="number"
-              min={1}
-              step={100}
-              value={dailyLimit}
-              onChange={(e) => setDailyLimit(e.target.value)}
-              placeholder="e.g. 1500"
-            />
-          </label>
-          <div className="sort-bar">
-            <button
-              type="button"
-              className="cta"
-              onClick={async () => {
-                try {
-                  setError(null);
-                  const parsed = dailyLimit.trim() ? Number(dailyLimit) : null;
-                  if (
-                    parsed != null &&
-                    (!Number.isFinite(parsed) || parsed <= 0)
-                  ) {
-                    setError("Enter a positive amount or clear the field");
-                    return;
-                  }
-                  await api.updatePreferences({ dailySpendLimit: parsed });
-                  setMessage(
-                    parsed ? `Daily limit set to ₹${parsed}` : "Daily limit cleared",
-                  );
-                  onChanged?.();
-                } catch (err) {
-                  setError(
-                    err instanceof Error ? err.message : "Could not save limit",
-                  );
-                }
-              }}
-            >
-              Save daily limit
-            </button>
-            {dailyLimit ? (
-              <button
-                type="button"
-                className="ghost"
-                onClick={async () => {
-                  setDailyLimit("");
-                  await api.updatePreferences({ dailySpendLimit: null });
-                  setMessage("Daily limit cleared");
-                  onChanged?.();
-                }}
-              >
-                Clear
-              </button>
-            ) : null}
-          </div>
-        </div>
+        <DailyLimitForm
+          limit={dailyLimit}
+          onSave={async (next) => {
+            const applied = await saveLimit(next);
+            setDailyLimit(applied);
+            onChanged?.();
+          }}
+        />
       </section>
 
       <section className="settings-section">

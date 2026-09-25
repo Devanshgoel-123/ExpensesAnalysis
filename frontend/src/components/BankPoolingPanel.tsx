@@ -7,6 +7,7 @@ import type { BankPreset, GmailStatus } from "@/lib/api/types";
 import { SpotlightCard } from "@/components/SpotlightCard";
 import {
   BACKFILL_DEFAULT_MAX_MESSAGES,
+  formatIsoDateLabel,
   formatScanWindowLabel,
   poolingScanWindow,
 } from "@/constants/pooling";
@@ -173,8 +174,10 @@ export function BankPoolingPanel({
       <header className="panel-head">
         <h2 className="ui-header">Bank mail</h2>
         <p className="meta">
-          Reads HDFC debit and credit alerts. Amount is stored. Mail is fetched
-          from today backward through {windowLabel}.
+          Reads HDFC debit and credit alerts. Amount is stored.{" "}
+          {gmail?.lastScannedOn
+            ? `Scanned through ${formatIsoDateLabel(gmail.lastScannedOn)}. The next scan starts the following day.`
+            : `Mail is fetched from today backward through ${windowLabel}.`}
         </p>
       </header>
 

@@ -1,14 +1,22 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
-import { motion } from "framer-motion";
+import { useMemo } from "react";
 import type { DailyInsights, DailySpend } from "@/types";
 import { formatInr } from "@/helpers/currency";
-
-import { formatChartDay, formatShortDate } from "@/helpers/dates";
+import {
+  formatChartDate,
+  formatChartDay,
+  formatChartWeekday,
+} from "@/helpers/dates";
 import { normalizeDailySpend } from "@/helpers/finance";
-import { LedgerlineCountUp } from "@/components/animations/LedgerlineCountUp";
 import { Panel, PanelHead } from "@/components/ui/Panel";
+import { DetailBarChart, type ChartGuide, type DetailBarPoint } from "@/components/charts/DetailBarChart";
+import {
+  spendTone,
+  spendToneLabel,
+  versusAverageCopy,
+  versusLimitCopy,
+} from "@/components/charts/chartTone";
 
 export interface DailySpendChartProps {
   data: DailySpend[];
@@ -27,59 +35,65 @@ export function DailySpendChart({
   insights,
 }: DailySpendChartProps) {
   const rows = useMemo(() => normalizeDailySpend(data), [data]);
-  const limit =
-    dailyLimit ?? (insights?.enabled ? insights.limit : null);
-  const max = Math.max(...rows.map((d) => d.amount), limit ?? 1, 1);
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const [hover, setHover] = useState<{ index: number; x: number; y: number } | null>(
-    null,
-  );
-
-  const overLimitDates = useMemo(
-    () => new Set(insights?.daysOverLimit.map((d) => d.date) ?? []),
-    [insights],
-  );
-
-  const ticks = useMemo(
-    () =>
-      rows.map((d, i) => ({
-        ...d,
-        showLabel:
-          rows.length <= 12 || i % Math.ceil(rows.length / 8) === 0 || i === rows.length - 1,
-      })),
-    [rows],
-  );
-
+  const limit = dailyLimit ?? (insights?.enabled ? insights.limit : null);
   const today = todayIso();
-  const focusIndex = hover?.index ?? activeIndex;
-  const focused = focusIndex != null ? rows[focusIndex] : null;
   const overCount = insights?.daysOverLimit.length ?? 0;
   const worst = insights?.worstDay ?? null;
   const avg =
-    rows.length > 0
-      ? rows.reduce((sum, d) => sum + d.amount, 0) / rows.length
-      : 0;
+    rows.length > 0 ? rows.reduce((sum, day) => sum + day.amount, 0) / rows.length : 0;
 
-  const showTooltip = useCallback(
-    (index: number, clientX: number, clientY: number, parent: HTMLElement) => {
-      const rect = parent.getBoundingClientRect();
-      setHover({
-        index,
-        x: clientX - rect.left,
-        y: clientY - rect.top,
+  const points = useMemo<DetailBarPoint[]>(() => {
+    const step = rows.length <= 8 ? 1 : Math.ceil(rows.length / 6);
+    return rows.map((day, index) => {
+      const tone = spendTone(day.amount, avg, limit);
+      const toneLabel = spendToneLabel(tone, day.amount, limit);
+      const compared = versusAverageCopy(day.amount, avg);
+      const limited = versusLimitCopy(day.amount, limit);
+      const details = [compared, limited].filter((line): line is string => Boolean(line));
+      const title = formatChartDate(day.date);
+      return {
+        key: day.date,
+        value: day.amount,
+        axisPrimary: formatChartDay(day.date),
+        axisSecondary: formatChartWeekday(day.date),
+        showLabel: rows.length <= 12 || index % step === 0 || index === rows.length - 1,
+        tone,
+        toneLabel,
+        title,
+        amountLabel: formatInr(day.amount),
+        details: details.map((text) => ({ text })),
+        ariaLabel: `${title}: ${formatInr(day.amount)}, ${toneLabel}${compared ? `, ${compared}` : ""}`,
+        emphasized: day.date === today,
+        overLimit: limit != null && day.amount > limit,
+      };
+    });
+  }, [rows, avg, limit, today]);
+
+  const guides = useMemo<ChartGuide[]>(() => {
+    const next: ChartGuide[] = [];
+    const ceilingPeak = Math.max(avg, limit ?? 0, ...rows.map((day) => day.amount), 1);
+    const overlap =
+      limit != null && avg > 0 && Math.abs(limit - avg) / (ceilingPeak * 1.08) < 0.07;
+    if (avg > 0) {
+      next.push({
+        value: avg,
+        label: "avg",
+        tone: "watch",
+        align: overlap ? "start" : "end",
       });
-    },
-    [],
-  );
+    }
+    if (limit != null) {
+      next.push({ value: limit, label: "limit", tone: "hot" });
+    }
+    return next;
+  }, [avg, limit, rows]);
 
   return (
     <Panel aria-label="Daily spend chart">
       <PanelHead
         title="Daily spend"
         subtitle={
-          limit != null
-            ? `Debits by day · limit ${formatInr(limit)}`
-            : "Debits by day"
+          limit != null ? `Debits by day · limit ${formatInr(limit)}` : "Debits by day"
         }
       />
 
@@ -99,98 +113,15 @@ export function DailySpendChart({
         ) : null}
       </div>
 
-      <div
-        className="bar-chart"
-        onMouseLeave={() => setHover(null)}
-        onTouchEnd={() => setActiveIndex(null)}
-      >
-        <div className="bar-chart-plot" role="img" aria-label="Bar chart of daily spend">
-          {limit != null ? (
-            <div
-              className="limit-line"
-              style={{ bottom: `${Math.max(4, (limit / max) * 100)}%` }}
-              aria-hidden
-            />
-          ) : null}
-          {ticks.map((d, index) => {
-            const heightPct = Math.max(4, (d.amount / max) * 100);
-            const overLimit = overLimitDates.has(d.date);
-            const isToday = d.date === today;
-            const isActive = focusIndex === index;
-            return (
-              <div
-                key={d.date}
-                className="bar-col"
-                role="button"
-                tabIndex={0}
-                aria-label={`${formatShortDate(d.date)}: ${formatInr(d.amount)}`}
-                onMouseMove={(e) => {
-                  const parent = e.currentTarget.parentElement;
-                  if (!parent) return;
-                  showTooltip(index, e.clientX, e.clientY, parent);
-                }}
-                onTouchStart={(e) => {
-                  setActiveIndex(index);
-                  const touch = e.touches[0];
-                  const parent = e.currentTarget.parentElement;
-                  if (touch && parent) {
-                    showTooltip(index, touch.clientX, touch.clientY, parent);
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setActiveIndex(index);
-                  }
-                }}
-              >
-                <motion.div
-                  className={`bar-fill${overLimit ? " over-limit" : ""}${isToday ? " today" : ""}${isActive ? " ring-2 ring-[var(--primary)]" : ""}`}
-                  initial={{ height: 0 }}
-                  animate={{ height: `${heightPct}%` }}
-                  transition={{ type: "spring", bounce: 0.2, delay: index * 0.012 }}
-                />
-                {d.showLabel ? (
-                  <span className={`bar-label${overLimit ? " over-limit" : ""}`}>
-                    {formatChartDay(d.date)}
-                  </span>
-                ) : (
-                  <span className="bar-label ghost" />
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {focused && (hover || activeIndex != null) ? (
-          <div
-            className="chart-tooltip"
-            style={{
-              left: hover
-                ? Math.min(Math.max(hover.x, 72), 10000)
-                : "50%",
-              top: hover ? Math.max(hover.y - 12, 8) : 8,
-              transform: "translate(-50%, -100%)",
-            }}
-          >
-            <p className="meta">{formatShortDate(focused.date)}</p>
-            <strong className="display-num sm">
-              <LedgerlineCountUp
-                key={focused.date}
-                value={focused.amount}
-                format={(n) => formatInr(n)}
-                durationMs={400}
-                once
-              />
-            </strong>
-            {limit != null && focused.amount > limit ? (
-              <p className="meta over-limit-text">
-                +{formatInr(focused.amount - limit)} over limit
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
+      {points.length === 0 ? (
+        <p className="meta">No daily spend in this period yet.</p>
+      ) : (
+        <DetailBarChart
+          points={points}
+          guides={guides}
+          ariaLabel="Daily spend with typical, elevated, and spike days"
+        />
+      )}
     </Panel>
   );
 }

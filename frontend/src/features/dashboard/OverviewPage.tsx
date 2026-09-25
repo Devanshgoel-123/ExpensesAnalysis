@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useDashboard } from "@/lib/dashboard-context";
+import { useSaveDailyLimit } from "@/components/DailyLimitForm";
 import { formatMonthTitle, aggregateMonthlySpend, buildCategorySpendRows } from "@/helpers/finance";
 import { pathForView } from "@/lib/dashboardViews";
 import { formatInr } from "@/helpers/currency";
@@ -14,9 +15,13 @@ import { MerchantSpendChart } from "@/components/charts/MerchantSpendChart";
 import { UpiRankingList } from "@/components/UpiRankingList";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { LedgerlineFadeContent } from "@/components/animations/LedgerlineFadeContent";
+import { DayCategoryBar } from "@/components/DayCategoryBar";
+import { dayCategoryMix } from "@/helpers/apps";
+import { Panel, PanelHead } from "@/components/ui/Panel";
 
 export function OverviewPage() {
   const { data, dailyInsights, month, fetching } = useDashboard();
+  const saveLimit = useSaveDailyLimit();
 
   if (fetching && !data) {
     return <LoadingState text="Loading overview" variant="skeleton" />;
@@ -29,6 +34,10 @@ export function OverviewPage() {
     data.amountBand25to60,
     data.categories ?? [],
   ).slice(0, 5);
+  const latestDay = data.transactions[0]?.date ?? null;
+  const latestMix = latestDay
+    ? dayCategoryMix(data.transactions, data.categories ?? [], latestDay)
+    : null;
   const netHint =
     data.summary.net >= 0
       ? `${formatInr(data.summary.net)} net in`
@@ -59,15 +68,35 @@ export function OverviewPage() {
       </LedgerlineFadeContent>
 
       <LedgerlineFadeContent delay={40}>
-        <StatsRow summary={data.summary} dailyInsights={dailyInsights} />
+        <StatsRow
+          summary={data.summary}
+          dailyInsights={dailyInsights}
+          onSaveLimit={saveLimit}
+        />
       </LedgerlineFadeContent>
+
+      {latestMix && latestMix.total > 0 ? (
+        <LedgerlineFadeContent delay={60}>
+          <Panel>
+            <PanelHead
+              title={`Category mix · ${latestDay}`}
+              subtitle="Share of that day's debit spend"
+            />
+            <DayCategoryBar mix={latestMix} />
+          </Panel>
+        </LedgerlineFadeContent>
+      ) : null}
 
       <div className="grid-main">
         <LedgerlineFadeContent delay={80}>
           <DailySpendChart data={data.daily} insights={dailyInsights} />
         </LedgerlineFadeContent>
         <LedgerlineFadeContent delay={120}>
-          <UpiRankingList items={data.upiRanking} month={month} />
+          <UpiRankingList
+            items={data.upiRanking}
+            month={month}
+            spentTotal={data.summary.totalSpent}
+          />
         </LedgerlineFadeContent>
       </div>
 
@@ -77,6 +106,7 @@ export function OverviewPage() {
             rows={categoryRows}
             title="Top categories"
             subtitle="Where most of your money went"
+            spentTotal={data.summary.totalSpent}
           />
         </LedgerlineFadeContent>
       ) : null}
@@ -92,6 +122,7 @@ export function OverviewPage() {
           items={data.merchantSpend ?? []}
           categories={data.categories ?? []}
           limit={5}
+          spentTotal={data.summary.totalSpent}
         />
       </LedgerlineFadeContent>
     </div>

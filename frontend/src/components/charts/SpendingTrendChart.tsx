@@ -1,16 +1,31 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { useMemo } from "react";
 import type { MonthlySpendRow } from "@/helpers/finance";
 import { monthOverMonthDelta } from "@/helpers/finance";
 import { formatInr } from "@/helpers/currency";
-
 import { LedgerlineCountUp } from "@/components/animations/LedgerlineCountUp";
 import { Panel, PanelHead } from "@/components/ui/Panel";
+import { DetailBarChart, type DetailBarPoint } from "@/components/charts/DetailBarChart";
+import {
+  monthDeltaLabel,
+  monthDeltaTone,
+  versusAverageCopy,
+} from "@/components/charts/chartTone";
 
 export interface SpendingTrendChartProps {
   rows: MonthlySpendRow[];
   highlightMonth?: string;
+}
+
+function shortMonth(month: string): { primary: string; year: string } {
+  const [y, m] = month.split("-").map(Number);
+  if (!y || !m) return { primary: month, year: "" };
+  const primary = new Date(Date.UTC(y, m - 1, 1)).toLocaleString("en-IN", {
+    month: "short",
+    timeZone: "UTC",
+  });
+  return { primary, year: String(y).slice(2) };
 }
 
 export function SpendingTrendChart({
@@ -18,7 +33,42 @@ export function SpendingTrendChart({
   highlightMonth,
 }: SpendingTrendChartProps) {
   const delta = monthOverMonthDelta(rows);
-  const max = Math.max(...rows.map((r) => r.total), 1);
+  const average =
+    rows.length > 0 ? rows.reduce((sum, row) => sum + row.total, 0) / rows.length : 0;
+
+  const points = useMemo<DetailBarPoint[]>(() => {
+    return rows.map((row, index) => {
+      const previous = index > 0 ? rows[index - 1]!.total : null;
+      const tone = monthDeltaTone(row.total, previous);
+      const toneLabel = monthDeltaLabel(tone);
+      const axis = shortMonth(row.month);
+      const compared = versusAverageCopy(row.total, average, "monthly average");
+      const change =
+        previous != null && previous > 0
+          ? (() => {
+              const pct = ((row.total - previous) / previous) * 100;
+              if (Math.abs(pct) < 0.05) return "Flat vs the previous month";
+              const direction = pct > 0 ? "higher" : "lower";
+              return `${Math.abs(pct).toFixed(1)}% ${direction} than the previous month`;
+            })()
+          : null;
+      const details = [change, compared].filter((line): line is string => Boolean(line));
+      return {
+        key: row.month,
+        value: row.total,
+        axisPrimary: axis.primary,
+        axisSecondary: axis.year,
+        showLabel: true,
+        tone,
+        toneLabel,
+        title: row.label,
+        amountLabel: formatInr(row.total),
+        details: details.map((text) => ({ text })),
+        ariaLabel: `${row.label}: ${formatInr(row.total)}, ${toneLabel}`,
+        emphasized: highlightMonth === row.month,
+      };
+    });
+  }, [rows, average, highlightMonth]);
 
   if (rows.length === 0) {
     return (
@@ -45,33 +95,17 @@ export function SpendingTrendChart({
         }
       />
 
-      {rows.length >= 2 ? (
-        <div className="mb-4 flex items-end gap-1 h-36">
-          {rows.map((row, index) => {
-            const heightPct = Math.max(8, (row.total / max) * 100);
-            const highlighted = highlightMonth === row.month;
-            return (
-              <div
-                key={row.month}
-                className="flex flex-1 flex-col items-center justify-end min-w-0 h-full"
-              >
-                <motion.div
-                  className={`w-[70%] max-w-9 rounded-t-sm ${highlighted ? "bg-[var(--primary)]" : "bg-[var(--chart-2)]"} opacity-90`}
-                  initial={{ height: 0 }}
-                  animate={{ height: `${heightPct}%` }}
-                  transition={{ delay: index * 0.06, duration: 0.45 }}
-                  title={`${row.label}: ${formatInr(row.total)}`}
-                />
-                <span className="bar-label mt-1 truncate w-full text-center text-[10px]">
-                  {row.month.slice(5)}/{row.month.slice(2, 4)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
+      <DetailBarChart
+        points={points}
+        guides={
+          average > 0
+            ? [{ value: average, label: "avg", tone: "watch" }]
+            : []
+        }
+        ariaLabel="Monthly spending trend with rises marked in yellow and red"
+      />
 
-      <ul className="list-none m-0 p-0 grid gap-2">
+      <ul className="list-none m-0 mt-4 p-0 grid gap-2">
         {rows.map((row) => (
           <li
             key={row.month}

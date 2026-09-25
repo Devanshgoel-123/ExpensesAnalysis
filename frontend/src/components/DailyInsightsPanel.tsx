@@ -23,7 +23,7 @@ export function DailyInsightsPanel({
         <header className="panel-head">
           <h2 className="ui-header">Daily limit</h2>
           <p className="meta">
-            Set a daily spend cap in settings to see over-budget days.
+            Set a daily spend cap to see over-budget days.
           </p>
         </header>
         <p className="meta-lg" style={{ marginTop: "0.5rem" }}>

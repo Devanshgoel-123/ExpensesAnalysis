@@ -3,6 +3,7 @@
 import { ActivityHeatmap } from "@/components/ActivityHeatmap";
 import { Panel, PanelHead } from "@/components/ui/Panel";
 import { dailySpendMap } from "@/helpers/finance";
+import { formatInr } from "@/helpers/currency";
 import type { DailySpend } from "@/types";
 
 export interface SpendingHeatmapProps {
@@ -18,18 +19,12 @@ export function SpendingHeatmap({
   dateFrom,
   dateTo,
   title = "Spending activity",
-  subtitle = "Darker cells = higher daily spend",
+  subtitle = "Parchment marks a day above your usual spend",
 }: SpendingHeatmapProps) {
   const spendByDay = dailySpendMap(daily);
   const days = [...spendByDay.keys()].sort();
-  const amounts = [...spendByDay.values()];
-  const max = Math.max(...amounts, 1);
-
-  const dayCounts: Record<string, number> = {};
-  for (const [day, amount] of spendByDay) {
-    const level = Math.min(4, Math.ceil((amount / max) * 4));
-    dayCounts[day] = level;
-  }
+  const dayValues: Record<string, number> = {};
+  for (const [day, amount] of spendByDay) dayValues[day] = amount;
 
   if (days.length === 0) {
     return (
@@ -45,7 +40,8 @@ export function SpendingHeatmap({
       <PanelHead title={title} subtitle={subtitle} />
       <ActivityHeatmap
         days={days}
-        dayCounts={dayCounts}
+        dayValues={dayValues}
+        formatValue={(amount) => formatInr(amount)}
         dateFrom={dateFrom ?? days[0]}
         dateTo={dateTo ?? days[days.length - 1]}
       />

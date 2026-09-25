@@ -1,23 +1,27 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "framer-motion";
 import type { DailyInsights, Summary } from "@/types";
 import { formatInr } from "@/helpers/currency";
+import { pathForView } from "@/lib/dashboardViews";
 import { LedgerlineCountUp } from "@/components/animations/LedgerlineCountUp";
+import { DailyLimitForm } from "@/components/DailyLimitForm";
 import { SpotlightCard } from "@/components/SpotlightCard";
 import { fadeUp, stagger } from "@/lib/motion";
 
 interface StatsRowProps {
   summary: Summary;
   dailyInsights?: DailyInsights;
+  onSaveLimit?: (limit: number | null) => Promise<unknown>;
 }
 
-export function StatsRow({ summary, dailyInsights }: StatsRowProps) {
+export function StatsRow({ summary, dailyInsights, onSaveLimit }: StatsRowProps) {
   const limit = dailyInsights?.enabled ? dailyInsights.limit : null;
   const overDays = dailyInsights?.daysOverLimit.length ?? 0;
   const budgetHint =
     limit == null
-      ? "Set a daily limit in Settings"
+      ? "Type the most you want to spend in a day"
       : overDays > 0
         ? `${overDays} day${overDays === 1 ? "" : "s"} over limit`
         : "Within daily limit so far";
@@ -32,10 +36,10 @@ export function StatsRow({ summary, dailyInsights }: StatsRowProps) {
       <motion.div variants={fadeUp}>
         <SpotlightCard className="metric-hero">
           <p className="stat-kicker">Total spent</p>
-          <strong className="display-num lg text-[var(--primary)]">
+          <strong className="display-num lg copper">
             <LedgerlineCountUp value={summary.totalSpent} format={(n) => formatInr(n)} />
           </strong>
-          <p className="meta mt-1">spent this month</p>
+          <p className="meta mt-1">money out</p>
           <div className="mt-4 flex flex-wrap gap-2">
             <span className="badge-pill !m-0 !text-[0.7rem]">
               {summary.transactionCount} debits
@@ -59,15 +63,22 @@ export function StatsRow({ summary, dailyInsights }: StatsRowProps) {
               format={(n) => formatInr(n)}
             />
           </strong>
-          <p className="meta">across days with spend</p>
+          <p className="meta">across days you spent</p>
         </SpotlightCard>
 
-        <SpotlightCard className="stat">
+        <SpotlightCard className="stat limit-stat">
           <p className="stat-kicker">Daily limit</p>
           <strong className={`display-num sm${overDays > 0 ? " text-[var(--danger)]" : ""}`}>
-            {limit == null ? "—" : <LedgerlineCountUp value={limit} format={(n) => formatInr(n)} />}
+            {limit == null ? "Not set" : <LedgerlineCountUp value={limit} format={(n) => formatInr(n)} />}
           </strong>
           <p className={`meta${overDays > 0 ? " over-limit-text" : ""}`}>{budgetHint}</p>
+          {limit == null ? (
+            <DailyLimitForm limit={null} compact onSave={onSaveLimit} />
+          ) : (
+            <Link href={pathForView("insights")} className="limit-edit">
+              Edit
+            </Link>
+          )}
         </SpotlightCard>
 
         <SpotlightCard className="stat">

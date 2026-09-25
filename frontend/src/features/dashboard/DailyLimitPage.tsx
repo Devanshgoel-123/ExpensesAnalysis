@@ -1,16 +1,16 @@
 "use client";
 
-import Link from "next/link";
 import { useDashboard } from "@/lib/dashboard-context";
 import { DailyInsightsPanel } from "@/components/DailyInsightsPanel";
+import { DailyLimitForm, useSaveDailyLimit } from "@/components/DailyLimitForm";
 import { DailySpendChart } from "@/components/charts/DailySpendChart";
 import { normalizeDailySpend } from "@/helpers/finance";
 import { LedgerlineFadeContent } from "@/components/animations/LedgerlineFadeContent";
 import { LoadingState } from "@/components/ui/LoadingState";
-import { pathForView } from "@/lib/dashboardViews";
 
 export function DailyLimitPage() {
   const { data, dailyInsights, fetching } = useDashboard();
+  const saveLimit = useSaveDailyLimit();
   const daily = data ? normalizeDailySpend(data.daily) : [];
 
   if (fetching && !data) {
@@ -40,20 +40,16 @@ export function DailyLimitPage() {
         />
       </LedgerlineFadeContent>
 
+      <LedgerlineFadeContent delay={60}>
+        <DailyLimitForm
+          limit={dailyInsights.enabled ? dailyInsights.limit : null}
+          onSave={saveLimit}
+        />
+      </LedgerlineFadeContent>
+
       {daily.length > 0 ? (
         <LedgerlineFadeContent delay={80}>
           <DailySpendChart data={daily} insights={dailyInsights} />
-        </LedgerlineFadeContent>
-      ) : null}
-
-      {!dailyInsights.enabled ? (
-        <LedgerlineFadeContent delay={120}>
-          <p className="meta">
-            <Link href={pathForView("settings")} className="text-[var(--primary)]">
-              Set a daily limit in Settings
-            </Link>{" "}
-            to highlight over-budget days on the chart.
-          </p>
         </LedgerlineFadeContent>
       ) : null}
     </div>

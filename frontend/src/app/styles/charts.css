@@ -28,17 +28,21 @@
   width: 70%;
   max-width: 36px;
   border-radius: 3px 3px 1px 1px;
-  background: var(--primary);
+  background: var(--bar-calm);
   opacity: 0.88;
 }
 
 .bar-fill.over-limit {
-  background: var(--danger);
+  background: var(--bar-hot);
   opacity: 0.85;
 }
 
+.bar-fill.is-peak {
+  background: var(--bar-peak);
+}
+
 .bar-fill.today {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 35%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--foreground) 28%, transparent);
 }
 
 .bar-label.over-limit {
@@ -90,8 +94,418 @@
   box-shadow: var(--shadow-md);
 }
 
-.chart-tooltip .meta {
-  margin-bottom: 0.2rem;
+.chart-tooltip .meta,
+.chart-tooltip-title {
+  margin: 0 0 0.2rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.chart-tooltip strong {
+  display: block;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.95rem;
+  color: var(--foreground);
+}
+
+.chart-tooltip ul {
+  margin: 0.4rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.12rem;
+}
+
+.chart-tooltip li {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.chart-tooltip li.tone-watch {
+  color: var(--warning);
+}
+
+.chart-tooltip li.tone-hot {
+  color: var(--danger);
+}
+
+/* Detailed lollipop charts */
+.detail-chart-body {
+  display: flex;
+  gap: 0.35rem;
+  height: 268px;
+}
+
+.detail-y-col {
+  position: relative;
+  width: 3.15rem;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-plot-col {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-scale {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.detail-x,
+.detail-x-spacer {
+  height: 1.85rem;
+  flex: none;
+}
+
+.detail-x {
+  display: flex;
+  align-items: flex-start;
+}
+
+.detail-y-label {
+  position: absolute;
+  right: 0.35rem;
+  transform: translateY(50%);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.62rem;
+  line-height: 1;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.chart-grid-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent);
+  pointer-events: none;
+}
+
+.chart-guide {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  border-top: 1px dashed color-mix(in srgb, var(--warning) 80%, transparent);
+  pointer-events: none;
+}
+
+.chart-guide.tone-hot {
+  border-top-color: color-mix(in srgb, var(--danger) 80%, transparent);
+}
+
+.chart-guide span {
+  position: absolute;
+  right: 0;
+  top: -0.85rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--warning);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  padding: 0 0.2rem;
+}
+
+.chart-guide.align-start span {
+  right: auto;
+  left: 0;
+}
+
+.chart-guide.tone-hot span {
+  color: var(--danger);
+}
+
+.detail-bars {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  z-index: 1;
+}
+
+.lollipop {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  cursor: crosshair;
+  outline: none;
+}
+
+.lollipop-mark {
+  width: 72%;
+  max-width: 34px;
+  min-width: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.lollipop-stem {
+  width: 100%;
+  flex: 1;
+  min-height: 3px;
+  border-radius: 7px 7px 3px 3px;
+  background: var(--bar-calm);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 16%);
+  opacity: 1;
+}
+
+.lollipop-stem.tone-calm,
+.lollipop-stem.mark-calm {
+  background: var(--bar-calm);
+}
+
+.lollipop-stem.tone-watch,
+.lollipop-stem.mark-high {
+  background: var(--bar-watch);
+}
+
+.lollipop-stem.tone-hot,
+.lollipop-stem.mark-over {
+  background: var(--bar-hot);
+}
+
+.lollipop-stem.mark-peak {
+  background: var(--bar-peak);
+}
+
+.lollipop-stem.is-empty {
+  min-height: 2px;
+  height: 2px;
+  flex: none;
+  background: var(--muted-2);
+  opacity: 0.35;
+}
+
+.lollipop-dot {
+  width: 9px;
+  height: 9px;
+  margin-bottom: -2px;
+  border-radius: 50%;
+  background: var(--muted-2);
+  box-shadow: 0 0 0 2px var(--surface);
+  flex: none;
+}
+
+.lollipop-dot.tone-calm,
+.lollipop-dot.mark-calm {
+  background: var(--muted-2);
+}
+
+.lollipop-dot.tone-watch,
+.lollipop-dot.mark-high {
+  background: var(--parchment);
+}
+
+.lollipop-dot.tone-hot,
+.lollipop-dot.mark-over {
+  background: var(--clay);
+}
+
+.lollipop-dot.mark-peak {
+  background: var(--copper);
+}
+
+.tone-calm {
+  color: var(--muted);
+}
+
+.tone-watch {
+  color: var(--parchment-ink);
+}
+
+.tone-hot {
+  color: var(--clay-ink);
+}
+
+.lollipop.is-active .lollipop-dot,
+.lollipop:hover .lollipop-dot {
+  transform: scale(1.35);
+}
+
+.lollipop.is-today .lollipop-dot {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--muted-2);
+}
+
+.detail-x .bar-label {
+  position: static;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.05rem;
+  font-size: 0.62rem;
+  line-height: 1.05;
+  color: var(--muted);
+}
+
+.detail-x .bar-label small {
+  font-size: 0.55rem;
+  color: var(--muted-2);
+  font-weight: 500;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem 1.1rem;
+  margin-top: 0.85rem;
+}
+
+.chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.legend-lollipop {
+  position: relative;
+  width: 10px;
+  height: 16px;
+  border-radius: 4px 4px 2px 2px;
+  background: var(--bar-calm);
+}
+
+.legend-lollipop.tone-watch,
+.legend-lollipop.mark-high {
+  background: var(--bar-watch);
+}
+
+.legend-lollipop.tone-hot,
+.legend-lollipop.mark-over {
+  background: var(--bar-hot);
+}
+
+.legend-lollipop.mark-peak {
+  background: var(--bar-peak);
+}
+
+.legend-lollipop::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted-2);
+  transform: translateX(-50%);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+.legend-lollipop.tone-watch::before,
+.legend-lollipop.mark-high::before {
+  background: var(--parchment);
+}
+
+.legend-lollipop.tone-hot::before,
+.legend-lollipop.mark-over::before {
+  background: var(--clay);
+}
+
+.legend-lollipop.mark-peak::before {
+  background: var(--copper);
+}
+
+.share-bar {
+  position: relative;
+  height: 16px;
+  margin-top: 0.45rem;
+}
+
+.share-bar::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 4px;
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
+.share-fill {
+  position: absolute;
+  left: 0;
+  top: 4px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bar-calm);
+}
+
+.share-fill.tone-watch {
+  background: var(--bar-watch);
+}
+
+.share-fill.tone-hot {
+  background: var(--bar-watch);
+}
+
+.share-fill.is-peak {
+  background: var(--bar-peak);
+}
+
+.share-dot {
+  position: absolute;
+  top: 3.5px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--muted-2);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+.share-dot.tone-watch,
+.share-dot.tone-hot {
+  background: var(--parchment);
+}
+
+.share-dot.is-peak {
+  background: var(--copper);
+}
+
+.chart-share-meta {
+  margin: 0;
+}
+
+.merchant-row-copy .share-bar {
+  margin-top: 0.55rem;
+}
+
+@media (max-width: 720px) {
+  .detail-chart-body {
+    height: 220px;
+  }
+
+  .detail-y-col {
+    width: 2.6rem;
+  }
+
+  .detail-x .bar-label small {
+    display: none;
+  }
 }
 
 /* Heatmap */
@@ -113,19 +527,19 @@
 }
 
 .heat-cell.level-1 {
-  background: color-mix(in srgb, var(--primary) 28%, var(--bg-muted));
+  background: color-mix(in srgb, var(--muted) 40%, var(--bg-muted));
 }
 
 .heat-cell.level-2 {
-  background: color-mix(in srgb, var(--primary) 48%, var(--bg-muted));
+  background: color-mix(in srgb, var(--parchment) 38%, var(--bg-muted));
 }
 
 .heat-cell.level-3 {
-  background: color-mix(in srgb, var(--primary) 70%, transparent);
+  background: var(--parchment);
 }
 
 .heat-cell.level-4 {
-  background: var(--primary);
+  background: color-mix(in srgb, var(--parchment) 68%, #3a2e24);
 }
 
 .heatmap-grid .heat-cell:hover {

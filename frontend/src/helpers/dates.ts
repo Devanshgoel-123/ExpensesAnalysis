@@ -63,11 +63,28 @@ export function formatShortDate(raw: string | null | undefined): string {
   });
 }
 
+const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
 /** Minimal bar chart tick — day of month only. */
 export function formatChartDay(raw: string | null | undefined): string {
   const dt = parseLedgerDate(raw);
   if (!dt) return "—";
   return String(dt.getUTCDate());
+}
+
+/** Short weekday for chart axes, e.g. "Mon". */
+export function formatChartWeekday(raw: string | null | undefined): string {
+  const dt = parseLedgerDate(raw);
+  if (!dt) return "";
+  return WEEKDAY_SHORT[dt.getUTCDay()] ?? "";
+}
+
+/** Tooltip date, e.g. "Mon, 1 Sep". */
+export function formatChartDate(raw: string | null | undefined): string {
+  const dt = parseLedgerDate(raw);
+  if (!dt) return "—";
+  const weekday = WEEKDAY_SHORT[dt.getUTCDay()] ?? "";
+  return `${weekday}, ${formatShortDate(raw)}`;
 }
 
 /** Human-readable statement period for the header. */
