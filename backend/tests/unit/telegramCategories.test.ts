@@ -14,6 +14,11 @@ describe("parseCategoryReply", () => {
     assert.equal(parseCategoryReply("invest"), "investments");
     assert.equal(parseCategoryReply("pharmacy"), "healthcare");
     assert.equal(parseCategoryReply("parents"), "family");
+    assert.equal(parseCategoryReply("hdfc"), "banks");
+    assert.equal(parseCategoryReply("maid"), "cook-maid");
+    assert.equal(parseCategoryReply("cleaning"), "household");
+    assert.equal(parseCategoryReply("furlenco"), "household");
+    assert.equal(parseCategoryReply("rent"), "rent");
   });
 
   it("returns null when no category is mentioned", () => {

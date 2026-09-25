@@ -88,6 +88,24 @@ async function main() {
   if (!categories.some((c) => c.slug === "family")) {
     throw new Error("Family category missing");
   }
+  if (!categories.some((c) => c.slug === "banks")) {
+    throw new Error("Banks category missing");
+  }
+  const bistro = providers.find((p) => p.canonicalName === "Bistro");
+  if (!bistro?.logoUrl?.includes("bistro")) {
+    throw new Error("Bistro logo missing");
+  }
+  if (!categories.some((c) => c.slug === "household")) {
+    throw new Error("Household category missing");
+  }
+  const pronto = providers.find((p) => p.canonicalName === "Pronto");
+  if (!pronto || pronto.categorySlug !== "household" || !pronto.logoUrl) {
+    throw new Error("Pronto should be household");
+  }
+  const furlenco = providers.find((p) => p.canonicalName === "Furlenco");
+  if (!furlenco || furlenco.categorySlug !== "household" || !furlenco.logoUrl) {
+    throw new Error("Furlenco should be household");
+  }
 
   const rule = await store.createRule({
     userId: registered.user.id,

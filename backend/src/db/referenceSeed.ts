@@ -48,7 +48,7 @@ export async function seedMemoryReferenceData(store: MemoryStore): Promise<void>
   }
 
   for (const match of sql.matchAll(
-    /INSERT INTO providers[\s\S]*?SELECT NULL, '([^']+)', ARRAY\[([^\]]*)\], ARRAY\[([^\]]*)\], ARRAY\[([^\]]*)\], (NULL|'[^']*'), (NULL|'[^']*'), ('[^']*'|NULL), TRUE/g,
+    /INSERT INTO providers[\s\S]*?SELECT NULL, '([^']+)', ARRAY\[([^\]]*)\](?:::TEXT\[\])?, ARRAY\[([^\]]*)\](?:::TEXT\[\])?, ARRAY\[([^\]]*)\](?:::TEXT\[\])?, (NULL|'[^']*'), (NULL|'[^']*'), ('[^']*'|NULL), TRUE/g,
   )) {
     const parseArray = (raw: string): string[] => {
       if (!raw.trim()) return [];

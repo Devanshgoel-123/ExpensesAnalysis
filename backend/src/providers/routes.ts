@@ -1,8 +1,13 @@
 import { Router } from "express";
 import { requireAuth } from "../auth/service.js";
 import { getStore } from "../db/index.js";
+import { AppError } from "../errors/AppError.js";
+import { asyncHandler } from "../middleware/asyncHandler.js";
 import { validate } from "../middleware/validate.js";
-import { createProviderBodySchema } from "../validators/providers.js";
+import {
+  createProviderBodySchema,
+  updateProviderBodySchema,
+} from "../validators/providers.js";
 import { resolveProviderLogo } from "./registry.js";
 
 export const providersRouter = Router();
@@ -50,4 +55,36 @@ providersRouter.post(
     });
     res.status(201).json({ provider });
   },
+);
+
+providersRouter.patch(
+  "/:id",
+  validate(updateProviderBodySchema),
+  asyncHandler(async (req, res) => {
+    const store = await getStore();
+    const id = typeof req.params.id === "string" ? req.params.id : req.params.id?.[0];
+    if (!id) throw AppError.notFound("App not found");
+    const existing = await store.getProviderById(id);
+    if (
+      !existing ||
+      (!existing.isGlobal && existing.userId !== req.user!.id)
+    ) {
+      throw AppError.notFound("App not found");
+    }
+    const body = req.body as { categorySlug: string };
+    const provider = await store.upsertProvider({
+      ...existing,
+      categorySlug: body.categorySlug,
+    });
+    res.json({
+      provider: {
+        ...provider,
+        ...resolveProviderLogo({
+          logoUrl: provider.logoUrl,
+          websiteDomain: provider.websiteDomain,
+          name: provider.canonicalName,
+        }),
+      },
+    });
+  }),
 );

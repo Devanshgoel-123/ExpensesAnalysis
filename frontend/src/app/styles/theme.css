@@ -44,9 +44,14 @@
   --cat-travel: #9bb8c9;
   --cat-healthcare: #c48984;
   --cat-family: #b7a8c9;
+  --cat-furniture: #fbbf24;
+  --cat-rent: #7dd3fc;
+  --cat-cook-maid: #f9a8d4;
+  --cat-household: #86efac;
   --cat-outing: #c4cbb0;
   --cat-investments: #8f9e86;
   --cat-cigarettes: #cbb992;
+  --cat-banks: #7eb6e6;
   --cat-other: #8b948c;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow-md: 0 16px 40px rgba(0, 0, 0, 0.45);

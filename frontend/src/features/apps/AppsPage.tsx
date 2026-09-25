@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDashboard } from "@/lib/dashboard-context";
 import { useApi } from "@/lib/useApi";
+import { pathForView } from "@/lib/dashboardViews";
 import type { Provider } from "@/lib/api/types";
 import {
   dayCategoryMix,
@@ -67,8 +69,15 @@ export function AppsPage() {
           <p className="stat-kicker mb-2">Apps</p>
           <h2 className="month-label">{formatMonthTitle(month)}</h2>
           <p className="meta mt-1.5">
-            Tag spends with the apps you actually use. The day bar splits that
-            day&apos;s debits by category.
+            Move an app between categories here. To capture per-vendor totals,
+            open{" "}
+            <Link
+              href={pathForView("transactions")}
+              className="text-[var(--primary)] underline-offset-2 hover:underline"
+            >
+              Transactions
+            </Link>{" "}
+            and set Category + App on each spend.
           </p>
         </header>
       </LedgerlineFadeContent>
@@ -109,6 +118,36 @@ export function AppsPage() {
                         ? `${formatInr(total)} · ${count} txn${count === 1 ? "" : "s"}`
                         : "No tagged spend yet"}
                     </p>
+                    <label className="field">
+                      <span>Category</span>
+                      <select
+                        value={provider.categorySlug ?? ""}
+                        onChange={async (event) => {
+                          if (!api || !provider.id) return;
+                          const next = event.target.value;
+                          try {
+                            setError(null);
+                            await api.patchProvider(provider.id, {
+                              categorySlug: next,
+                            });
+                            await loadProviders();
+                            refresh();
+                          } catch (err) {
+                            setError(
+                              err instanceof Error
+                                ? err.message
+                                : "Could not move app",
+                            );
+                          }
+                        }}
+                      >
+                        {(data.categories ?? []).map((category) => (
+                          <option key={category.slug} value={category.slug}>
+                            {category.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   </article>
                 ))}
               </div>

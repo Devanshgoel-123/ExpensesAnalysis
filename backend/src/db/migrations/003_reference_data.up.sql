@@ -50,6 +50,26 @@ SELECT NULL, 'cigarettes', 'Cigarettes', 'Tiny spends ₹25–₹60', '#c084fc',
 WHERE NOT EXISTS (SELECT 1 FROM categories WHERE is_global = TRUE AND slug = 'cigarettes');
 
 INSERT INTO categories (user_id, slug, label, blurb, accent, is_global, sort_order, meta)
+SELECT NULL, 'furniture', 'Furniture', 'Home furniture · fittings', '#d97706', TRUE, 10, '{}'::jsonb
+WHERE NOT EXISTS (SELECT 1 FROM categories WHERE is_global = TRUE AND slug = 'furniture');
+
+INSERT INTO categories (user_id, slug, label, blurb, accent, is_global, sort_order, meta)
+SELECT NULL, 'rent', 'Rent', 'House rent · deposits', '#0ea5e9', TRUE, 11, '{}'::jsonb
+WHERE NOT EXISTS (SELECT 1 FROM categories WHERE is_global = TRUE AND slug = 'rent');
+
+INSERT INTO categories (user_id, slug, label, blurb, accent, is_global, sort_order, meta)
+SELECT NULL, 'cook-maid', 'Cook & maid', 'Cook · maid · help at home', '#f472b6', TRUE, 12, '{}'::jsonb
+WHERE NOT EXISTS (SELECT 1 FROM categories WHERE is_global = TRUE AND slug = 'cook-maid');
+
+INSERT INTO categories (user_id, slug, label, blurb, accent, is_global, sort_order, meta)
+SELECT NULL, 'household', 'Household', 'Cleaning · Pronto · Furlenco · home services', '#22c55e', TRUE, 13, '{}'::jsonb
+WHERE NOT EXISTS (SELECT 1 FROM categories WHERE is_global = TRUE AND slug = 'household');
+
+INSERT INTO categories (user_id, slug, label, blurb, accent, is_global, sort_order, meta)
+SELECT NULL, 'banks', 'Banks', 'HDFC · SBI · ICICI · Axis', '#004c8f', TRUE, 9, '{}'::jsonb
+WHERE NOT EXISTS (SELECT 1 FROM categories WHERE is_global = TRUE AND slug = 'banks');
+
+INSERT INTO categories (user_id, slug, label, blurb, accent, is_global, sort_order, meta)
 SELECT NULL, 'other', 'Other', 'Uncategorized apps & people', '#6d5cff', TRUE, 99, '{}'::jsonb
 WHERE NOT EXISTS (SELECT 1 FROM categories WHERE is_global = TRUE AND slug = 'other');
 
@@ -58,11 +78,11 @@ SELECT NULL, 'Swiggy', ARRAY['Swiggy'], ARRAY['swiggy'], ARRAY['swiggy.in'], 'sw
 WHERE NOT EXISTS (SELECT 1 FROM providers WHERE is_global = TRUE AND lower(canonical_name) = 'swiggy');
 
 INSERT INTO providers (user_id, canonical_name, aliases, upi_handles, sender_domains, website_domain, logo_url, category_slug, is_global)
-SELECT NULL, 'Bistro', ARRAY['Bistro','Swiggy Bistro','Bistor'], ARRAY['bistro'], ARRAY['swiggy.in'], 'swiggy.com', '/providers/swiggy.png', 'food', TRUE
+SELECT NULL, 'Bistro', ARRAY['Bistro','Swiggy Bistro','Bistor','Blinkit Bistro'], ARRAY['bistro'], ARRAY['swiggy.in'], 'blinkit.com', '/providers/bistro.png', 'food', TRUE
 WHERE NOT EXISTS (SELECT 1 FROM providers WHERE is_global = TRUE AND lower(canonical_name) = 'bistro');
 
 INSERT INTO providers (user_id, canonical_name, aliases, upi_handles, sender_domains, website_domain, logo_url, category_slug, is_global)
-SELECT NULL, 'Zepto', ARRAY['Zepto'], ARRAY['zepto'], ARRAY['zeptonow.com'], 'zeptonow.com', '/providers/zepto.svg', 'food', TRUE
+SELECT NULL, 'Zepto', ARRAY['Zepto'], ARRAY['zepto'], ARRAY['zeptonow.com'], 'zeptonow.com', '/providers/zepto.png', 'food', TRUE
 WHERE NOT EXISTS (SELECT 1 FROM providers WHERE is_global = TRUE AND lower(canonical_name) = 'zepto');
 
 INSERT INTO providers (user_id, canonical_name, aliases, upi_handles, sender_domains, website_domain, logo_url, category_slug, is_global)
@@ -78,7 +98,7 @@ SELECT NULL, 'District', ARRAY['District'], ARRAY['district'], ARRAY['district.i
 WHERE NOT EXISTS (SELECT 1 FROM providers WHERE is_global = TRUE AND lower(canonical_name) = 'district');
 
 INSERT INTO providers (user_id, canonical_name, aliases, upi_handles, sender_domains, website_domain, logo_url, category_slug, is_global)
-SELECT NULL, 'HDFC Bank', ARRAY['HDFC'], ARRAY[]::TEXT[], ARRAY['hdfcbank.bank.in','hdfcbank.net','hdfcbank.com'], 'hdfcbank.com', '/providers/hdfc.svg', NULL, TRUE
+SELECT NULL, 'HDFC Bank', ARRAY['HDFC'], ARRAY[]::TEXT[], ARRAY['hdfcbank.bank.in','hdfcbank.net','hdfcbank.com'], 'hdfcbank.com', '/providers/hdfc.svg', 'banks', TRUE
 WHERE NOT EXISTS (SELECT 1 FROM providers WHERE is_global = TRUE AND lower(canonical_name) = 'hdfc bank');
 
 INSERT INTO providers (user_id, canonical_name, aliases, upi_handles, sender_domains, website_domain, logo_url, category_slug, is_global)
@@ -98,7 +118,7 @@ SELECT NULL, 'EatSure', ARRAY['EatSure','Eat Sure'], ARRAY['eatsure'], ARRAY['ea
 WHERE NOT EXISTS (SELECT 1 FROM providers WHERE is_global = TRUE AND lower(canonical_name) = 'eatsure');
 
 INSERT INTO providers (user_id, canonical_name, aliases, upi_handles, sender_domains, website_domain, logo_url, category_slug, is_global)
-SELECT NULL, 'Swish', ARRAY['Swish'], ARRAY['swish'], ARRAY[]::TEXT[], NULL, '/providers/swish.svg', 'food', TRUE
+SELECT NULL, 'Swish', ARRAY['Swish'], ARRAY['swish'], ARRAY[]::TEXT[], NULL, '/providers/swish.png', 'food', TRUE
 WHERE NOT EXISTS (SELECT 1 FROM providers WHERE is_global = TRUE AND lower(canonical_name) = 'swish');
 
 INSERT INTO providers (user_id, canonical_name, aliases, upi_handles, sender_domains, website_domain, logo_url, category_slug, is_global)
@@ -120,6 +140,26 @@ WHERE NOT EXISTS (SELECT 1 FROM providers WHERE is_global = TRUE AND lower(canon
 INSERT INTO providers (user_id, canonical_name, aliases, upi_handles, sender_domains, website_domain, logo_url, category_slug, is_global)
 SELECT NULL, 'Namma Yatri', ARRAY['Namma Yatri','NammaYatri'], ARRAY['nammayatri','yatri'], ARRAY['nammayatri.in'], 'nammayatri.in', '/providers/nammayatri.svg', 'travel', TRUE
 WHERE NOT EXISTS (SELECT 1 FROM providers WHERE is_global = TRUE AND lower(canonical_name) = 'namma yatri');
+
+INSERT INTO providers (user_id, canonical_name, aliases, upi_handles, sender_domains, website_domain, logo_url, category_slug, is_global)
+SELECT NULL, 'Pronto', ARRAY['Pronto','Pronnto'], ARRAY['pronto'], ARRAY[]::TEXT[], NULL, '/providers/pronto.png', 'household', TRUE
+WHERE NOT EXISTS (SELECT 1 FROM providers WHERE is_global = TRUE AND lower(canonical_name) = 'pronto');
+
+INSERT INTO providers (user_id, canonical_name, aliases, upi_handles, sender_domains, website_domain, logo_url, category_slug, is_global)
+SELECT NULL, 'Furlenco', ARRAY['Furlenco'], ARRAY['furlenco'], ARRAY['furlenco.com'], 'furlenco.com', '/providers/furlenco.png', 'household', TRUE
+WHERE NOT EXISTS (SELECT 1 FROM providers WHERE is_global = TRUE AND lower(canonical_name) = 'furlenco');
+
+INSERT INTO providers (user_id, canonical_name, aliases, upi_handles, sender_domains, website_domain, logo_url, category_slug, is_global)
+SELECT NULL, 'SBI', ARRAY['SBI','State Bank of India'], ARRAY[]::TEXT[], ARRAY['sbi.co.in','onlinesbi.com'], 'sbi.co.in', '/providers/sbi.svg', 'banks', TRUE
+WHERE NOT EXISTS (SELECT 1 FROM providers WHERE is_global = TRUE AND lower(canonical_name) = 'sbi');
+
+INSERT INTO providers (user_id, canonical_name, aliases, upi_handles, sender_domains, website_domain, logo_url, category_slug, is_global)
+SELECT NULL, 'ICICI Bank', ARRAY['ICICI'], ARRAY[]::TEXT[], ARRAY['icicibank.com'], 'icicibank.com', '/providers/icici.svg', 'banks', TRUE
+WHERE NOT EXISTS (SELECT 1 FROM providers WHERE is_global = TRUE AND lower(canonical_name) = 'icici bank');
+
+INSERT INTO providers (user_id, canonical_name, aliases, upi_handles, sender_domains, website_domain, logo_url, category_slug, is_global)
+SELECT NULL, 'Axis Bank', ARRAY['Axis','AXIS'], ARRAY[]::TEXT[], ARRAY['axisbank.com'], 'axisbank.com', '/providers/axis.svg', 'banks', TRUE
+WHERE NOT EXISTS (SELECT 1 FROM providers WHERE is_global = TRUE AND lower(canonical_name) = 'axis bank');
 
 INSERT INTO bank_presets (id, label, adapter_id, pdf_adapter_ready, default_sender_emails, description, sort_order)
 VALUES
@@ -150,5 +190,15 @@ WHERE is_global = TRUE AND slug = 'investments';
 UPDATE categories SET sort_order = 8, blurb = 'Tiny spends ₹25–₹60', accent = '#c084fc',
   meta = '{"amountBandMin":25,"amountBandMax":60,"amountBandLabel":"₹25 – ₹60"}'::jsonb
 WHERE is_global = TRUE AND slug = 'cigarettes';
+UPDATE categories SET sort_order = 9, blurb = 'HDFC · SBI · ICICI · Axis', accent = '#004c8f'
+WHERE is_global = TRUE AND slug = 'banks';
+UPDATE categories SET sort_order = 10, blurb = 'Home furniture · fittings', accent = '#d97706'
+WHERE is_global = TRUE AND slug = 'furniture';
+UPDATE categories SET sort_order = 11, blurb = 'House rent · deposits', accent = '#0ea5e9'
+WHERE is_global = TRUE AND slug = 'rent';
+UPDATE categories SET sort_order = 12, blurb = 'Cook · maid · help at home', accent = '#f472b6'
+WHERE is_global = TRUE AND slug = 'cook-maid';
+UPDATE categories SET sort_order = 13, blurb = 'Cleaning · Pronto · Furlenco · home services', accent = '#22c55e'
+WHERE is_global = TRUE AND slug = 'household';
 UPDATE categories SET sort_order = 99, blurb = 'Uncategorized apps & people', accent = '#6d5cff'
 WHERE is_global = TRUE AND slug = 'other';

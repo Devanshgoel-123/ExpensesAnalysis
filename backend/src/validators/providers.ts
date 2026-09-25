@@ -9,3 +9,7 @@ export const createProviderBodySchema = z.object({
   logoUrl: z.string().max(500).nullable().optional(),
   categorySlug: z.string().max(64).nullable().optional(),
 });
+
+export const updateProviderBodySchema = z.object({
+  categorySlug: z.string().trim().min(1).max(64),
+});

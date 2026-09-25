@@ -154,6 +154,14 @@ export function createApiClient(token: string) {
         },
       ),
 
+    patchProvider: (id: string, body: { categorySlug: string }) =>
+      requestJson<{ provider: Provider }>(`/api/providers/${id}`, {
+        method: "PATCH",
+        ...auth,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+
     createProvider: (body: {
       canonicalName: string;
       categorySlug?: string | null;

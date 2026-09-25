@@ -103,7 +103,21 @@
 .pill.lifestyle.cat-travel { color: var(--cat-travel); }
 .pill.lifestyle.cat-healthcare { color: var(--cat-healthcare); }
 .pill.lifestyle.cat-family { color: var(--cat-family); }
+.pill.lifestyle.cat-furniture { color: var(--cat-furniture); }
+.pill.lifestyle.cat-rent { color: var(--cat-rent); }
+.pill.lifestyle.cat-cook-maid { color: var(--cat-cook-maid); }
+.pill.lifestyle.cat-household { color: var(--cat-household); }
 .pill.lifestyle.cat-outing { color: var(--cat-outing); }
 .pill.lifestyle.cat-investments { color: var(--cat-investments); }
 .pill.lifestyle.cat-cigarettes { color: var(--cat-cigarettes); }
+.pill.lifestyle.cat-banks { color: var(--cat-banks); }
 .pill.lifestyle.cat-other { color: var(--cat-other); }
+
+.app-card .field {
+  margin: 0;
+}
+
+.app-card select {
+  width: 100%;
+  font-size: 0.78rem;
+}

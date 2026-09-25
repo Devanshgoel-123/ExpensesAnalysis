@@ -158,6 +158,12 @@ describe("logoForAppName", () => {
   it("maps known vendors to local logos", () => {
     expect(logoForAppName("Namma Yatri")).toBe("/providers/nammayatri.svg");
     expect(logoForAppName("Swiggy")).toBe("/providers/swiggy.png");
+    expect(logoForAppName("Bistro")).toBe("/providers/bistro.png");
+    expect(logoForAppName("Swish")).toBe("/providers/swish.png");
+    expect(logoForAppName("HDFC Bank")).toBe("/providers/hdfc.svg");
+    expect(logoForAppName("Zepto")).toBe("/providers/zepto.png");
+    expect(logoForAppName("Pronto")).toBe("/providers/pronto.png");
+    expect(logoForAppName("Furlenco")).toBe("/providers/furlenco.png");
     expect(logoForAppName("unknown cafe")).toBeNull();
   });
 });
