@@ -53,6 +53,9 @@ const envSchema = z.object({
   DB_POOL_MAX: z.coerce.number().int().positive().default(20),
   DB_POOL_IDLE_MS: z.coerce.number().int().positive().default(30_000),
   DB_POOL_CONN_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
+  TELEGRAM_BOT_TOKEN: z.string().optional().default(""),
+  TELEGRAM_BOT_USERNAME: z.string().optional().default(""),
+  TELEGRAM_WEBHOOK_SECRET: z.string().optional().default(""),
 });
 
 export type AppConfig = {
@@ -95,6 +98,12 @@ export type AppConfig = {
     max: number;
     idleTimeoutMillis: number;
     connectionTimeoutMillis: number;
+  };
+  telegram: {
+    enabled: boolean;
+    botToken: string;
+    botUsername: string;
+    webhookSecret: string;
   };
 };
 
@@ -240,6 +249,12 @@ function loadConfig(): AppConfig {
       max: env.DB_POOL_MAX,
       idleTimeoutMillis: env.DB_POOL_IDLE_MS,
       connectionTimeoutMillis: env.DB_POOL_CONN_TIMEOUT_MS,
+    },
+    telegram: {
+      enabled: Boolean(env.TELEGRAM_BOT_TOKEN.trim()),
+      botToken: env.TELEGRAM_BOT_TOKEN.trim(),
+      botUsername: env.TELEGRAM_BOT_USERNAME.trim().replace(/^@/, ""),
+      webhookSecret: env.TELEGRAM_WEBHOOK_SECRET.trim(),
     },
   };
 }
