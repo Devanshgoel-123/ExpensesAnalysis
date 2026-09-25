@@ -27,9 +27,7 @@
 .category-card:hover,
 .payee-card:hover {
   border-color: var(--border-strong);
-  box-shadow:
-    var(--shadow-card),
-    0 0 0 1px color-mix(in srgb, var(--primary) 12%, transparent);
+  box-shadow: var(--shadow-card);
 }
 
 .spotlight-glow {

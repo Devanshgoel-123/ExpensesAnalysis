@@ -70,7 +70,7 @@ function PreviewCard() {
       </div>
       <div className="login-preview-bars">
         <span style={{ height: "72%" }} />
-        <span style={{ height: "100%" }} />
+        <span className="peak" style={{ height: "100%" }} />
         <span style={{ height: "45%" }} />
         <span style={{ height: "88%" }} className="over" />
         <span style={{ height: "60%" }} />

@@ -180,9 +180,9 @@ void main() {
 const ctxMap = new WeakMap<HTMLDivElement, TunnelContext>();
 
 export default function LightTunnel({
-  cableColor = "#7fe6a6",
-  pulseColor = "#7fe6a6",
-  tunnelColor = "#17b061",
+  cableColor = "#5c4638",
+  pulseColor = "#cbbfae",
+  tunnelColor = "#1a1410",
   tunnelOpacity = 0,
   speed = 0.1,
   flowDirection = "outward",

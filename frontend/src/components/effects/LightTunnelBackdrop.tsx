@@ -44,10 +44,10 @@ export function LightTunnelBackdrop({ className }: { className?: string }) {
     >
       <LightTunnel
         className="h-full w-full"
-        cableColor={isDark ? "#7fe6a6" : "#17b061"}
-        pulseColor={isDark ? "#c5f6d8" : "#0d5a31"}
-        tunnelColor={isDark ? "#17b061" : "#0a3d22"}
-        tunnelOpacity={isDark ? 0.1 : 0.05}
+        cableColor={isDark ? "#5c4638" : "#8a6a52"}
+        pulseColor={isDark ? "#cbbfae" : "#6a5344"}
+        tunnelColor={isDark ? "#1a1410" : "#3a2c22"}
+        tunnelOpacity={isDark ? 0.08 : 0.04}
         speed={0.07}
         flowDirection="outward"
         pulseSpeed={1.5}
@@ -62,14 +62,14 @@ export function LightTunnelBackdrop({ className }: { className?: string }) {
         size={1.08}
         centerX={0}
         centerY={0}
-        glow={1.1}
+        glow={0.35}
         fadeNear={0.28}
         fadeFar={2.2}
-        brightness={isDark ? 0.72 : 0.42}
+        brightness={isDark ? 0.28 : 0.2}
         colorVariance
         grain
         grainIntensity={0.035}
-        opacity={isDark ? 0.62 : 0.38}
+        opacity={isDark ? 0.28 : 0.16}
         mouseInteraction
         mouseStrength={0.07}
       />

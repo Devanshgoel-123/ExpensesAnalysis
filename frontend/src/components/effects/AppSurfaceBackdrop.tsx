@@ -18,7 +18,7 @@ type AppSurfaceBackdropProps = {
 };
 
 /**
- * Dual-layer backdrop: soft green surface glow + LightTunnel WebGL cables.
+ * Dual-layer backdrop: near-black field with a dim warm cable trace.
  * Inspired by MailAutomater-new AppSurfaceBackdrop.
  */
 export function AppSurfaceBackdrop({
