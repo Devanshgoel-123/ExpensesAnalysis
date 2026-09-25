@@ -42,6 +42,8 @@ export function createApp(): express.Application {
 
   app.set("trust proxy", 1);
   app.disable("x-powered-by");
+  // Live dashboard/status JSON must not 304 — the browser then keeps polling a stale "running" scan.
+  app.set("etag", false);
 
   app.use(requestContext);
   app.use(securityHeaders());

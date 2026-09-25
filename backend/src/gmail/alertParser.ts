@@ -18,18 +18,21 @@ function parseInrAmount(raw: string): number | null {
 
 const AMOUNT = String.raw`([0-9][0-9,]*(?:\.[0-9]{1,2})?)`;
 
+const MONEY = String.raw`(?:rs\.?|inr|₹)`;
+
 const DEBIT_PATTERNS = [
-  new RegExp(String.raw`(?:rs\.?|inr)\s*${AMOUNT}\s*(?:has been|is|was)?\s*debited`, "i"),
-  new RegExp(String.raw`debited\s*(?:with|by|for)?\s*(?:rs\.?|inr)?\s*${AMOUNT}`, "i"),
-  new RegExp(String.raw`(?:spent|paid)\s*(?:rs\.?|inr)?\s*${AMOUNT}`, "i"),
+  new RegExp(String.raw`${MONEY}\s*${AMOUNT}\s*(?:has been|is|was)?\s*debited`, "i"),
+  new RegExp(String.raw`debited\s*(?:with|by|for)?\s*${MONEY}?\s*${AMOUNT}`, "i"),
+  new RegExp(String.raw`(?:spent|paid)\s*${MONEY}?\s*${AMOUNT}`, "i"),
   new RegExp(String.raw`debit\s*(?:of|inr|rs\.?)?\s*${AMOUNT}`, "i"),
+  new RegExp(String.raw`(?:upi\s*txn|txn)\s+of\s*${MONEY}\s*${AMOUNT}`, "i"),
 ];
 
 const CREDIT_PATTERNS = [
-  new RegExp(String.raw`(?:rs\.?|inr)\s*${AMOUNT}\s*(?:has been|is|was)?\s*credited`, "i"),
-  new RegExp(String.raw`credited\s*(?:with|by|to)?\s*(?:rs\.?|inr)?\s*${AMOUNT}`, "i"),
+  new RegExp(String.raw`${MONEY}\s*${AMOUNT}\s*(?:has been|is|was)?\s*credited`, "i"),
+  new RegExp(String.raw`credited\s*(?:with|by|to)?\s*${MONEY}?\s*${AMOUNT}`, "i"),
   new RegExp(String.raw`credit\s*(?:of|inr|rs\.?)?\s*${AMOUNT}`, "i"),
-  new RegExp(String.raw`received\s*(?:rs\.?|inr)?\s*${AMOUNT}`, "i"),
+  new RegExp(String.raw`received\s*${MONEY}?\s*${AMOUNT}`, "i"),
 ];
 
 const MONTHS: Record<string, number> = {
@@ -134,6 +137,17 @@ export function parseBankAlertEmail(
       const amount = parseInrAmount(match[1]);
       if (amount != null) {
         return { amount, type: TxType.Credit, currency: DEFAULT_CURRENCY, description, date };
+      }
+    }
+  }
+
+  // HDFC UPI subjects rarely include the amount; body/snippet often only has ₹184.
+  if (/upi\s*txn/i.test(text)) {
+    const rupee = text.match(new RegExp(String.raw`${MONEY}\s*${AMOUNT}`, "i"));
+    if (rupee?.[1]) {
+      const amount = parseInrAmount(rupee[1]);
+      if (amount != null) {
+        return { amount, type: TxType.Debit, currency: DEFAULT_CURRENCY, description, date };
       }
     }
   }

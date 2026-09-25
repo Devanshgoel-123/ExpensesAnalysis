@@ -1,7 +1,7 @@
 /** Keep in sync with backend SCAN_SUCCESS_BATCH. */
 export const SCAN_SUCCESS_BATCH = 100;
 
-export const BACKFILL_DEFAULT_MAX_MESSAGES = 500;
+export const BACKFILL_DEFAULT_MAX_MESSAGES = 2000;
 
 /** Today back to the 1st of the month this many months earlier. */
 export const POOLING_LOOKBACK_MONTHS = 2;

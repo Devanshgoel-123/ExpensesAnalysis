@@ -21,8 +21,13 @@ export function BankPoolingPanel({
   onGmailStatus?: (status: GmailStatus | null) => void;
 }) {
   const api = useApi();
-  const { scanning: scanRunning, scanError, watchActiveScan, scanWindow } =
-    useDashboard();
+  const {
+    scanning: scanRunning,
+    scanError,
+    mailScan,
+    watchActiveScan,
+    scanWindow,
+  } = useDashboard();
   const [presets, setPresets] = useState<BankPreset[]>([]);
   const [bank, setBank] = useState("");
   const [gmail, setGmail] = useState<GmailStatus | null>(null);
@@ -88,12 +93,6 @@ export function BankPoolingPanel({
     };
   }, [api, refresh]);
 
-  useEffect(() => {
-    if (gmail?.latestRun?.status === "running") {
-      watchActiveScan();
-    }
-  }, [gmail?.latestRun?.status, watchActiveScan]);
-
   if (!api) return null;
 
   const client = api;
@@ -136,7 +135,8 @@ export function BankPoolingPanel({
         maxMessages: BACKFILL_DEFAULT_MAX_MESSAGES,
       });
       watchActiveScan();
-      await refresh();
+      const next = await client.gmailStatus().catch(() => null);
+      applyGmail(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start scan");
     } finally {
@@ -196,9 +196,14 @@ export function BankPoolingPanel({
         </select>
       </label>
 
-      {selectedPreset && selectedPreset.defaultSenderEmails.length > 0 ? (
-        <p className="meta" style={{ marginTop: "-0.5rem" }}>
-          Searches {selectedPreset.defaultSenderEmails.join(", ")}
+      {scanRunning ? (
+        <p className="meta" style={{ marginBottom: "0.85rem" }} role="status">
+          Scanning {windowLabel} — {mailScan?.imported ?? 0} imported from{" "}
+          {mailScan?.scanned ?? 0} emails.
+        </p>
+      ) : mailScan?.phase === "done" ? (
+        <p className="meta" style={{ marginBottom: "0.85rem" }} role="status">
+          Last scan imported {mailScan.imported} of {mailScan.scanned} emails.
         </p>
       ) : null}
 

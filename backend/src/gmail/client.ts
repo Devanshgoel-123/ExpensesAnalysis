@@ -9,6 +9,7 @@ import {
 import { decryptSecret, encryptSecret } from "../crypto/secrets.js";
 import { getStore } from "../db/index.js";
 import type { GmailConnectionRow } from "../db/types.js";
+import { htmlToText } from "./htmlText.js";
 import {
   clampPoolingAfter,
   gmailFromClause,
@@ -133,8 +134,7 @@ export function buildAlertQuery(
   const after = clampPoolingAfter(options?.after);
   const parts = [
     fromClause,
-    // HDFC InstaAlerts often use "UPI txn" / "Account update" subjects.
-    `(debited OR credited OR "has been debited" OR "has been credited" OR UPI OR "UPI txn" OR "Account update" OR InstaAlerts OR "Rs." OR INR)`,
+    `(subject:(UPI OR "Account update" OR InstaAlerts OR Alert OR debited OR credited) OR "has been debited" OR "has been credited" OR "UPI txn")`,
     `after:${toGmailQueryAfter(after)}`,
   ];
   if (options?.before && options.before > after) {
@@ -156,7 +156,7 @@ export async function listStatementMessageIds(
     {
       userId: "me",
       q,
-      maxResults: 25,
+      maxResults: 100,
       pageToken,
     },
     { timeout: GMAIL_REQUEST_TIMEOUT_MS },
@@ -174,11 +174,14 @@ export async function fetchPdfAttachments(
   messageId: string,
 ): Promise<Array<{ filename: string; buffer: Buffer }>> {
   const gmail = await getAuthedGmail(connection);
-  const msg = await gmail.users.messages.get({
-    userId: "me",
-    id: messageId,
-    format: "full",
-  });
+  const msg = await gmail.users.messages.get(
+    {
+      userId: "me",
+      id: messageId,
+      format: "full",
+    },
+    { timeout: GMAIL_REQUEST_TIMEOUT_MS },
+  );
 
   const parts = flattenParts(msg.data.payload);
   const pdfs: Array<{ filename: string; buffer: Buffer }> = [];
@@ -224,24 +227,40 @@ function extractBodyText(
   } | null | undefined,
 ): string {
   if (!payload) return "";
-  const mime = payload.mimeType ?? "";
-  if (mime.includes("text/plain") && payload.body?.data) {
-    return decodeBody(payload.body.data);
-  }
-  let text = "";
-  for (const child of payload.parts ?? []) {
-    const part = child as {
+  let plain = "";
+  let html = "";
+  const walk = (
+    node: {
       mimeType?: string | null;
       body?: { data?: string | null } | null;
       parts?: unknown[] | null;
-    };
-    const nested = extractBodyText(part);
-    if (nested) text += `${nested}\n`;
+    } | null | undefined,
+  ) => {
+    if (!node) return;
+    const mime = node.mimeType ?? "";
+    if (node.body?.data) {
+      const decoded = decodeBody(node.body.data);
+      if (mime.includes("text/plain")) plain += `${decoded}\n`;
+      else if (mime.includes("text/html")) html += `${decoded}\n`;
+    }
+    for (const child of node.parts ?? []) {
+      walk(
+        child as {
+          mimeType?: string | null;
+          body?: { data?: string | null } | null;
+          parts?: unknown[] | null;
+        },
+      );
+    }
+  };
+  walk(payload);
+  if (plain.trim()) return plain.trim();
+  if (html.trim()) return htmlToText(html);
+  if (payload.body?.data) {
+    const raw = decodeBody(payload.body.data);
+    return (payload.mimeType ?? "").includes("html") ? htmlToText(raw) : raw.trim();
   }
-  if (!text && payload.body?.data) {
-    return decodeBody(payload.body.data);
-  }
-  return text.trim();
+  return "";
 }
 
 export async function fetchMessageDetails(
@@ -249,11 +268,14 @@ export async function fetchMessageDetails(
   messageId: string,
 ): Promise<GmailMessageDetails> {
   const gmail = await getAuthedGmail(connection);
-  const msg = await gmail.users.messages.get({
-    userId: "me",
-    id: messageId,
-    format: "full",
-  });
+  const msg = await gmail.users.messages.get(
+    {
+      userId: "me",
+      id: messageId,
+      format: "full",
+    },
+    { timeout: GMAIL_REQUEST_TIMEOUT_MS },
+  );
   const headers = msg.data.payload?.headers ?? [];
   const from =
     headers.find((h) => h.name?.toLowerCase() === "from")?.value ?? "";

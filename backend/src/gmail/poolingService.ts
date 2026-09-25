@@ -26,6 +26,7 @@ import {
 } from "../constants/index.js";
 import {
   currentMonth,
+  fromAddressMatchesSenders,
   gmailFromClause,
   isWithinPoolingWindow,
   sendersForBank,
@@ -104,6 +105,7 @@ async function processAlertMessage(input: {
   accountId: string;
   connection: GmailConnectionRow;
   messageId: string;
+  senders: string[];
 }): Promise<MailProcessResult> {
   const store = await getStore();
   const existingMail = await store.findMailMessageByGmailId(
@@ -121,13 +123,19 @@ async function processAlertMessage(input: {
   if (isStatementLikeEmail(details.subject, details.snippet)) {
     return "not_alert";
   }
+  if (!fromAddressMatchesSenders(details.fromAddress, input.senders)) {
+    return "skipped";
+  }
 
-  // Parse in-memory only — never persist body/snippet.
-  const parsed = parseBankAlertEmail(details.subject, details.bodyText);
+  // Parse in-memory only — never persist body/snippet. Snippet covers HTML-only mail.
+  const parsed = parseBankAlertEmail(
+    details.subject,
+    [details.bodyText, details.snippet].filter(Boolean).join("\n"),
+  );
   const fingerprint = sha256Hex(`mail:${input.messageId}`);
-  const txDate =
-    (parsed.date && isWithinPoolingWindow(parsed.date) ? parsed.date : null) ??
-    toIstCalendarDate(details.receivedAt);
+  // Gmail received time in IST is the source of truth. Body dates like
+  // "on 30-09-25" are often footers and would drop a real September mail.
+  const txDate = toIstCalendarDate(details.receivedAt);
 
   if (!txDate || !isWithinPoolingWindow(txDate)) {
     return "skipped";
@@ -301,6 +309,7 @@ async function scanQuery(input: {
             accountId: input.accountId,
             connection: input.connection,
             messageId,
+            senders: input.senders,
           });
           if (result === "imported") imported += 1;
           else skipped += 1;
@@ -355,9 +364,9 @@ async function startRun(input: {
   });
 }
 
-const STALE_RUN_MS = 10 * 60 * 1000;
+const STALE_RUN_MS = 2 * 60 * 1000;
 
-async function failStaleRunningRuns(
+export async function failStaleRunningRuns(
   userId: string,
   maxAgeMs = STALE_RUN_MS,
 ): Promise<void> {
@@ -366,6 +375,7 @@ async function failStaleRunningRuns(
   const cutoff = Date.now() - maxAgeMs;
   for (const run of recent) {
     if (run.status !== PoolingRunStatus.Running) continue;
+    if (activeScans.get(userId) === run.id) continue;
     const started = runLastActivityMs(run);
     if (!Number.isFinite(started) || started > cutoff) continue;
     await store.updatePoolingRun(run.id, {
@@ -373,7 +383,7 @@ async function failStaleRunningRuns(
       errorMessage:
         maxAgeMs === 0
           ? "Replaced by a new scan"
-          : "Run timed out after 10 minutes",
+          : "Scan stalled — Gmail stopped responding. Try Scan again.",
       finishedAt: new Date().toISOString(),
     });
   }
@@ -471,8 +481,7 @@ export async function runPoolingSync(input: {
     const batch = Math.floor(counts.imported / SCAN_SUCCESS_BATCH);
     const hitBatch =
       counts.imported > 0 && counts.imported % SCAN_SUCCESS_BATCH === 0;
-    const hitHeartbeat =
-      counts.scanned > 0 && counts.scanned % POOLING_PROGRESS_EVERY === 0;
+    const hitHeartbeat = counts.scanned > 0 && counts.scanned % 10 === 0;
     const duePersist = Date.now() - lastPersistMs >= 60_000;
     if (hitBatch || hitHeartbeat || duePersist) {
       const store = await getStore();
@@ -665,6 +674,7 @@ export async function runPoolingPoll(
   let scanned = 0;
   let imported = 0;
   let skipped = 0;
+  const senders = sendersForBank(account.bank, account.statementSenderEmails);
 
   try {
     const ready = await ensureHistoryId(connection);
@@ -675,6 +685,7 @@ export async function runPoolingPoll(
         accountId: account.id,
         connection: ready,
         messageId,
+        senders,
       }).catch(() => "not_alert" as const);
 
       if (

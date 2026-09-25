@@ -19,6 +19,7 @@ import {
 } from "./client.js";
 import { poolingScanWindow } from "../helpers/index.js";
 import {
+  failStaleRunningRuns,
   runPoolingPoll,
   runPoolingSync,
   type PoolingSyncResult,
@@ -92,6 +93,7 @@ export async function resolveAccountForPooling(
 
 /** What the app needs to connect Gmail and know whether a scan is still running. */
 export async function getGmailStatusForUser(userId: string) {
+  await failStaleRunningRuns(userId);
   const store = await getStore();
   const connection = await store.getGmailConnection(userId);
   const accounts = await store.listAccounts(userId);
@@ -108,6 +110,8 @@ export async function getGmailStatusForUser(userId: string) {
       ? {
           status: latestRun.status,
           imported: latestRun.imported,
+          scanned: latestRun.scanned,
+          skipped: latestRun.skipped,
           errorMessage: latestRun.errorMessage,
         }
       : null,

@@ -6,6 +6,7 @@ import {
   catalogSendersForBank,
 } from "../../src/constants/index.js";
 import {
+  fromAddressMatchesSenders,
   gmailFromClause,
   normalizeGmailSender,
   normalizeGmailSenders,
@@ -40,11 +41,33 @@ describe("gmail sender normalization", () => {
     assert.equal(gmailFromClause(["hdfcbank.bank.in"]), "from:hdfcbank.bank.in");
     assert.equal(
       gmailFromClause(["hdfcbank.net", "hdfcbank.com"]),
-      "from:(hdfcbank.net OR hdfcbank.com)",
+      "(from:hdfcbank.net OR from:hdfcbank.com)",
     );
     assert.throws(
       () => gmailFromClause(["not-a-sender"]),
       /No valid bank sender emails configured/,
+    );
+    assert.equal(
+      fromAddressMatchesSenders(
+        "HDFC Bank InstaAlerts <alerts@hdfcbank.bank.in>",
+        ["hdfcbank.bank.in"],
+      ),
+      true,
+    );
+    assert.equal(
+      fromAddressMatchesSenders("Groww Digest <noreply@digest.groww.in>", [
+        "hdfcbank.bank.in",
+      ]),
+      false,
+    );
+    assert.equal(
+      fromAddressMatchesSenders("alerts@HDFCBANK.NET", ["hdfcbank.net"]),
+      true,
+    );
+    assert.equal(fromAddressMatchesSenders("alerts@hdfcbank.bank.in", []), false);
+    assert.equal(
+      fromAddressMatchesSenders("alerts@hdfcbank.bank.in", ["not-a-sender"]),
+      false,
     );
   });
 });
@@ -98,7 +121,7 @@ describe("gmail search queries", () => {
     });
     assert.match(
       alert,
-      /^from:\(hdfcbank\.bank\.in OR hdfcbank\.net OR hdfcbank\.com\) /,
+      /^\(from:hdfcbank\.bank\.in OR from:hdfcbank\.net OR from:hdfcbank\.com\) /,
     );
     assert.match(alert, / after:2026\/07\/26$/);
     assert.equal(alert.includes("after:178"), false);
@@ -116,6 +139,6 @@ describe("gmail search queries", () => {
       before: "2026-09-27",
     });
     assert.match(alertWithBefore, / before:2026\/09\/27$/);
-    assert.match(alertWithBefore, /\(debited OR credited /);
+    assert.match(alertWithBefore, /subject:\(UPI OR "Account update"/);
   });
 });

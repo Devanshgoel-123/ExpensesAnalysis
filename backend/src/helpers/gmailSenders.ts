@@ -51,7 +51,19 @@ export function gmailFromClause(senders: readonly string[]): string {
       "No valid bank sender emails configured. Use a domain like hdfcbank.net.",
     );
   }
-  return cleaned.length === 1
-    ? `from:${cleaned[0]}`
-    : `from:(${cleaned.join(" OR ")})`;
+  // Repeat `from:` on every token. `from:(a OR b)` is parsed by Gmail as
+  // `from:a OR b`, which matches the whole mailbox.
+  const clause = cleaned.map((sender) => `from:${sender}`).join(" OR ");
+  return cleaned.length === 1 ? clause : `(${clause})`;
+}
+
+/** True when a From header belongs to one of the bank senders. */
+export function fromAddressMatchesSenders(
+  fromAddress: string,
+  senders: readonly string[],
+): boolean {
+  const lower = fromAddress.toLowerCase();
+  return normalizeGmailSenders(senders).some((sender) =>
+    lower.includes(sender.toLowerCase()),
+  );
 }

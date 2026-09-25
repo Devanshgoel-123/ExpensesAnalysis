@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  BACKFILL_DEFAULT_MAX_MESSAGES,
   formatIsoDateLabel,
   formatScanWindowLabel,
   monthsInPoolingWindow,
@@ -31,6 +32,10 @@ describe("pooling scan window", () => {
       "2025-12",
       "2026-01",
     ]);
+  });
+
+  it("asks Gmail for the same backfill cap the API uses", () => {
+    expect(BACKFILL_DEFAULT_MAX_MESSAGES).toBe(2000);
   });
 
   it("formats the window for the bank panel", () => {

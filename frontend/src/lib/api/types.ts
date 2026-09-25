@@ -37,6 +37,8 @@ export type GmailStatus = {
   latestRun?: {
     status: PoolingRunStatus | string;
     imported: number;
+    scanned?: number;
+    skipped?: number;
     errorMessage: string | null;
   } | null;
 };

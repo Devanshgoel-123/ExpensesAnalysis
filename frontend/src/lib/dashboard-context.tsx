@@ -19,7 +19,6 @@ import { pathForView } from "@/lib/dashboardViews";
 import {
   monthsInPoolingWindow,
   poolingScanWindow,
-  SCAN_SUCCESS_BATCH,
   type ScanWindow,
 } from "@/constants/pooling";
 import type { ImportStatus } from "@/lib/api/types";
@@ -73,6 +72,13 @@ interface DashboardContextValue {
   /** True while a bank-mail scan is still running. */
   scanning: boolean;
   scanError: string | null;
+  /** Live scan counters while a run is in flight. */
+  mailScan: {
+    phase: "running" | "done" | "failed";
+    imported: number;
+    scanned: number;
+    skipped: number;
+  } | null;
   /** Today back to the 1st of the month two months earlier. */
   scanWindow: ScanWindow;
   /** Poll until the current pooling run finishes. Safe to call more than once. */
@@ -95,6 +101,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [mailScan, setMailScan] = useState<{
+    phase: "running" | "done" | "failed";
+    imported: number;
+    scanned: number;
+    skipped: number;
+  } | null>(null);
   const autoMonthDone = useRef(false);
   const scanWatching = useRef(false);
   const scanTimer = useRef<number | null>(null);
@@ -117,7 +129,17 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     scanWatching.current = true;
     setScanning(true);
     setScanError(null);
-    let lastBatch = 0;
+    let lastImported = -1;
+
+    const stop = (refreshAfter: boolean) => {
+      scanWatching.current = false;
+      setScanning(false);
+      if (scanTimer.current) {
+        window.clearTimeout(scanTimer.current);
+        scanTimer.current = null;
+      }
+      if (refreshAfter) refresh();
+    };
 
     const tick = async () => {
       if (!scanWatching.current) return;
@@ -126,26 +148,40 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         if (!scanWatching.current) return;
         const run = status.latestRun;
         if (!run || run.status !== "running") {
-          scanWatching.current = false;
-          setScanning(false);
+          setMailScan(
+            run
+              ? {
+                  phase: run.status === "failed" ? "failed" : "done",
+                  imported: run.imported ?? 0,
+                  scanned: run.scanned ?? 0,
+                  skipped: run.skipped ?? 0,
+                }
+              : null,
+          );
           if (run?.status === "failed") {
             setScanError(run.errorMessage ?? "Could not finish the bank-mail scan.");
           }
-          refresh();
+          stop(true);
           return;
         }
 
-        const batch = Math.floor(run.imported / SCAN_SUCCESS_BATCH);
-        if (batch > lastBatch) {
-          lastBatch = batch;
+        setMailScan({
+          phase: "running",
+          imported: run.imported ?? 0,
+          scanned: run.scanned ?? 0,
+          skipped: run.skipped ?? 0,
+        });
+        if (run.imported !== lastImported && lastImported >= 0) {
           refresh();
         }
+        lastImported = run.imported ?? 0;
         scanTimer.current = window.setTimeout(() => {
           void tick();
-        }, 3000);
+        }, 5000);
       } catch {
-        scanWatching.current = false;
-        setScanning(false);
+        scanTimer.current = window.setTimeout(() => {
+          void tick();
+        }, 8000);
       }
     };
 
@@ -165,7 +201,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     void api
       .gmailStatus()
       .then((status) => {
-        if (!cancelled && status.latestRun?.status === "running") {
+        if (cancelled) return;
+        if (status.latestRun?.status === "running") {
           watchActiveScan();
         }
       })
@@ -201,30 +238,14 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     };
   }, [api, refreshKey]);
 
-  // Refresh analytics when returning to the tab if bank-mail pooling is active.
   useEffect(() => {
-    if (!api) return;
-    const client = api;
-    let poolingOn = false;
-    let cancelled = false;
-    void client
-      .gmailStatus()
-      .then((s) => {
-        if (!cancelled) poolingOn = Boolean(s.poolingEnabled);
-      })
-      .catch(() => undefined);
-
     function onFocus() {
-      if (!poolingOn) return;
-      void client.fetchImportStatus().then(setImportStatus).catch(() => undefined);
+      if (scanWatching.current) return;
       setRefreshKey((k) => k + 1);
     }
     window.addEventListener("focus", onFocus);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [api]);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -334,6 +355,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       goToOverview,
       scanning,
       scanError,
+      mailScan,
       scanWindow: importStatus?.scanWindow ?? poolingScanWindow(),
       watchActiveScan,
     }),
@@ -356,6 +378,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       refreshStatus,
       scanning,
       scanError,
+      mailScan,
       watchActiveScan,
     ],
   );

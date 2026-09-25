@@ -56,6 +56,7 @@ export async function requestJson<T>(
   const { token, headers, ...init } = options;
   try {
     const res = await fetch(`${API_BASE}${path}`, {
+      cache: "no-store",
       ...init,
       headers: {
         ...headers,
