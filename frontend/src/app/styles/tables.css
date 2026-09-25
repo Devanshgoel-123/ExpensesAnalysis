@@ -101,9 +101,30 @@
 }
 
 .table-scroll {
-  overflow: auto;
-  max-height: 480px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: none;
+  min-height: 0;
   isolation: isolate;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 40%, transparent) transparent;
+}
+
+.txn-panel table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.txn-panel col.col-date { width: 11%; }
+.txn-panel col.col-merchant { width: 34%; }
+.txn-panel col.col-assign { width: 32%; }
+.txn-panel col.col-upi { width: 12%; }
+.txn-panel col.col-amount { width: 11%; }
+
+.txn-panel td.upi-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 table {
@@ -153,9 +174,22 @@ th.num {
 }
 
 .provider-cell {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.55rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.provider-cell > div {
+  min-width: 0;
+}
+
+.provider-cell .desc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 .provider-name {
@@ -176,23 +210,28 @@ th.num {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 22%;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 8px;
   overflow: hidden;
-  background: transparent;
-  border: 0;
+  background: #fff;
+  border: 1px solid var(--border);
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .brand-mark img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  padding: 0;
-  background: transparent;
+  object-fit: contain;
+  object-position: center;
+  padding: 2px;
+  box-sizing: border-box;
 }
 
 .brand-mark.fallback {
-  font-size: 0.65rem;
+  background: var(--bg-muted);
+  font-size: 0.72rem;
   font-weight: 600;
   color: var(--primary);
 }

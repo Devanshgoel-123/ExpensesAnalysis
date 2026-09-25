@@ -39,7 +39,7 @@ export function TransactionsPage() {
   if (!data) return null;
 
   return (
-    <LedgerlineFadeContent>
+    <LedgerlineFadeContent className="txn-fill">
       <TransactionTable
         items={data.transactions}
         categories={data.categories ?? []}

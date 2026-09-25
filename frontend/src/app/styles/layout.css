@@ -20,8 +20,33 @@
 .app-shell {
   position: relative;
   min-height: 100vh;
+  max-width: 100%;
+  overflow-x: clip;
   z-index: 1;
   background: transparent;
+}
+
+.app-shell:has(.txn-fill) {
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.app-shell:has(.txn-fill) .app-main {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-shell:has(.txn-fill) .app-content,
+.app-shell:has(.txn-fill) .txn-fill,
+.app-shell:has(.txn-fill) .txn-panel {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 [data-theme="light"] .app-shell {
@@ -59,6 +84,9 @@
   position: relative;
   z-index: 2;
   min-height: 100vh;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
   padding: 1rem 1rem 5.5rem;
 }
 

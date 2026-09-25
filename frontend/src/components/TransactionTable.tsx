@@ -6,13 +6,10 @@ import type { CategorySummary, Transaction } from "@/types";
 import type { Provider } from "@/lib/api/types";
 import { formatInrExact } from "@/helpers/currency";
 import { formatShortDate } from "@/helpers/dates";
-import {
-  dayCategoryMix,
-  groupTransactionsByDay,
-} from "@/helpers/apps";
+import { groupTransactionsByDay } from "@/helpers/apps";
 import { BrandMark } from "@/components/BrandMark";
-import { DayCategoryBar } from "@/components/DayCategoryBar";
 import { SpotlightCard } from "@/components/SpotlightCard";
+import { TxnAssignPicker } from "@/components/TxnAssignPicker";
 
 interface TransactionTableProps {
   items: Transaction[];
@@ -54,15 +51,6 @@ export function TransactionTable({
     }
     return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
   }, [categories, items]);
-
-  const vendorOptions = useMemo(
-    () =>
-      [...providers]
-        .filter((p) => p.categorySlug)
-        .filter((p) => p.canonicalName.toLowerCase() !== "ayodhya")
-        .sort((a, b) => a.canonicalName.localeCompare(b.canonicalName)),
-    [providers],
-  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -123,44 +111,14 @@ export function TransactionTable({
   }
 
   function assignControls(txn: Transaction) {
-    const disabled = !txn.id || !onAssign || assigningId === txn.id;
     return (
-      <div className="txn-assign">
-        <select
-          aria-label="Category"
-          disabled={disabled}
-          value={txn.category ?? ""}
-          onChange={(e) => {
-            const value = e.target.value;
-            if (!value || !txn.id) return;
-            onAssign?.(txn, { categorySlug: value });
-          }}
-        >
-          <option value="">Category</option>
-          {categoryOptions.map(([slug, label]) => (
-            <option key={slug} value={slug}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label="App"
-          disabled={disabled}
-          value={txn.providerId ?? ""}
-          onChange={(e) => {
-            const value = e.target.value;
-            if (!value || !txn.id) return;
-            onAssign?.(txn, { providerId: value });
-          }}
-        >
-          <option value="">App</option>
-          {vendorOptions.map((provider) => (
-            <option key={provider.id} value={provider.id}>
-              {provider.canonicalName}
-            </option>
-          ))}
-        </select>
-      </div>
+      <TxnAssignPicker
+        txn={txn}
+        categories={categoryOptions}
+        providers={providers}
+        disabled={!txn.id || !onAssign || assigningId === txn.id}
+        onAssign={onAssign}
+      />
     );
   }
 
@@ -201,7 +159,7 @@ export function TransactionTable({
             placeholder="Search merchant, UPI, narration…"
           />
         </label>
-        <label className="field" style={{ minWidth: 160 }}>
+        <label className="field field-compact" style={{ minWidth: 160 }}>
           <span className="sr-only">Filter by category</span>
           <select
             value={categoryFilter}
@@ -219,6 +177,13 @@ export function TransactionTable({
 
       <div className="table-scroll">
         <table>
+          <colgroup>
+            <col className="col-date" />
+            <col className="col-merchant" />
+            <col className="col-assign" />
+            <col className="col-upi" />
+            <col className="col-amount" />
+          </colgroup>
           <thead>
             <tr>
               <th>Date</th>
@@ -230,17 +195,15 @@ export function TransactionTable({
           </thead>
           <tbody>
             {days.map((day) => {
-              const mix = dayCategoryMix(day.items, categories, day.date);
               return [
                 <tr key={`day-${day.date}`} className="txn-day-head">
                   <td colSpan={5}>
-                    <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+                    <div className="txn-day-label">
                       <strong>{formatShortDate(day.date)}</strong>
                       <span className="meta">
                         {day.items.length} txn{day.items.length === 1 ? "" : "s"}
                       </span>
                     </div>
-                    <DayCategoryBar mix={mix} />
                   </td>
                 </tr>,
                 ...day.items.map((txn, i) => {
@@ -280,7 +243,7 @@ export function TransactionTable({
                         </div>
                       </td>
                       <td>{assignControls(txn)}</td>
-                      <td className="mono">{txn.upiId ?? "—"}</td>
+                      <td className="mono upi-cell">{txn.upiId ?? "—"}</td>
                       <td className={`num mono ${txn.type}`}>
                         {txn.type === "debit" ? "−" : "+"}
                         {formatInrExact(txn.amount)}
@@ -296,12 +259,13 @@ export function TransactionTable({
 
       <div className="txn-cards" aria-label="Transaction list">
         {days.map((day) => {
-          const mix = dayCategoryMix(day.items, categories, day.date);
           return (
             <div key={`cards-${day.date}`}>
-              <div className="mb-2">
+              <div className="txn-day-label mb-2">
                 <strong>{formatShortDate(day.date)}</strong>
-                <DayCategoryBar mix={mix} />
+                <span className="meta">
+                  {day.items.length} txn{day.items.length === 1 ? "" : "s"}
+                </span>
               </div>
               {day.items.map((txn, i) => {
                 const merchant = merchantOf(txn);

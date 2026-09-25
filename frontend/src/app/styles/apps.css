@@ -36,66 +36,179 @@
   }
 }
 
-.day-mix {
-  display: grid;
-  gap: 0.55rem;
-}
-
-.day-mix.compact .day-mix-legend {
-  display: none;
-}
-
-.day-mix-bar {
-  display: flex;
-  height: 0.7rem;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--bg-muted);
-}
-
-.day-mix-seg {
-  display: block;
-  min-width: 0;
-  height: 100%;
-}
-
-.day-mix-legend {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem 1rem;
-}
-
-.day-mix-legend li {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.78rem;
-  color: var(--muted);
-}
-
-.day-mix-dot {
-  width: 0.55rem;
-  height: 0.55rem;
-  border-radius: 999px;
-}
-
 .txn-day-head td {
-  padding-top: 1rem;
+  width: auto;
+  padding-top: 0.85rem;
+  padding-bottom: 0.35rem;
   border-bottom: 0;
   background: transparent;
 }
 
-.txn-assign {
-  display: grid;
-  gap: 0.35rem;
-  min-width: 8.5rem;
+.txn-day-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
-.txn-assign select {
+.txn-assign {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.txn-assign-btn {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 1.9rem;
+  padding: 0 0.45rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--foreground);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.txn-assign-btn:hover,
+.txn-assign-btn.open {
+  border-color: var(--border-strong);
+}
+
+.txn-assign-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.txn-assign-btn > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.txn-assign-btn .brand-mark {
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 4px;
+}
+
+.txn-assign-caret {
+  width: 0.38rem;
+  height: 0.38rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translateY(-1px);
+  opacity: 0.55;
+  flex-shrink: 0;
+}
+
+.txn-picker {
+  position: fixed;
+  z-index: 70;
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.8fr) minmax(0, 1.2fr);
+  max-height: min(340px, calc(100dvh - 16px));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-md);
+}
+
+.txn-picker-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 0.55rem;
+}
+
+.txn-picker-col + .txn-picker-col {
+  border-left: 1px solid var(--border);
+}
+
+.txn-picker-label {
+  margin: 0 0.35rem 0.35rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.txn-picker-search {
+  width: 100%;
+  margin-bottom: 0.4rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--foreground);
+  font: inherit;
   font-size: 0.78rem;
+}
+
+.txn-picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.txn-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0.4rem 0.45rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.txn-picker-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.txn-picker-item .brand-mark {
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 5px;
+}
+
+.txn-picker-item:hover {
+  background: var(--bg-muted);
+}
+
+.txn-picker-item.active {
+  background: var(--primary-soft);
+  color: var(--foreground);
+}
+
+.txn-picker-split,
+.txn-picker-empty {
+  margin: 0.35rem 0.45rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .pill.lifestyle.cat-food { color: var(--cat-food); }

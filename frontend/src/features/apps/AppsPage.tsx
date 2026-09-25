@@ -6,15 +6,10 @@ import { useDashboard } from "@/lib/dashboard-context";
 import { useApi } from "@/lib/useApi";
 import { pathForView } from "@/lib/dashboardViews";
 import type { Provider } from "@/lib/api/types";
-import {
-  dayCategoryMix,
-  groupAppsByCategory,
-  logoForAppName,
-} from "@/helpers/apps";
+import { groupAppsByCategory, logoForAppName } from "@/helpers/apps";
 import { formatInr } from "@/helpers/currency";
 import { formatMonthTitle } from "@/helpers/finance";
 import { BrandMark } from "@/components/BrandMark";
-import { DayCategoryBar } from "@/components/DayCategoryBar";
 import { LedgerlineFadeContent } from "@/components/animations/LedgerlineFadeContent";
 import { Panel, PanelHead } from "@/components/ui/Panel";
 import { LoadingState } from "@/components/ui/LoadingState";
@@ -51,12 +46,6 @@ export function AppsPage() {
     [providers, data],
   );
 
-  const latestDay = data?.transactions[0]?.date ?? null;
-  const todayMix = useMemo(() => {
-    if (!data || !latestDay) return null;
-    return dayCategoryMix(data.transactions, data.categories ?? [], latestDay);
-  }, [data, latestDay]);
-
   if (fetching && !data) {
     return <LoadingState text="Loading apps" variant="skeleton" />;
   }
@@ -81,18 +70,6 @@ export function AppsPage() {
           </p>
         </header>
       </LedgerlineFadeContent>
-
-      {todayMix && todayMix.total > 0 ? (
-        <LedgerlineFadeContent delay={40}>
-          <Panel>
-            <PanelHead
-              title={`Mix on ${latestDay}`}
-              subtitle="Each color is that category’s share of the day’s debit total"
-            />
-            <DayCategoryBar mix={todayMix} />
-          </Panel>
-        </LedgerlineFadeContent>
-      ) : null}
 
       {groups.map((group, index) => (
         <LedgerlineFadeContent key={group.slug} delay={80 + index * 40}>

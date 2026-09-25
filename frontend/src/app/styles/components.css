@@ -104,6 +104,12 @@
   font-weight: 500;
 }
 
+.field.field-compact input,
+.field.field-compact select {
+  padding: 0.45rem 0.7rem;
+  font-size: 0.8rem;
+}
+
 .field input,
 .field select,
 .field textarea {
