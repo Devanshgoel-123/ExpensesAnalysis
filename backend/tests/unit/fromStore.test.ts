@@ -26,7 +26,7 @@ const baseRow = (patch: Partial<TransactionRow>): TransactionRow => ({
 });
 
 describe("buildAnalyticsFromRows spend", () => {
-  it("counts debits as spend and keeps credits separate", () => {
+  it("deducts credits from spend, the day, and the net", () => {
     const rows = [
       baseRow({ id: "1", date: "2026-09-01", amount: 1000, fingerprint: "a" }),
       baseRow({
@@ -47,11 +47,14 @@ describe("buildAnalyticsFromRows spend", () => {
       }),
     ];
     const result = buildAnalyticsFromRows(rows, [], [], []);
-    assert.equal(result.summary.totalSpent, 1000);
+    assert.equal(result.summary.totalSpent, 350);
     assert.equal(result.summary.totalReceived, 650);
     assert.equal(result.summary.net, -350);
-    assert.equal(result.summary.avgDailySpend, 1000);
-    assert.deepEqual(result.daily, [{ date: "2026-09-01", amount: 1000 }]);
+    assert.equal(result.summary.avgDailySpend, 175);
+    assert.deepEqual(result.daily, [
+      { date: "2026-09-01", amount: 750 },
+      { date: "2026-09-02", amount: -400 },
+    ]);
   });
 
   it("does not treat the account bank as the merchant", () => {

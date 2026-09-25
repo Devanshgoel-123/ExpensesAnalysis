@@ -70,12 +70,12 @@ export function groupAppsByCategory(
 ): AppCategoryGroup[] {
   const spend = new Map<string, { total: number; count: number }>();
   for (const txn of transactions) {
-    if (txn.type !== "debit") continue;
+    if (txn.type !== "debit" && txn.type !== "credit") continue;
     const key = txn.providerId ?? txn.merchant?.toLowerCase() ?? "";
     if (!key) continue;
     const current = spend.get(key) ?? { total: 0, count: 0 };
-    current.total += txn.amount;
-    current.count += 1;
+    current.total += txn.type === "credit" ? -txn.amount : txn.amount;
+    if (txn.type === "debit") current.count += 1;
     spend.set(key, current);
   }
 
@@ -116,18 +116,20 @@ export function dayCategoryMix(
   categories: CategorySummary[],
   date: string,
 ): DayCategoryMix {
-  const debits = transactions.filter(
-    (txn) => txn.type === "debit" && txn.date === date,
+  const dayRows = transactions.filter(
+    (txn) =>
+      txn.date === date && (txn.type === "debit" || txn.type === "credit"),
   );
   const totals = new Map<string, number>();
-  let total = 0;
-  for (const txn of debits) {
+  for (const txn of dayRows) {
     const slug = txn.category ?? CategorySlug.Other;
-    totals.set(slug, (totals.get(slug) ?? 0) + txn.amount);
-    total += txn.amount;
+    const signed = txn.type === "credit" ? -txn.amount : txn.amount;
+    totals.set(slug, (totals.get(slug) ?? 0) + signed);
   }
+  const positive = [...totals.entries()].filter(([, amount]) => amount > 0);
+  const total = positive.reduce((sum, [, amount]) => sum + amount, 0);
 
-  const segments = [...totals.entries()]
+  const segments = positive
     .sort((a, b) => b[1] - a[1])
     .map(([slug, amount]) => {
       const meta = categoryMeta(slug, categories);

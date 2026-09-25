@@ -412,8 +412,10 @@ export function buildAnalytics(
   const credits = transactions.filter((t) => t.type === "credit");
 
   const dailyMap = new Map<string, number>();
-  for (const t of debits) {
-    dailyMap.set(t.date, (dailyMap.get(t.date) ?? 0) + t.amount);
+  for (const t of transactions) {
+    if (t.type !== "debit" && t.type !== "credit") continue;
+    const signed = t.type === "credit" ? -t.amount : t.amount;
+    dailyMap.set(t.date, (dailyMap.get(t.date) ?? 0) + signed);
   }
 
   const daily: DailySpend[] = [...dailyMap.entries()]
@@ -422,31 +424,37 @@ export function buildAnalytics(
       date,
       amount: Math.round(amount * 100) / 100,
     }))
-    .filter((day) => day.amount > 0);
+    .filter((day) => day.amount !== 0);
 
   const upiMap = new Map<string, UpiRanking>();
-  for (const t of debits) {
+  for (const t of transactions) {
     if (!t.upiId) continue;
+    if (t.type !== "debit" && t.type !== "credit") continue;
+    const signed = t.type === "credit" ? -t.amount : t.amount;
     const existing = upiMap.get(t.upiId);
     if (!existing) {
       upiMap.set(t.upiId, {
         upiId: t.upiId,
-        total: t.amount,
-        count: 1,
+        total: signed,
+        count: t.type === "debit" ? 1 : 0,
         lastDate: t.date,
       });
     } else {
-      existing.total = Math.round((existing.total + t.amount) * 100) / 100;
-      existing.count += 1;
+      existing.total = Math.round((existing.total + signed) * 100) / 100;
+      if (t.type === "debit") existing.count += 1;
       if (t.date > existing.lastDate) existing.lastDate = t.date;
     }
   }
 
-  const upiRanking = [...upiMap.values()].sort((a, b) => b.total - a.total);
+  const upiRanking = [...upiMap.values()]
+    .filter((row) => row.total > 0)
+    .sort((a, b) => b.total - a.total);
 
   const merchantMap = new Map<string, MerchantSpend>();
-  for (const t of debits) {
+  for (const t of transactions) {
     if (!t.merchant) continue;
+    if (t.type !== "debit" && t.type !== "credit") continue;
+    const signed = t.type === "credit" ? -t.amount : t.amount;
     let bucket = merchantMap.get(t.merchant);
     if (!bucket) {
       bucket = {
@@ -457,17 +465,19 @@ export function buildAnalytics(
       };
       merchantMap.set(t.merchant, bucket);
     }
-    bucket.total = Math.round((bucket.total + t.amount) * 100) / 100;
-    bucket.count += 1;
+    bucket.total = Math.round((bucket.total + signed) * 100) / 100;
+    if (t.type === "debit") bucket.count += 1;
     if (!bucket.lastDate || t.date > bucket.lastDate) bucket.lastDate = t.date;
   }
-  const merchantSpend = [...merchantMap.values()].sort(
-    (a, b) => b.total - a.total,
-  );
+  const merchantSpend = [...merchantMap.values()]
+    .filter((row) => row.total > 0)
+    .sort((a, b) => b.total - a.total);
 
   const payeeMap = new Map<string, PayeeSpend>();
   for (const t of transactions) {
     if (!t.payee) continue;
+    if (t.type !== "debit" && t.type !== "credit") continue;
+    const signed = t.type === "credit" ? -t.amount : t.amount;
     let bucket = payeeMap.get(t.payee);
     if (!bucket) {
       bucket = {
@@ -479,8 +489,8 @@ export function buildAnalytics(
       };
       payeeMap.set(t.payee, bucket);
     }
-    bucket.total = Math.round((bucket.total + t.amount) * 100) / 100;
-    bucket.count += 1;
+    bucket.total = Math.round((bucket.total + signed) * 100) / 100;
+    if (t.type === "debit") bucket.count += 1;
     if (!bucket.days.includes(t.date)) bucket.days.push(t.date);
     if (!bucket.lastDate || t.date > bucket.lastDate) bucket.lastDate = t.date;
   }
@@ -515,10 +525,11 @@ export function buildAnalytics(
     dayCounts: bandDayCounts,
   };
 
-  const totalSpent =
+  const grossSpent =
     Math.round(debits.reduce((sum, t) => sum + t.amount, 0) * 100) / 100;
   const totalReceived =
     Math.round(credits.reduce((sum, t) => sum + t.amount, 0) * 100) / 100;
+  const totalSpent = Math.round((grossSpent - totalReceived) * 100) / 100;
   const days = daily.length || 1;
 
   const dailyInsights = buildDailyInsights(daily, null);
@@ -527,7 +538,7 @@ export function buildAnalytics(
     summary: {
       totalSpent,
       totalReceived,
-      net: Math.round((totalReceived - totalSpent) * 100) / 100,
+      net: Math.round((totalReceived - grossSpent) * 100) / 100,
       transactionCount: debits.length,
       upiPayees: upiRanking.length,
       avgDailySpend: Math.round((totalSpent / days) * 100) / 100,

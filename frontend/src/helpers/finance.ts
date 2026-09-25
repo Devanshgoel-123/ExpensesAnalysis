@@ -98,10 +98,11 @@ export function aggregateMonthlySpend(
 ): MonthlySpendRow[] {
   const totals = new Map<string, number>();
   for (const txn of transactions) {
-    if (txn.type !== TxType.Debit) continue;
+    if (txn.type !== TxType.Debit && txn.type !== TxType.Credit) continue;
     const key = monthKey(txn.date);
     if (!ISO_MONTH_RE.test(key)) continue;
-    totals.set(key, (totals.get(key) ?? 0) + txn.amount);
+    const signed = txn.type === TxType.Credit ? -txn.amount : txn.amount;
+    totals.set(key, (totals.get(key) ?? 0) + signed);
   }
   return [...totals.entries()]
     .sort(([a], [b]) => a.localeCompare(b))

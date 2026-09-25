@@ -18,6 +18,10 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+function signedAmount(row: TransactionRow): number {
+  return row.type === "credit" ? -row.amount : row.amount;
+}
+
 interface SpendIdentity {
   merchant: string;
   upiId: string | null;
@@ -154,8 +158,9 @@ export function buildAnalyticsFromRows(
   const credits = rows.filter((t) => t.type === "credit");
 
   const dailyMap = new Map<string, number>();
-  for (const t of debits) {
-    dailyMap.set(t.date, (dailyMap.get(t.date) ?? 0) + t.amount);
+  for (const t of rows) {
+    if (t.type !== "debit" && t.type !== "credit") continue;
+    dailyMap.set(t.date, (dailyMap.get(t.date) ?? 0) + signedAmount(t));
   }
   const daily: DailySpend[] = [...dailyMap.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
@@ -163,27 +168,30 @@ export function buildAnalyticsFromRows(
       date,
       amount: round2(amount),
     }))
-    .filter((day) => day.amount > 0);
+    .filter((day) => day.amount !== 0);
 
   const upiMap = new Map<string, UpiRanking>();
-  for (const t of debits) {
+  for (const t of rows) {
+    if (t.type !== "debit" && t.type !== "credit") continue;
     const identity = resolveSpendIdentity(t, providers);
     if (!identity.upiId) continue;
     const existing = upiMap.get(identity.upiId);
     if (!existing) {
       upiMap.set(identity.upiId, {
         upiId: identity.upiId,
-        total: t.amount,
-        count: 1,
+        total: signedAmount(t),
+        count: t.type === "debit" ? 1 : 0,
         lastDate: t.date,
       });
     } else {
-      existing.total = round2(existing.total + t.amount);
-      existing.count += 1;
+      existing.total = round2(existing.total + signedAmount(t));
+      if (t.type === "debit") existing.count += 1;
       if (t.date > existing.lastDate) existing.lastDate = t.date;
     }
   }
-  const upiRanking = [...upiMap.values()].sort((a, b) => b.total - a.total);
+  const upiRanking = [...upiMap.values()]
+    .filter((row) => row.total > 0)
+    .sort((a, b) => b.total - a.total);
 
   const merchantMap = new Map<
     string,
@@ -202,7 +210,8 @@ export function buildAnalyticsFromRows(
       providerId: provider.id,
     });
   }
-  for (const t of debits) {
+  for (const t of rows) {
+    if (t.type !== "debit" && t.type !== "credit") continue;
     const identity = resolveSpendIdentity(t, providers);
     let bucket = merchantMap.get(identity.merchant);
     if (!bucket) {
@@ -217,17 +226,17 @@ export function buildAnalyticsFromRows(
       };
       merchantMap.set(identity.merchant, bucket);
     }
-    bucket.total = round2(bucket.total + t.amount);
-    bucket.count += 1;
+    bucket.total = round2(bucket.total + signedAmount(t));
+    if (t.type === "debit") bucket.count += 1;
     if (!bucket.categorySlug && identity.categorySlug) {
       bucket.categorySlug = identity.categorySlug;
     }
     if (!bucket.logoUrl && identity.logoUrl) bucket.logoUrl = identity.logoUrl;
     if (!bucket.lastDate || t.date > bucket.lastDate) bucket.lastDate = t.date;
   }
-  const merchantSpend = [...merchantMap.values()].sort(
-    (a, b) => b.total - a.total,
-  );
+  const merchantSpend = [...merchantMap.values()]
+    .filter((row) => row.total > 0)
+    .sort((a, b) => b.total - a.total);
 
   const payeeNames = new Set<string>([
     ...trackedPayees,
@@ -243,12 +252,13 @@ export function buildAnalyticsFromRows(
       days: [],
     });
   }
-  for (const t of debits) {
+  for (const t of rows) {
     if (!t.payee) continue;
+    if (t.type !== "debit" && t.type !== "credit") continue;
     const bucket = payeeMap.get(t.payee);
     if (!bucket) continue;
-    bucket.total = Math.round((bucket.total + t.amount) * 100) / 100;
-    bucket.count += 1;
+    bucket.total = round2(bucket.total + signedAmount(t));
+    if (t.type === "debit") bucket.count += 1;
     if (!bucket.days.includes(t.date)) bucket.days.push(t.date);
     if (!bucket.lastDate || t.date > bucket.lastDate) bucket.lastDate = t.date;
   }
@@ -267,14 +277,15 @@ export function buildAnalyticsFromRows(
       dayCounts: {},
     } satisfies AmountBand);
 
-  const totalSpent = round2(debits.reduce((sum, t) => sum + t.amount, 0));
+  const grossSpent = round2(debits.reduce((sum, t) => sum + t.amount, 0));
   const totalReceived = round2(credits.reduce((sum, t) => sum + t.amount, 0));
+  const totalSpent = round2(grossSpent - totalReceived);
   const days = daily.length || 1;
 
   const summary: Summary = {
     totalSpent,
     totalReceived,
-    net: round2(totalReceived - totalSpent),
+    net: round2(totalReceived - grossSpent),
     transactionCount: debits.length,
     upiPayees: upiRanking.length,
     avgDailySpend: round2(totalSpent / days),

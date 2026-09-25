@@ -61,7 +61,7 @@ export function MerchantSpendChart({
               categoryBySlug.get(item.categorySlug ?? "other")?.label ?? "Other";
             const share = total > 0 ? item.total / total : 0;
             const tone = ranked.length < 2 ? "calm" : shareTone(share);
-            const shareLabel = `${Math.round(share * 100)}% of money out`;
+            const shareLabel = `${Math.round(share * 100)}% of spend`;
             return (
               <article
                 className="merchant-row"
@@ -145,7 +145,7 @@ function MerchantTip({
           ...(item.lastDate
             ? [{ text: `Last paid ${formatShortDate(item.lastDate)}` }]
             : []),
-          { text: `${Math.round(share * 100)}% of money out` },
+          { text: `${Math.round(share * 100)}% of spend` },
           ...(comparable && tone !== "calm"
             ? [
                 {

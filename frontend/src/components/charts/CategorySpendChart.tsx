@@ -47,7 +47,7 @@ export function CategorySpendChart({
           const share = total > 0 ? row.total / total : 0;
           const tone = rows.length < 2 ? "calm" : shareTone(share);
           const toneLabel = shareToneLabel(tone);
-          const shareLabel = `${Math.round(share * 100)}% of money out`;
+          const shareLabel = `${Math.round(share * 100)}% of spend`;
           return (
             <motion.li
               key={row.id}
@@ -86,7 +86,7 @@ export function CategorySpendChart({
             amount={formatInr(active.total)}
             lines={[
               {
-                text: `${Math.round((total > 0 ? active.total / total : 0) * 100)}% of money out`,
+                text: `${Math.round((total > 0 ? active.total / total : 0) * 100)}% of spend`,
               },
               {
                 text: shareToneLabel(

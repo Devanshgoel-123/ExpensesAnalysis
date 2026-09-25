@@ -43,7 +43,7 @@ export function UpiRankingList({ items, month, spentTotal }: UpiRankingListProps
           {ranked.map((item, index) => {
             const share = total > 0 ? item.total / total : 0;
             const tone = ranked.length < 2 ? "calm" : shareTone(share);
-            const shareLabel = `${Math.round(share * 100)}% of money out`;
+            const shareLabel = `${Math.round(share * 100)}% of spend`;
             return (
               <motion.li
                 key={item.upiId}
@@ -91,7 +91,7 @@ export function UpiRankingList({ items, month, spentTotal }: UpiRankingListProps
                 ...(ranked.length > 1
                   ? [
                       {
-                        text: `${Math.round((total > 0 ? active.total / total : 0) * 100)}% of money out`,
+                        text: `${Math.round((total > 0 ? active.total / total : 0) * 100)}% of spend`,
                       },
                       {
                         text: shareToneLabel(
