@@ -244,6 +244,70 @@ async function main() {
     throw new Error("daily insights should flag over-limit day");
   }
 
+  await store.setTelegramLinkToken(registered.user.id, "ll_product");
+  const {
+    handleTelegramUpdate,
+    notifyMailDebits,
+  } = await import("../../src/telegram/service.js");
+  const tgSent: string[] = [];
+  const tgSend = async (_chatId: string, text: string) => {
+    tgSent.push(text);
+  };
+  await handleTelegramUpdate(
+    {
+      update_id: 1,
+      message: {
+        message_id: 1,
+        chat: { id: 9001, type: "private" },
+        text: "/start ll_product",
+      },
+    },
+    tgSend,
+  );
+  const tgUser = await store.findUserById(registered.user.id);
+  if (tgUser?.telegramChatId !== "9001") {
+    throw new Error("telegram link from /start failed");
+  }
+  const tgInsert = await store.insertTransactions(registered.user.id, [
+    {
+      importId: imp.id,
+      accountId: account.id,
+      date: "2026-09-26",
+      time: null,
+      description: "UPI-TEA",
+      amount: 55,
+      type: "debit" as const,
+      upiId: "tea@ybl",
+      merchant: null,
+      payee: null,
+      providerId: null,
+      categorySlug: null,
+      counterparty: null,
+      confidence: 0.5,
+      classificationSource: "email_alert",
+      fingerprint: "fp-tg-tea",
+    },
+  ]);
+  await notifyMailDebits(registered.user.id, tgInsert.ids, tgSend);
+  if (!tgSent.some((line) => /₹55/.test(line))) {
+    throw new Error(`telegram prompt missing: ${tgSent.join(" | ")}`);
+  }
+  await handleTelegramUpdate(
+    {
+      update_id: 2,
+      message: {
+        message_id: 2,
+        chat: { id: 9001, type: "private" },
+        text: "food",
+      },
+    },
+    tgSend,
+  );
+  const tea = await store.getTransaction(registered.user.id, tgInsert.ids[0]!);
+  if (tea?.categorySlug !== "food" || tea.classificationSource !== "telegram") {
+    throw new Error(`telegram category not applied: ${JSON.stringify(tea)}`);
+  }
+
   const swiggyForLogo = providers.find((p) => p.canonicalName === "Swiggy");
   if (!swiggyForLogo) throw new Error("Swiggy provider missing");
   const updatedLogo = await store.upsertProvider({
