@@ -1,6 +1,9 @@
 import jwt from "jsonwebtoken";
 import { config } from "../config.js";
-import { BACKFILL_DEFAULT_MAX_MESSAGES } from "../constants/index.js";
+import {
+  BACKFILL_DEFAULT_MAX_MESSAGES,
+  SCAN_SUCCESS_BATCH,
+} from "../constants/index.js";
 import { encryptSecret } from "../crypto/secrets.js";
 import { getStore } from "../db/index.js";
 import type { AccountRow } from "../db/types.js";
@@ -17,7 +20,55 @@ import {
   gmailConfigured,
   renewWatch,
 } from "./client.js";
-import { poolingDateWindow, runPoolingPoll, runPoolingSync } from "./poolingService.js";
+import {
+  poolingDateWindow,
+  runPoolingPoll,
+  runPoolingSync,
+  type PoolingSyncResult,
+} from "./poolingService.js";
+
+const EMPTY_SCAN = { scanned: 0, imported: 0, skipped: 0 };
+
+/**
+ * Start a query scan and return its run id. The scan keeps running after
+ * this resolves; each batch of successful imports is written as it lands.
+ */
+async function beginPoolingSync(
+  input: Parameters<typeof runPoolingSync>[0],
+  onDone: (sync: PoolingSyncResult) => Promise<void>,
+): Promise<string> {
+  let resolveStarted!: (runId: string) => void;
+  let rejectStarted!: (error: unknown) => void;
+  let announced = false;
+  const started = new Promise<string>((resolve, reject) => {
+    resolveStarted = resolve;
+    rejectStarted = reject;
+  });
+
+  const done = runPoolingSync({
+    ...input,
+    onStarted(runId) {
+      announced = true;
+      resolveStarted(runId);
+    },
+  });
+
+  void done.then(
+    async (sync) => {
+      try {
+        if (!sync.superseded) await onDone(sync);
+      } catch (error) {
+        gmailLog.syncFailed(input.userId, error);
+      }
+    },
+    (error: unknown) => {
+      if (!announced) rejectStarted(error);
+      else gmailLog.syncFailed(input.userId, error);
+    },
+  );
+
+  return started;
+}
 
 /** Resolve the user's bank account configured for Gmail pooling. */
 export async function resolveAccountForPooling(
@@ -153,25 +204,31 @@ export async function runGmailBackfillForUser(
   const account = await resolveAccountForPooling(userId);
   const ready = await ensureHistoryId(connection);
   const month = body.month;
-  const sync = await runPoolingSync({
-    userId,
-    connection: ready,
-    account,
-    password: body.password ?? "",
-    maxMessages: body.maxMessages ?? BACKFILL_DEFAULT_MAX_MESSAGES,
-    month,
-    trigger: "backfill",
-  });
-  await store.audit(userId, "gmail.backfill", {
-    month: month ?? "from-cutoff",
-    statements: sync.statements,
-    alerts: sync.alerts,
-  });
+  const runId = await beginPoolingSync(
+    {
+      userId,
+      connection: ready,
+      account,
+      password: body.password ?? "",
+      maxMessages: body.maxMessages ?? BACKFILL_DEFAULT_MAX_MESSAGES,
+      month,
+      trigger: "backfill",
+    },
+    async (sync) => {
+      await store.audit(userId, "gmail.backfill", {
+        month: month ?? "from-cutoff",
+        statements: sync.statements,
+        alerts: sync.alerts,
+      });
+    },
+  );
   return {
     month: month ?? null,
     window: poolingDateWindow(month),
-    statements: sync.statements,
-    alerts: sync.alerts,
+    status: "running" as const,
+    runId,
+    statements: EMPTY_SCAN,
+    alerts: EMPTY_SCAN,
   };
 }
 
@@ -196,36 +253,37 @@ export async function enablePoolingForUser(
   const account = await resolveAccountForPooling(userId, body.accountId);
   const updated = await store.setPoolingEnabled(userId, account.id, true);
   const ready = await ensureHistoryId(connection);
-  const sync = await runPoolingSync({
-    userId,
-    connection: ready,
-    account: updated ?? account,
-    password: body.password ?? "",
-    maxMessages: body.maxMessages ?? BACKFILL_DEFAULT_MAX_MESSAGES,
-    month,
-    trigger: "enable",
-  });
   gmailLog.enabled(userId, month ?? "from-cutoff");
-  await store.audit(userId, "gmail.pooling_enabled", {
-    accountId: account.id,
-    bank: account.bank,
-    month: month ?? "from-cutoff",
-    statements: sync.statements,
-    alerts: sync.alerts,
-  });
+  const runId = await beginPoolingSync(
+    {
+      userId,
+      connection: ready,
+      account: updated ?? account,
+      password: body.password ?? "",
+      maxMessages: body.maxMessages ?? BACKFILL_DEFAULT_MAX_MESSAGES,
+      month,
+      trigger: "enable",
+    },
+    async (sync) => {
+      await store.audit(userId, "gmail.pooling_enabled", {
+        accountId: account.id,
+        bank: account.bank,
+        month: month ?? "from-cutoff",
+        statements: sync.statements,
+        alerts: sync.alerts,
+      });
+    },
+  );
   return {
     account: updated,
     month: month ?? null,
     window: poolingDateWindow(month),
-    statements: sync.statements,
-    alerts: sync.alerts,
-    backfill: {
-      scanned: sync.statements.scanned + sync.alerts.scanned,
-      imported: sync.statements.imported + sync.alerts.imported,
-      skipped: sync.statements.skipped + sync.alerts.skipped,
-    },
-    notice:
-      "Pooling enabled. Alert emails are synced first; PDF statements are a secondary backfill.",
+    status: "running" as const,
+    runId,
+    statements: EMPTY_SCAN,
+    alerts: EMPTY_SCAN,
+    backfill: EMPTY_SCAN,
+    notice: `Pooling is on. Scanning in batches of ${SCAN_SUCCESS_BATCH} — transactions show up as each batch finishes.`,
   };
 }
 

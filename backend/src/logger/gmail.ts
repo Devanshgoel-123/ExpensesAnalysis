@@ -66,6 +66,26 @@ export const gmailLog = {
     );
   },
 
+  /** A batch of successful imports is now visible; the scan continues. */
+  batchPushed(input: {
+    userId: string;
+    imported: number;
+    scanned: number;
+    skipped: number;
+    runId: string;
+  }): void {
+    log.info(
+      {
+        userId: input.userId,
+        imported: input.imported,
+        scanned: input.scanned,
+        skipped: input.skipped,
+        runId: input.runId,
+      },
+      `pooling batch — ${input.imported} imported, continuing scan`,
+    );
+  },
+
   dispatcherStarted(accountCount: number): void {
     log.info({ accountCount }, `pooling dispatcher started — ${accountCount} account(s)`);
   },

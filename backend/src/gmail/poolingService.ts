@@ -24,6 +24,7 @@ import {
   POOLING_EARLIEST_DATE,
   POOLING_EARLIEST_MONTH,
   POOLING_PROGRESS_EVERY,
+  SCAN_SUCCESS_BATCH,
 } from "../constants/index.js";
 import {
   currentMonth,
@@ -65,6 +66,32 @@ function maybeLogProgress(input: {
   if (input.scanned > 0 && input.scanned % POOLING_PROGRESS_EVERY === 0) {
     gmailLog.mailsProcessed(input);
   }
+}
+
+type ScanCounts = { scanned: number; imported: number; skipped: number };
+
+const EMPTY_COUNTS: ScanCounts = { scanned: 0, imported: 0, skipped: 0 };
+
+/** userId → run id that is allowed to keep scanning. */
+const activeScans = new Map<string, string>();
+
+function claimScan(userId: string, runId: string): void {
+  activeScans.set(userId, runId);
+}
+
+function scanStillOwned(userId: string, runId: string): boolean {
+  return activeScans.get(userId) === runId;
+}
+
+function releaseScan(userId: string, runId: string): void {
+  if (activeScans.get(userId) === runId) activeScans.delete(userId);
+}
+
+function runLastActivityMs(run: PoolingRunRow): number {
+  const progressAt = run.meta.progressAt;
+  const raw = typeof progressAt === "string" ? progressAt : run.startedAt;
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : Date.parse(run.startedAt);
 }
 
 async function processAlertMessage(input: {
@@ -228,13 +255,16 @@ async function scanQuery(input: {
   maxMessages: number;
   mode: Exclude<PoolingScanMode, "poll">;
   runId?: string;
-}): Promise<{ scanned: number; imported: number; skipped: number }> {
+  /** Return false to stop this scan (a newer run took over). */
+  onTick?: (counts: ScanCounts) => Promise<boolean>;
+}): Promise<ScanCounts> {
   let pageToken: string | undefined;
   let scanned = 0;
   let imported = 0;
   let skipped = 0;
+  let stop = false;
 
-  while (scanned < input.maxMessages) {
+  while (!stop && scanned < input.maxMessages) {
     const page = await listStatementMessageIds(
       input.connection,
       pageToken,
@@ -283,8 +313,16 @@ async function scanQuery(input: {
         skipped,
         runId: input.runId,
       });
+
+      if (input.onTick) {
+        const keepGoing = await input.onTick({ scanned, imported, skipped });
+        if (!keepGoing) {
+          stop = true;
+          break;
+        }
+      }
     }
-    if (!page.nextPageToken) break;
+    if (stop || !page.nextPageToken) break;
     pageToken = page.nextPageToken;
   }
 
@@ -324,7 +362,7 @@ async function failStaleRunningRuns(
   const cutoff = Date.now() - maxAgeMs;
   for (const run of recent) {
     if (run.status !== PoolingRunStatus.Running) continue;
-    const started = Date.parse(run.startedAt);
+    const started = runLastActivityMs(run);
     if (!Number.isFinite(started) || started > cutoff) continue;
     await store.updatePoolingRun(run.id, {
       status: PoolingRunStatus.Failed,
@@ -360,6 +398,14 @@ async function finishRun(
   });
 }
 
+export type PoolingSyncResult = {
+  statements: ScanCounts;
+  alerts: ScanCounts;
+  runId: string;
+  /** A newer scan replaced this one before it finished. */
+  superseded?: boolean;
+};
+
 /** Full query-based sync: alert mail first, then statement PDFs. */
 export async function runPoolingSync(input: {
   userId: string;
@@ -369,11 +415,9 @@ export async function runPoolingSync(input: {
   month?: string;
   maxMessages?: number;
   trigger?: PoolingRunTrigger;
-}): Promise<{
-  statements: { scanned: number; imported: number; skipped: number };
-  alerts: { scanned: number; imported: number; skipped: number };
-  runId: string;
-}> {
+  /** Fired once the run row exists, before mail is scanned. */
+  onStarted?: (runId: string) => void;
+}): Promise<PoolingSyncResult> {
   const connection = await ensureHistoryId(input.connection);
   if (!connection.refreshTokenEncrypted) {
     throw new Error(
@@ -402,7 +446,68 @@ export async function runPoolingSync(input: {
         : POOLING_EARLIEST_MONTH,
   });
 
+  claimScan(input.userId, run.id);
+  const parts = {
+    alerts: { ...EMPTY_COUNTS },
+    statements: { ...EMPTY_COUNTS },
+  };
+  let lastPushedBatch = 0;
+  let lastPersistMs = Date.now();
+  let aborted = false;
+
+  const totals = (): ScanCounts => ({
+    scanned: parts.alerts.scanned + parts.statements.scanned,
+    imported: parts.alerts.imported + parts.statements.imported,
+    skipped: parts.alerts.skipped + parts.statements.skipped,
+  });
+
+  const stillActive = (): boolean =>
+    !aborted && scanStillOwned(input.userId, run.id);
+
+  /** Persist counters so a batch of imports is visible, then keep scanning. */
+  async function checkpoint(): Promise<boolean> {
+    if (!stillActive()) return false;
+    const counts = totals();
+    const batch = Math.floor(counts.imported / SCAN_SUCCESS_BATCH);
+    const hitBatch =
+      counts.imported > 0 && counts.imported % SCAN_SUCCESS_BATCH === 0;
+    const hitHeartbeat =
+      counts.scanned > 0 && counts.scanned % POOLING_PROGRESS_EVERY === 0;
+    const duePersist = Date.now() - lastPersistMs >= 60_000;
+    if (hitBatch || hitHeartbeat || duePersist) {
+      const store = await getStore();
+      const recent = await store.listPoolingRuns(input.userId, 5);
+      const current = recent.find((row) => row.id === run.id);
+      if (!current || current.status !== PoolingRunStatus.Running) {
+        aborted = true;
+        return false;
+      }
+      const progressAt = new Date().toISOString();
+      run.meta = { ...run.meta, progressAt };
+      await store.updatePoolingRun(run.id, {
+        scanned: counts.scanned,
+        imported: counts.imported,
+        skipped: counts.skipped,
+        meta: run.meta,
+      });
+      lastPersistMs = Date.now();
+      if (hitBatch && batch > lastPushedBatch) {
+        lastPushedBatch = batch;
+        gmailLog.batchPushed({
+          userId: input.userId,
+          imported: counts.imported,
+          scanned: counts.scanned,
+          skipped: counts.skipped,
+          runId: run.id,
+        });
+      }
+    }
+    return stillActive();
+  }
+
   try {
+    input.onStarted?.(run.id);
+
     const statementQuery = buildStatementQuery(
       input.account.statementSenderEmails,
       dateWindow,
@@ -413,7 +518,7 @@ export async function runPoolingSync(input: {
     );
 
     // Alert emails are primary; PDF statements are a secondary backfill.
-    const alerts = await scanQuery({
+    parts.alerts = await scanQuery({
       userId: input.userId,
       accountId: input.account.id,
       connection,
@@ -423,9 +528,22 @@ export async function runPoolingSync(input: {
       maxMessages,
       mode: PoolingScanMode.Alert,
       runId: run.id,
+      onTick: async (local) => {
+        parts.alerts = local;
+        return checkpoint();
+      },
     });
 
-    const statements = await scanQuery({
+    if (!stillActive()) {
+      return {
+        statements: parts.statements,
+        alerts: parts.alerts,
+        runId: run.id,
+        superseded: true,
+      };
+    }
+
+    parts.statements = await scanQuery({
       userId: input.userId,
       accountId: input.account.id,
       connection,
@@ -435,43 +553,78 @@ export async function runPoolingSync(input: {
       maxMessages: statementScanBudget(maxMessages),
       mode: PoolingScanMode.Statement,
       runId: run.id,
+      onTick: async (local) => {
+        parts.statements = local;
+        return checkpoint();
+      },
     });
 
+    if (!stillActive()) {
+      return {
+        statements: parts.statements,
+        alerts: parts.alerts,
+        runId: run.id,
+        superseded: true,
+      };
+    }
+
     const store = await getStore();
+    const recent = await store.listPoolingRuns(input.userId, 5);
+    const current = recent.find((row) => row.id === run.id);
+    if (!current || current.status !== PoolingRunStatus.Running) {
+      return {
+        statements: parts.statements,
+        alerts: parts.alerts,
+        runId: run.id,
+        superseded: true,
+      };
+    }
     await store.upsertGmailConnection({
       ...connection,
       lastSyncAt: new Date().toISOString(),
     });
 
-    const scanned = statements.scanned + alerts.scanned;
-    const imported = statements.imported + alerts.imported;
-    const skipped = statements.skipped + alerts.skipped;
-
+    const counts = totals();
     await finishRun(run, {
       status: PoolingRunStatus.Completed,
-      scanned,
-      imported,
-      skipped,
-      meta: { statements, alerts },
+      scanned: counts.scanned,
+      imported: counts.imported,
+      skipped: counts.skipped,
+      meta: { statements: parts.statements, alerts: parts.alerts },
     });
 
     gmailLog.syncComplete({
       userId: input.userId,
       month: monthLabel,
-      statements,
-      alerts,
+      statements: parts.statements,
+      alerts: parts.alerts,
     });
 
-    return { statements, alerts, runId: run.id };
+    return {
+      statements: parts.statements,
+      alerts: parts.alerts,
+      runId: run.id,
+    };
   } catch (error) {
+    if (!stillActive()) {
+      return {
+        statements: parts.statements,
+        alerts: parts.alerts,
+        runId: run.id,
+        superseded: true,
+      };
+    }
+    const counts = totals();
     await finishRun(run, {
       status: PoolingRunStatus.Failed,
-      scanned: 0,
-      imported: 0,
-      skipped: 0,
+      scanned: counts.scanned,
+      imported: counts.imported,
+      skipped: counts.skipped,
       errorMessage: error instanceof Error ? error.message : String(error),
     });
     throw error;
+  } finally {
+    releaseScan(input.userId, run.id);
   }
 }
 

@@ -17,7 +17,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { LedgerlineFadeContent } from "@/components/animations/LedgerlineFadeContent";
 
 export function OverviewPage() {
-  const { data, dailyInsights, month, fetching } = useDashboard();
+  const { data, dailyInsights, month, fetching, mailScan } = useDashboard();
 
   if (fetching && !data) {
     return <LoadingState text="Loading overview" variant="skeleton" />;
@@ -56,7 +56,7 @@ export function OverviewPage() {
               </Link>
             </p>
           </div>
-          <GmailBackfillButton />
+          <GmailBackfillButton disabled={mailScan?.phase === "running"} />
         </header>
       </LedgerlineFadeContent>
 

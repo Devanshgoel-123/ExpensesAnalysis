@@ -27,6 +27,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     refresh,
     goToImport,
     fetchError,
+    mailScan,
     importStatus,
     fetching,
   } = useDashboard();
@@ -73,6 +74,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       hasAnyData={hasAnyData}
       userEmail={user?.email}
       fetchError={DATA_OPTIONAL_VIEWS.includes(view) ? fetchError : null}
+      mailScan={mailScan}
       onImportAnother={goToImport}
       onRefresh={refresh}
       onLogout={logout}

@@ -14,6 +14,12 @@ export const POOLING_EARLIEST_MONTH = POOLING_EARLIEST_DATE.slice(0, 7);
 /** Log progress every N messages scanned. */
 export const POOLING_PROGRESS_EVERY = 50;
 
+/**
+ * After this many successful imports, persist the run and let the dashboard
+ * pick up the batch. The scan keeps going.
+ */
+export const SCAN_SUCCESS_BATCH = 100;
+
 export const POOLING_DISPATCHER_CONCURRENCY = 3;
 
 export const STATEMENT_SCAN_MIN = 3;

@@ -81,6 +81,8 @@ export function createApiClient(token: string) {
     enablePooling: (body: { month?: string; password?: string; maxMessages?: number } = {}) =>
       requestJson<{
         month: string | null;
+        status?: "running" | "completed";
+        runId?: string;
         statements: { scanned: number; imported: number; skipped: number };
         alerts: { scanned: number; imported: number; skipped: number };
         backfill: { imported: number; skipped: number; scanned: number };

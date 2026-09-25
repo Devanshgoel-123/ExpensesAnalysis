@@ -16,7 +16,15 @@ import { currentMonth, monthBounds, monthFromDate, normalizeMonth } from "@/help
 import { formatMonthTitle } from "@/helpers/finance";
 import type { AmountBand, DailyInsights, ParseResult } from "@/types";
 import { pathForView } from "@/lib/dashboardViews";
+import { SCAN_SUCCESS_BATCH } from "@/constants/pooling";
 import type { ImportStatus } from "@/lib/api/types";
+
+export type MailScanProgress = {
+  phase: "running" | "done" | "failed";
+  imported: number;
+  scanned: number;
+  error?: string | null;
+};
 
 const EMPTY_BAND: AmountBand = {
   label: "",
@@ -64,6 +72,10 @@ interface DashboardContextValue {
   periodLabel: string;
   goToImport: () => void;
   goToOverview: () => void;
+  /** Live bank-mail scan. Charts refresh every {@link SCAN_SUCCESS_BATCH} imports. */
+  mailScan: MailScanProgress | null;
+  /** Poll until the current pooling run finishes. Safe to call more than once. */
+  watchActiveScan: () => void;
 }
 
 const DashboardContext = createContext<DashboardContextValue | null>(null);
@@ -80,7 +92,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [month, setMonthState] = useState(() => currentMonth());
   const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
+  const [mailScan, setMailScan] = useState<MailScanProgress | null>(null);
   const autoMonthDone = useRef(false);
+  const scanWatching = useRef(false);
+  const scanTimer = useRef<number | null>(null);
+  const scanDoneTimer = useRef<number | null>(null);
 
   const setMonth = useCallback((next: string) => {
     setMonthState(normalizeMonth(next) ?? currentMonth());
@@ -88,6 +104,101 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
   const range = useMemo(() => monthBounds(month), [month]);
+
+  const watchActiveScan = useCallback(() => {
+    if (!api || scanWatching.current) return;
+    scanWatching.current = true;
+    if (scanDoneTimer.current) {
+      window.clearTimeout(scanDoneTimer.current);
+      scanDoneTimer.current = null;
+    }
+    let lastBatch = 0;
+
+    const tick = async () => {
+      if (!scanWatching.current) return;
+      try {
+        const status = await api.gmailStatus();
+        if (!scanWatching.current) return;
+        const run = status.latestRun;
+        if (!run || run.status !== "running") {
+          scanWatching.current = false;
+          if (run?.status === "failed") {
+            setMailScan({
+              phase: "failed",
+              imported: run.imported,
+              scanned: run.scanned,
+              error: run.errorMessage,
+            });
+          } else if (run) {
+            setMailScan({
+              phase: "done",
+              imported: run.imported,
+              scanned: run.scanned,
+            });
+          } else {
+            setMailScan(null);
+          }
+          refresh();
+          scanDoneTimer.current = window.setTimeout(() => {
+            setMailScan(null);
+          }, 8000);
+          return;
+        }
+
+        setMailScan((prev) => {
+          if (
+            prev?.phase === "running" &&
+            prev.imported === run.imported &&
+            prev.scanned === run.scanned
+          ) {
+            return prev;
+          }
+          return {
+            phase: "running",
+            imported: run.imported,
+            scanned: run.scanned,
+          };
+        });
+
+        const batch = Math.floor(run.imported / SCAN_SUCCESS_BATCH);
+        if (batch > lastBatch) {
+          lastBatch = batch;
+          refresh();
+        }
+        scanTimer.current = window.setTimeout(() => {
+          void tick();
+        }, 3000);
+      } catch {
+        scanWatching.current = false;
+      }
+    };
+
+    void tick();
+  }, [api, refresh]);
+
+  useEffect(() => {
+    return () => {
+      scanWatching.current = false;
+      if (scanTimer.current) window.clearTimeout(scanTimer.current);
+      if (scanDoneTimer.current) window.clearTimeout(scanDoneTimer.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!api) return;
+    let cancelled = false;
+    void api
+      .gmailStatus()
+      .then((status) => {
+        if (!cancelled && status.latestRun?.status === "running") {
+          watchActiveScan();
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [api, watchActiveScan]);
 
   const refreshStatus = useCallback(async () => {
     if (!api) return;
@@ -246,6 +357,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       periodLabel,
       goToImport,
       goToOverview,
+      mailScan,
+      watchActiveScan,
     }),
     [
       data,
@@ -264,6 +377,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       hasAnyData,
       importStatus,
       refreshStatus,
+      mailScan,
+      watchActiveScan,
     ],
   );
 

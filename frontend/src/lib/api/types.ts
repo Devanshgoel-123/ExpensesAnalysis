@@ -61,6 +61,8 @@ export type GmailStatus = {
 export type GmailBackfillResult = {
   month: string | null;
   window: { after: string; before?: string };
+  status?: "running" | "completed";
+  runId?: string;
   statements: { scanned: number; imported: number; skipped: number };
   alerts: { scanned: number; imported: number; skipped: number };
 };

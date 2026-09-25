@@ -47,6 +47,7 @@ export function ImportPage() {
     refresh,
     refreshStatus,
     goToOverview,
+    mailScan,
   } = useDashboard();
   const api = useApi();
   const searchParams = useSearchParams();
@@ -117,10 +118,9 @@ export function ImportPage() {
           {bannerError}
         </p>
       ) : null}
-      {scanning ? (
+      {scanning && mailScan?.phase !== "running" ? (
         <p className="meta" role="status">
-          Scanning bank mail… this can take a minute. Charts will refresh when
-          imports land.
+          Starting the bank-mail scan…
         </p>
       ) : null}
 

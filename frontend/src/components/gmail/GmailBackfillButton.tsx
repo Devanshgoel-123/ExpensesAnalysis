@@ -7,6 +7,7 @@ import { useDashboard } from "@/lib/dashboard-context";
 import {
   BACKFILL_DEFAULT_MAX_MESSAGES,
   POOLING_EARLIEST_DATE,
+  SCAN_SUCCESS_BATCH,
 } from "@/constants/pooling";
 import { Button } from "@/components/ui/Button";
 
@@ -16,6 +17,7 @@ interface GmailBackfillButtonProps {
   className?: string;
   variant?: "primary" | "ghost";
   onComplete?: (imported?: number) => void;
+  disabled?: boolean;
 }
 
 function formatCutoffLabel(isoDate: string): string {
@@ -36,9 +38,10 @@ export function GmailBackfillButton({
   className,
   variant = "ghost",
   onComplete,
+  disabled = false,
 }: GmailBackfillButtonProps) {
   const api = useApi();
-  const { refresh } = useDashboard();
+  const { refresh, watchActiveScan } = useDashboard();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +91,14 @@ export function GmailBackfillButton({
       const result = await api.gmailBackfill({
         maxMessages: BACKFILL_DEFAULT_MAX_MESSAGES,
       });
+      if (result.status === "running") {
+        watchActiveScan();
+        setMessage(
+          `Backfill is scanning in batches of ${SCAN_SUCCESS_BATCH}. You can leave this page — charts update as each batch finishes.`,
+        );
+        onComplete?.();
+        return;
+      }
       const scanned = result.alerts.scanned + result.statements.scanned;
       const imported = result.alerts.imported + result.statements.imported;
       const skipped = result.alerts.skipped + result.statements.skipped;
@@ -114,7 +125,7 @@ export function GmailBackfillButton({
       <Button
         type="button"
         variant={variant}
-        disabled={busy || Boolean(blockedReason)}
+        disabled={busy || disabled || Boolean(blockedReason)}
         title={blockedReason ?? `Scan Gmail from ${cutoffLabel}, 00:00 IST`}
         onClick={() => void handleBackfill()}
       >
