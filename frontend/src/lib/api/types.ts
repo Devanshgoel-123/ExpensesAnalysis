@@ -33,6 +33,8 @@ export type GmailStatus = {
   connected: boolean;
   email: string | null;
   scanWindow?: ScanWindow;
+  /** Inclusive IST day already scanned. Null until the first full scan, or after a clear. */
+  lastScannedOn?: string | null;
   poolingEnabled: boolean;
   latestRun?: {
     status: PoolingRunStatus | string;
@@ -50,6 +52,14 @@ export type ImportStatus = {
   latestMonth: string | null;
   transactionCount: number;
   scanWindow: ScanWindow;
+};
+
+export type TelegramStatus = {
+  configured: boolean;
+  linked: boolean;
+  botUsername: string | null;
+  deepLink?: string | null;
+  startCommand?: string | null;
 };
 
 export type ClearedImportedData = {

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/useApi";
 import { pathForView } from "@/lib/dashboardViews";
+import { telegramConnectHint, type TelegramStatus } from "@/lib/telegram";
 
 function buildRuleMatchFields(matchText: string): {
   matchNarrationRe?: string;
@@ -40,20 +41,23 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showDanger, setShowDanger] = useState(false);
+  const [telegram, setTelegram] = useState<TelegramStatus | null>(null);
 
   const refresh = useCallback(async () => {
     if (!api) return;
     try {
-      const [rulesRes, suggestionsRes, prefsRes] = await Promise.all([
+      const [rulesRes, suggestionsRes, prefsRes, telegramRes] = await Promise.all([
         api.listRules(),
         api.fetchSuggestions().catch(() => ({ suggestions: [] })),
         api.fetchPreferences(),
+        api.telegramStatus().catch(() => null),
       ]);
       setRules(rulesRes.rules);
       setSuggestions(suggestionsRes.suggestions);
       setDailyLimit(
         prefsRes.dailySpendLimit != null ? String(prefsRes.dailySpendLimit) : "",
       );
+      setTelegram(telegramRes);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load settings");
     }
@@ -150,6 +154,82 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
               </button>
             ) : null}
           </div>
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h3 className="ui-header">Telegram categories</h3>
+        <p className="meta">
+          {telegram
+            ? telegramConnectHint(telegram)
+            : "Ask the bot which category a new mail spend belongs to."}
+        </p>
+        {telegram?.startCommand ? (
+          <p className="meta" style={{ marginTop: "0.5rem" }}>
+            In Telegram, send{" "}
+            <code>{telegram.startCommand}</code>
+            {telegram.botUsername ? ` to @${telegram.botUsername}` : ""}.
+          </p>
+        ) : null}
+        <div className="sort-bar" style={{ marginTop: "0.75rem" }}>
+          {telegram?.linked ? (
+            <button
+              type="button"
+              className="ghost"
+              onClick={async () => {
+                try {
+                  setError(null);
+                  const next = await api.unlinkTelegram();
+                  setTelegram(next);
+                  setMessage("Telegram disconnected");
+                } catch (err) {
+                  setError(
+                    err instanceof Error
+                      ? err.message
+                      : "Could not disconnect Telegram",
+                  );
+                }
+              }}
+            >
+              Disconnect Telegram
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="cta"
+              disabled={telegram?.configured === false}
+              onClick={async () => {
+                try {
+                  setError(null);
+                  const next = await api.createTelegramLink();
+                  setTelegram(next);
+                  setMessage(
+                    next.deepLink
+                      ? "Open Telegram to finish connecting"
+                      : "Send the /start command below in Telegram",
+                  );
+                } catch (err) {
+                  setError(
+                    err instanceof Error
+                      ? err.message
+                      : "Could not create Telegram link",
+                  );
+                }
+              }}
+            >
+              Connect Telegram
+            </button>
+          )}
+          {telegram?.deepLink ? (
+            <a
+              className="cta inline-flex"
+              href={telegram.deepLink}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open Telegram
+            </a>
+          ) : null}
         </div>
       </section>
 

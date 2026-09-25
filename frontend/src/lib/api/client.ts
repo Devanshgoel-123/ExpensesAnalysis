@@ -5,6 +5,7 @@ import type {
   AuthUser,
   GmailStatus,
   ParseStatementResult,
+  TelegramStatus,
 } from "./types";
 
 /**
@@ -122,6 +123,21 @@ export function createApiClient(token: string) {
 
     gmailConnectUrl: () =>
       requestJson<{ url: string }>("/api/gmail/connect", auth),
+
+    telegramStatus: () =>
+      requestJson<TelegramStatus>("/api/telegram/status", auth),
+
+    createTelegramLink: () =>
+      requestJson<TelegramStatus>("/api/telegram/link", {
+        method: "POST",
+        ...auth,
+      }),
+
+    unlinkTelegram: () =>
+      requestJson<TelegramStatus>("/api/telegram/link", {
+        method: "DELETE",
+        ...auth,
+      }),
   };
 }
 
