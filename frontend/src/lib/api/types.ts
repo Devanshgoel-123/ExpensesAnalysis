@@ -54,6 +54,17 @@ export type ImportStatus = {
   scanWindow: ScanWindow;
 };
 
+export interface Provider {
+  id: string;
+  canonicalName: string;
+  aliases: string[];
+  upiHandles: string[];
+  websiteDomain: string | null;
+  logoUrl: string | null;
+  categorySlug: string | null;
+  isGlobal: boolean;
+}
+
 export type TelegramStatus = {
   configured: boolean;
   linked: boolean;

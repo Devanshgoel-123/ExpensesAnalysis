@@ -152,6 +152,7 @@ export function detectFromProviders(
     .filter(Boolean);
 
   for (const provider of providers) {
+    if (!provider.categorySlug) continue;
     const needles = [provider.canonicalName, ...provider.aliases];
     for (const needle of needles) {
       if (!needle) continue;

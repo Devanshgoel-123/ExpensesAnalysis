@@ -153,4 +153,39 @@ describe("classifyTransaction", () => {
     assert.equal(result.categorySlug, "other");
     assert.equal(result.classificationSource, "parser");
   });
+
+  it("does not label every HDFC alert as the bank", () => {
+    const result = classifyTransaction(
+      {
+        description:
+          "Alert : Update on your HDFC Bank account UPI-SWIGGY-swiggy@ybl",
+        upiId: "swiggy@ybl",
+        merchant: null,
+        amount: 250,
+        type: "debit",
+        payee: null,
+      },
+      {
+        providers: [
+          {
+            id: "hdfc",
+            userId: null,
+            canonicalName: "HDFC Bank",
+            aliases: ["HDFC"],
+            upiHandles: [],
+            senderDomains: [],
+            websiteDomain: null,
+            logoUrl: null,
+            categorySlug: null,
+            isGlobal: true,
+          },
+          ...providers,
+        ],
+        categories,
+        rules: [],
+      },
+    );
+    assert.equal(result.merchant, "Swiggy");
+    assert.equal(result.categorySlug, "food");
+  });
 });

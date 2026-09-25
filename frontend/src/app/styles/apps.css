@@ -1,0 +1,109 @@
+.apps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.75rem;
+}
+
+.app-card {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.9rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  min-height: 8.5rem;
+}
+
+.app-card .brand-mark {
+  width: 2.25rem;
+  height: 2.25rem;
+}
+
+.app-card strong {
+  font-size: 0.92rem;
+  letter-spacing: -0.02em;
+}
+
+.apps-add {
+  display: grid;
+  gap: 0.75rem;
+}
+
+@media (min-width: 720px) {
+  .apps-add {
+    grid-template-columns: 1fr 10rem auto;
+    align-items: end;
+  }
+}
+
+.day-mix {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.day-mix.compact .day-mix-legend {
+  display: none;
+}
+
+.day-mix-bar {
+  display: flex;
+  height: 0.7rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-muted);
+}
+
+.day-mix-seg {
+  display: block;
+  min-width: 0;
+  height: 100%;
+}
+
+.day-mix-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 1rem;
+}
+
+.day-mix-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.day-mix-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+}
+
+.txn-day-head td {
+  padding-top: 1rem;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.txn-assign {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 8.5rem;
+}
+
+.txn-assign select {
+  font-size: 0.78rem;
+}
+
+.pill.lifestyle.cat-food { color: var(--cat-food); }
+.pill.lifestyle.cat-shopping { color: var(--cat-shopping); }
+.pill.lifestyle.cat-travel { color: var(--cat-travel); }
+.pill.lifestyle.cat-healthcare { color: var(--cat-healthcare); }
+.pill.lifestyle.cat-family { color: var(--cat-family); }
+.pill.lifestyle.cat-outing { color: var(--cat-outing); }
+.pill.lifestyle.cat-investments { color: var(--cat-investments); }
+.pill.lifestyle.cat-cigarettes { color: var(--cat-cigarettes); }
+.pill.lifestyle.cat-other { color: var(--cat-other); }

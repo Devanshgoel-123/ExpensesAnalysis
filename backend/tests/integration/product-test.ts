@@ -71,6 +71,23 @@ async function main() {
   if (providers.length < 5) throw new Error("providers not seeded");
   const swiggy = providers.find((p) => p.canonicalName === "Swiggy");
   if (!swiggy?.logoUrl) throw new Error("Swiggy logo missing");
+  const zomato = providers.find((p) => p.canonicalName === "Zomato");
+  if (!zomato?.logoUrl || zomato.categorySlug !== "food") {
+    throw new Error("Zomato app catalog missing");
+  }
+  const namma = providers.find((p) => p.canonicalName === "Namma Yatri");
+  if (!namma || namma.categorySlug !== "travel") {
+    throw new Error("Namma Yatri should be travel");
+  }
+  if (providers.some((p) => p.canonicalName.toLowerCase() === "ayodhya")) {
+    throw new Error("Ayodhya should not be in the catalog");
+  }
+  if (!categories.some((c) => c.slug === "healthcare")) {
+    throw new Error("Healthcare category missing");
+  }
+  if (!categories.some((c) => c.slug === "family")) {
+    throw new Error("Family category missing");
+  }
 
   const rule = await store.createRule({
     userId: registered.user.id,

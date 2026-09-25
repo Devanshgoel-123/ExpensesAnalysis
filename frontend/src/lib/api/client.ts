@@ -5,6 +5,7 @@ import type {
   AuthUser,
   GmailStatus,
   ParseStatementResult,
+  Provider,
   TelegramStatus,
 } from "./types";
 
@@ -138,6 +139,54 @@ export function createApiClient(token: string) {
         method: "DELETE",
         ...auth,
       }),
+
+    listProviders: () =>
+      requestJson<{ providers: Provider[] }>("/api/providers", auth),
+
+    createCategory: (body: { label: string; blurb?: string; accent?: string }) =>
+      requestJson<{ category: import("@/types").CategorySummary }>(
+        "/api/categories",
+        {
+          method: "POST",
+          ...auth,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      ),
+
+    createProvider: (body: {
+      canonicalName: string;
+      categorySlug?: string | null;
+      aliases?: string[];
+      upiHandles?: string[];
+      websiteDomain?: string | null;
+      logoUrl?: string | null;
+    }) =>
+      requestJson<{ provider: Provider }>("/api/providers", {
+        method: "POST",
+        ...auth,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+
+    correctTransaction: (
+      id: string,
+      body: {
+        categorySlug?: string;
+        providerId?: string | null;
+        merchant?: string;
+        applyFuture?: boolean;
+      },
+    ) =>
+      requestJson<{ transaction: unknown; reclassified: number }>(
+        `/api/imports/transactions/${id}`,
+        {
+          method: "PATCH",
+          ...auth,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      ),
   };
 }
 

@@ -4,6 +4,7 @@ import {
   CreditCard,
   Flame,
   LayoutDashboard,
+  LayoutGrid,
   List,
   Settings2,
   Upload,
@@ -29,6 +30,7 @@ export const DASHBOARD_PATHS: Record<DashboardView, string> = {
   overview: "/overview",
   insights: "/daily-limit",
   categories: "/lifestyle",
+  apps: "/apps",
   people: "/people",
   upi: "/upi-handles",
   habits: "/habits",
@@ -58,6 +60,13 @@ export const DASHBOARD_NAV: DashboardNavItem[] = [
     description: "Where life costs go",
     icon: Wallet,
     path: DASHBOARD_PATHS.categories,
+  },
+  {
+    id: "apps",
+    label: "Apps",
+    description: "Vendors and logos",
+    icon: LayoutGrid,
+    path: DASHBOARD_PATHS.apps,
   },
   {
     id: "people",
@@ -106,7 +115,7 @@ export const DASHBOARD_NAV: DashboardNavItem[] = [
 export const DASHBOARD_NAV_GROUPS: { label: string; ids: DashboardView[] }[] = [
   {
     label: "Insights",
-    ids: ["overview", "insights", "categories", "people", "upi", "habits"],
+    ids: ["overview", "insights", "categories", "apps", "people", "upi", "habits"],
   },
   { label: "Data", ids: ["transactions", "import"] },
   { label: "System", ids: ["settings"] },
@@ -116,7 +125,7 @@ export const DASHBOARD_NAV_GROUPS: { label: string; ids: DashboardView[] }[] = [
 export const MOBILE_NAV_IDS: DashboardView[] = [
   "overview",
   "insights",
-  "categories",
+  "apps",
   "transactions",
   "import",
 ];

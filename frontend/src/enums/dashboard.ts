@@ -2,6 +2,7 @@ export const DASHBOARD_VIEWS = [
   "overview",
   "insights",
   "categories",
+  "apps",
   "people",
   "upi",
   "habits",

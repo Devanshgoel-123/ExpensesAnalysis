@@ -42,6 +42,7 @@ import {
 } from "../helpers/index.js";
 import { gmailLog } from "../logger/gmail.js";
 import { parseBankAlertEmail } from "./alertParser.js";
+import { counterpartyFromNarration, merchantIsAccountBank } from "../narration/party.js";
 import {
   buildAlertQuery,
   buildStatementQuery,
@@ -117,7 +118,28 @@ async function processAlertMessage(input: {
     input.userId,
     input.messageId,
   );
-  if (existingMail?.amount != null && existingMail.txType) {
+  if (existingMail?.amount != null && existingMail.txType && existingMail.receivedAt) {
+    const txDate = toIstCalendarDate(existingMail.receivedAt);
+    if (!txDate) return "skipped";
+    const txFingerprint = transactionFingerprint({
+      date: txDate,
+      amount: existingMail.amount,
+      type: existingMail.txType,
+      description: existingMail.subject.trim(),
+      upiId: null,
+    });
+    const existingTx = await store.findTransactionByFingerprint(
+      input.userId,
+      txFingerprint,
+    );
+    const context = await loadClassificationContext(input.userId);
+    if (
+      !existingTx ||
+      !merchantIsAccountBank(existingTx.merchant, context.providers)
+    ) {
+      return "skipped";
+    }
+  } else if (existingMail?.amount != null && existingMail.txType) {
     return "skipped";
   }
 
@@ -164,10 +186,13 @@ async function processAlertMessage(input: {
   }
 
   const account = await store.getOrCreateAccount(input.userId);
+  const party = counterpartyFromNarration(
+    `${details.subject}\n${details.bodyText}`,
+  );
   const classificationInput = {
     description: `${details.subject} ${details.bodyText}`.trim(),
-    upiId: null,
-    merchant: null,
+    upiId: party.upiId,
+    merchant: party.name,
     amount: parsed.amount,
     type: parsed.type,
     payee: null,
@@ -210,7 +235,7 @@ async function processAlertMessage(input: {
       description: parsed.description,
       amount: parsed.amount,
       type: parsed.type,
-      upiId: null,
+      upiId: party.upiId,
       merchant: classification.merchant,
       payee: classification.payee,
       providerId: classification.providerId,
@@ -221,6 +246,26 @@ async function processAlertMessage(input: {
       fingerprint: txFingerprint,
     },
   ]);
+
+  if (result.inserted === 0) {
+    const existing = await store.findTransactionByFingerprint(
+      input.userId,
+      txFingerprint,
+    );
+    const context = await loadClassificationContext(input.userId);
+    if (existing && merchantIsAccountBank(existing.merchant, context.providers)) {
+      await store.updateTransaction(input.userId, existing.id, {
+        merchant: classification.merchant,
+        payee: classification.payee,
+        providerId: classification.providerId,
+        categorySlug: classification.categorySlug,
+        counterparty: classification.counterparty,
+        upiId: party.upiId,
+        confidence: classification.confidence,
+        classificationSource: classification.classificationSource,
+      });
+    }
+  }
 
   if (parsed.type === TxType.Debit && result.ids.length > 0) {
     void notifyMailDebits(input.userId, result.ids).catch((error) => {

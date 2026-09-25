@@ -300,10 +300,20 @@ export async function correctTransactionForUser(input: {
     throw AppError.notFound("Transaction not found");
   }
 
+  let merchant = input.merchant;
+  let categorySlug = input.categorySlug;
+  if (input.providerId) {
+    const provider = await store.getProviderById(input.providerId);
+    if (provider) {
+      merchant = merchant ?? provider.canonicalName;
+      categorySlug = categorySlug ?? provider.categorySlug ?? undefined;
+    }
+  }
+
   const updated = await store.updateTransaction(input.userId, tx.id, {
     payee: input.payee,
-    merchant: input.merchant,
-    categorySlug: input.categorySlug,
+    merchant,
+    categorySlug,
     providerId: input.providerId ?? undefined,
     classificationSource: ClassificationSource.UserOverride,
     confidence: 1,
@@ -313,8 +323,8 @@ export async function correctTransactionForUser(input: {
     userId: input.userId,
     transactionId: tx.id,
     payee: input.payee ?? null,
-    merchant: input.merchant ?? null,
-    categorySlug: input.categorySlug ?? null,
+    merchant: merchant ?? null,
+    categorySlug: categorySlug ?? null,
     providerId: input.providerId ?? null,
     applyFuture: Boolean(input.applyFuture),
   });
@@ -326,7 +336,7 @@ export async function correctTransactionForUser(input: {
       : buildMatchFieldsFromText(tx.description.slice(0, 40));
     const rule = await store.createRule({
       userId: input.userId,
-      name: `Correction for ${input.payee || input.merchant || input.categorySlug || tx.id}`,
+      name: `Correction for ${input.payee || merchant || categorySlug || tx.id}`,
       priority: 10,
       enabled: true,
       matchNarrationRe: matchFields.matchNarrationRe,
@@ -337,7 +347,7 @@ export async function correctTransactionForUser(input: {
       matchType: null,
       setProviderId: input.providerId ?? null,
       setPayeeName: input.payee ?? null,
-      setCategorySlug: input.categorySlug ?? null,
+      setCategorySlug: categorySlug ?? null,
       setTags: [],
     });
 
@@ -346,8 +356,8 @@ export async function correctTransactionForUser(input: {
       (candidate) => matchRule(rule, candidate) && candidate.id !== tx.id,
       {
         payee: input.payee,
-        merchant: input.merchant,
-        categorySlug: input.categorySlug,
+        merchant,
+        categorySlug,
         providerId: input.providerId ?? undefined,
         classificationSource: ruleClassificationSource(rule.id),
       },
