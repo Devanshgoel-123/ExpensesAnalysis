@@ -4,6 +4,7 @@ export const CLASSIFICATION_SOURCES = [
   "amount_band",
   "email_alert",
   "user_override",
+  "telegram",
 ] as const;
 
 export const ClassificationSource = {
@@ -12,6 +13,7 @@ export const ClassificationSource = {
   AmountBand: "amount_band",
   EmailAlert: "email_alert",
   UserOverride: "user_override",
+  Telegram: "telegram",
 } as const;
 
 export type ClassificationSource = (typeof CLASSIFICATION_SOURCES)[number];

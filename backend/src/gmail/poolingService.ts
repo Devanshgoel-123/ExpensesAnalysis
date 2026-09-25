@@ -1,5 +1,7 @@
 import { sha256Hex, transactionFingerprint } from "../crypto/secrets.js";
 import { getStore } from "../db/index.js";
+import { logger } from "../logger/index.js";
+import { notifyMailDebits } from "../telegram/service.js";
 import type {
   AccountRow,
   GmailConnectionRow,
@@ -10,6 +12,7 @@ import { loadClassificationContext } from "../imports/context.js";
 import { processPdfImport } from "../imports/service.js";
 import {
   ClassificationSource,
+  TxType,
   ImportSource,
   ImportStatus,
   MailProcessResult,
@@ -29,6 +32,7 @@ import {
   fromAddressMatchesSenders,
   gmailFromClause,
   isWithinPoolingWindow,
+  nextScanWindow,
   sendersForBank,
   poolingDateWindow,
   poolingScanWindow,
@@ -70,6 +74,7 @@ function maybeLogProgress(input: {
 }
 
 type ScanCounts = { scanned: number; imported: number; skipped: number };
+type ScanQueryResult = ScanCounts & { exhausted: boolean };
 
 const EMPTY_COUNTS: ScanCounts = { scanned: 0, imported: 0, skipped: 0 };
 
@@ -217,6 +222,12 @@ async function processAlertMessage(input: {
     },
   ]);
 
+  if (parsed.type === TxType.Debit && result.ids.length > 0) {
+    void notifyMailDebits(input.userId, result.ids).catch((error) => {
+      logger.warn({ error, userId: input.userId }, "telegram notify failed");
+    });
+  }
+
   return result.inserted > 0 ? "imported" : "skipped";
 }
 
@@ -269,12 +280,13 @@ async function scanQuery(input: {
   runId?: string;
   /** Return false to stop this scan (a newer run took over). */
   onTick?: (counts: ScanCounts) => Promise<boolean>;
-}): Promise<ScanCounts> {
+}): Promise<ScanQueryResult> {
   let pageToken: string | undefined;
   let scanned = 0;
   let imported = 0;
   let skipped = 0;
   let stop = false;
+  let exhausted = false;
 
   while (!stop && scanned < input.maxMessages) {
     const page = await listStatementMessageIds(
@@ -290,8 +302,12 @@ async function scanQuery(input: {
       resultSizeEstimate: page.resultSizeEstimate,
       pageToken: page.nextPageToken ?? undefined,
     });
+    let finishedPage = true;
     for (const messageId of page.ids) {
-      if (scanned >= input.maxMessages) break;
+      if (scanned >= input.maxMessages) {
+        finishedPage = false;
+        break;
+      }
       scanned += 1;
       try {
         if (input.mode === PoolingScanMode.Statement) {
@@ -331,15 +347,23 @@ async function scanQuery(input: {
         const keepGoing = await input.onTick({ scanned, imported, skipped });
         if (!keepGoing) {
           stop = true;
+          finishedPage = false;
           break;
         }
       }
     }
-    if (stop || !page.nextPageToken) break;
+    if (stop || !finishedPage) {
+      exhausted = false;
+      break;
+    }
+    if (!page.nextPageToken) {
+      exhausted = true;
+      break;
+    }
     pageToken = page.nextPageToken;
   }
 
-  return { scanned, imported, skipped };
+  return { scanned, imported, skipped, exhausted };
 }
 
 async function startRun(input: {
@@ -440,7 +464,10 @@ export async function runPoolingSync(input: {
   }
 
   const month = input.month ?? null;
-  const dateWindow = poolingDateWindow(month);
+  const resumed = month ? null : nextScanWindow(connection.lastScannedOn);
+  const dateWindow = resumed
+    ? { after: resumed.after, before: resumed.covered ? undefined : resumed.before }
+    : poolingDateWindow(month);
   const maxMessages = input.maxMessages ?? BACKFILL_DEFAULT_MAX_MESSAGES;
   const password = input.password ?? "";
   const trigger = input.trigger ?? PoolingRunTrigger.Backfill;
@@ -517,6 +544,21 @@ export async function runPoolingSync(input: {
   try {
     input.onStarted?.(run.id);
 
+    if (resumed?.covered) {
+      await finishRun(run, {
+        status: PoolingRunStatus.Completed,
+        scanned: 0,
+        imported: 0,
+        skipped: 0,
+        meta: { alreadyScannedThrough: resumed.through },
+      });
+      return {
+        statements: parts.statements,
+        alerts: parts.alerts,
+        runId: run.id,
+      };
+    }
+
     const senders = sendersForBank(
       input.account.bank,
       input.account.statementSenderEmails,
@@ -525,7 +567,7 @@ export async function runPoolingSync(input: {
     const alertQuery = buildAlertQuery(senders, dateWindow);
 
     // Alert emails are primary; PDF statements are a secondary backfill.
-    parts.alerts = await scanQuery({
+    const alertScan = await scanQuery({
       userId: input.userId,
       accountId: input.account.id,
       connection,
@@ -540,6 +582,7 @@ export async function runPoolingSync(input: {
         return checkpoint();
       },
     });
+    parts.alerts = alertScan;
 
     if (!stillActive()) {
       return {
@@ -589,6 +632,8 @@ export async function runPoolingSync(input: {
     await store.upsertGmailConnection({
       ...connection,
       lastSyncAt: new Date().toISOString(),
+      lastScannedOn:
+        resumed && alertScan.exhausted ? resumed.through : connection.lastScannedOn,
     });
 
     const counts = totals();

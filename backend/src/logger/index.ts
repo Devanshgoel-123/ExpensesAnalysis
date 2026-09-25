@@ -22,6 +22,8 @@ export const logger = pino({
       "jwtSecret",
       "refreshToken",
       "accessToken",
+      "botToken",
+      "telegram.botToken",
     ],
     censor: "[Redacted]",
   },
