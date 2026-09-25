@@ -421,7 +421,8 @@ export function buildAnalytics(
     .map(([date, amount]) => ({
       date,
       amount: Math.round(amount * 100) / 100,
-    }));
+    }))
+    .filter((day) => day.amount > 0);
 
   const upiMap = new Map<string, UpiRanking>();
   for (const t of debits) {

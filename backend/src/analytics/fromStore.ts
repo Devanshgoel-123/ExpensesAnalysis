@@ -1,5 +1,7 @@
 import type { CategoryRow, ProviderRow, TransactionRow } from "../db/types.js";
 import { resolveAmountBand } from "../categories/heuristics.js";
+import { counterpartyFromNarration, isAccountBank } from "../narration/party.js";
+import { detectFromProviders } from "../rules/engine.js";
 import { buildDailyInsights } from "./dailyInsights.js";
 import type {
   AmountBand,
@@ -11,6 +13,67 @@ import type {
   Transaction,
   UpiRanking,
 } from "../types/index.js";
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+interface SpendIdentity {
+  merchant: string;
+  upiId: string | null;
+  categorySlug: string | null;
+  providerId: string | null;
+  logoUrl: string | null;
+}
+
+/** Banks named in the alert template are not the merchant. Use the VPA or app. */
+function resolveSpendIdentity(
+  row: TransactionRow,
+  providers: ProviderRow[],
+): SpendIdentity {
+  const bankNames = new Set(
+    providers
+      .filter(isAccountBank)
+      .flatMap((provider) => [provider.canonicalName, ...provider.aliases])
+      .map((name) => name.toLowerCase()),
+  );
+  const storedIsBank =
+    row.merchant != null && bankNames.has(row.merchant.toLowerCase());
+  const party = counterpartyFromNarration(row.description);
+  const detected = detectFromProviders(
+    {
+      description: row.description,
+      upiId: row.upiId ?? party.upiId,
+      merchant: storedIsBank ? party.name : row.merchant,
+      payee: row.payee ?? party.name,
+    },
+    providers,
+  );
+  const provider =
+    providers.find((item) => item.id === (detected.providerId ?? row.providerId)) ??
+    providers.find(
+      (item) =>
+        item.categorySlug &&
+        item.canonicalName.toLowerCase() ===
+          (detected.merchant ?? row.merchant ?? "").toLowerCase(),
+    ) ??
+    null;
+  const merchant = storedIsBank
+    ? (detected.merchant ?? party.name ?? "Other")
+    : (row.merchant ?? detected.merchant ?? party.name ?? "Other");
+  const categorySlug = storedIsBank
+    ? (detected.categorySlug ?? "other")
+    : (row.categorySlug ?? detected.categorySlug ?? provider?.categorySlug ?? "other");
+  return {
+    merchant,
+    upiId: row.upiId ?? party.upiId,
+    categorySlug,
+    providerId: storedIsBank
+      ? (detected.providerId ?? null)
+      : (row.providerId ?? detected.providerId ?? provider?.id ?? null),
+    logoUrl: provider?.logoUrl ?? null,
+  };
+}
 
 function rowToApiTransaction(
   row: TransactionRow,
@@ -24,8 +87,9 @@ function rowToApiTransaction(
   logoUrl: string | null;
 } {
   const provider = providers.find((p) => p.id === row.providerId) ?? null;
+  const identity = resolveSpendIdentity(row, providers);
   const category =
-    categories.find((c) => c.slug === row.categorySlug) ?? null;
+    categories.find((c) => c.slug === identity.categorySlug) ?? null;
   return {
     id: row.id,
     date: row.date,
@@ -33,13 +97,13 @@ function rowToApiTransaction(
     description: row.description,
     amount: row.amount,
     type: row.type,
-    upiId: row.upiId,
-    merchant: row.merchant,
+    upiId: identity.upiId,
+    merchant: identity.merchant,
     payee: row.payee,
-    providerId: row.providerId,
-    category: row.categorySlug,
+    providerId: identity.providerId ?? provider?.id ?? null,
+    category: identity.categorySlug,
     categoryLabel: category?.label ?? null,
-    logoUrl: provider?.logoUrl ?? null,
+    logoUrl: identity.logoUrl ?? provider?.logoUrl ?? null,
   };
 }
 
@@ -97,22 +161,24 @@ export function buildAnalyticsFromRows(
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, amount]) => ({
       date,
-      amount: Math.round(amount * 100) / 100,
-    }));
+      amount: round2(amount),
+    }))
+    .filter((day) => day.amount > 0);
 
   const upiMap = new Map<string, UpiRanking>();
   for (const t of debits) {
-    if (!t.upiId) continue;
-    const existing = upiMap.get(t.upiId);
+    const identity = resolveSpendIdentity(t, providers);
+    if (!identity.upiId) continue;
+    const existing = upiMap.get(identity.upiId);
     if (!existing) {
-      upiMap.set(t.upiId, {
-        upiId: t.upiId,
+      upiMap.set(identity.upiId, {
+        upiId: identity.upiId,
         total: t.amount,
         count: 1,
         lastDate: t.date,
       });
     } else {
-      existing.total = Math.round((existing.total + t.amount) * 100) / 100;
+      existing.total = round2(existing.total + t.amount);
       existing.count += 1;
       if (t.date > existing.lastDate) existing.lastDate = t.date;
     }
@@ -137,23 +203,26 @@ export function buildAnalyticsFromRows(
     });
   }
   for (const t of debits) {
-    if (!t.merchant) continue;
-    let bucket = merchantMap.get(t.merchant);
+    const identity = resolveSpendIdentity(t, providers);
+    let bucket = merchantMap.get(identity.merchant);
     if (!bucket) {
-      const provider = providers.find((p) => p.canonicalName === t.merchant);
       bucket = {
-        merchant: t.merchant,
+        merchant: identity.merchant,
         total: 0,
         count: 0,
         lastDate: "",
-        categorySlug: t.categorySlug ?? provider?.categorySlug ?? null,
-        logoUrl: provider?.logoUrl ?? null,
-        providerId: provider?.id ?? t.providerId,
+        categorySlug: identity.categorySlug,
+        logoUrl: identity.logoUrl,
+        providerId: identity.providerId,
       };
-      merchantMap.set(t.merchant, bucket);
+      merchantMap.set(identity.merchant, bucket);
     }
-    bucket.total = Math.round((bucket.total + t.amount) * 100) / 100;
+    bucket.total = round2(bucket.total + t.amount);
     bucket.count += 1;
+    if (!bucket.categorySlug && identity.categorySlug) {
+      bucket.categorySlug = identity.categorySlug;
+    }
+    if (!bucket.logoUrl && identity.logoUrl) bucket.logoUrl = identity.logoUrl;
     if (!bucket.lastDate || t.date > bucket.lastDate) bucket.lastDate = t.date;
   }
   const merchantSpend = [...merchantMap.values()].sort(
@@ -174,7 +243,7 @@ export function buildAnalyticsFromRows(
       days: [],
     });
   }
-  for (const t of rows) {
+  for (const t of debits) {
     if (!t.payee) continue;
     const bucket = payeeMap.get(t.payee);
     if (!bucket) continue;
@@ -198,19 +267,17 @@ export function buildAnalyticsFromRows(
       dayCounts: {},
     } satisfies AmountBand);
 
-  const totalSpent =
-    Math.round(debits.reduce((sum, t) => sum + t.amount, 0) * 100) / 100;
-  const totalReceived =
-    Math.round(credits.reduce((sum, t) => sum + t.amount, 0) * 100) / 100;
+  const totalSpent = round2(debits.reduce((sum, t) => sum + t.amount, 0));
+  const totalReceived = round2(credits.reduce((sum, t) => sum + t.amount, 0));
   const days = daily.length || 1;
 
   const summary: Summary = {
     totalSpent,
     totalReceived,
-    net: Math.round((totalReceived - totalSpent) * 100) / 100,
+    net: round2(totalReceived - totalSpent),
     transactionCount: debits.length,
     upiPayees: upiRanking.length,
-    avgDailySpend: Math.round((totalSpent / days) * 100) / 100,
+    avgDailySpend: round2(totalSpent / days),
     dateFrom: daily[0]?.date ?? null,
     dateTo: daily[daily.length - 1]?.date ?? null,
   };
