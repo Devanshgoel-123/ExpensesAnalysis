@@ -134,7 +134,7 @@ export function buildAlertQuery(
   const after = clampPoolingAfter(options?.after);
   const parts = [
     fromClause,
-    `(subject:(UPI OR "Account update" OR InstaAlerts OR Alert OR debited OR credited) OR "has been debited" OR "has been credited" OR "UPI txn")`,
+    `(subject:(UPI OR "Account update" OR InstaAlerts OR Alert OR debited OR credited OR received OR IMPS OR NEFT) OR "has been debited" OR "has been credited" OR "is credited" OR "UPI txn" OR "you have received" OR "payment received")`,
     `after:${toGmailQueryAfter(after)}`,
   ];
   if (options?.before && options.before > after) {

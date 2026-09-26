@@ -21,6 +21,7 @@ export interface UserRow {
   email: string;
   passwordHash: string;
   displayName: string | null;
+  avatarUrl: string | null;
   dailySpendLimit: number | null;
   telegramChatId: string | null;
   telegramLinkToken: string | null;
@@ -254,6 +255,10 @@ export interface Store {
     userId: string,
     patch: Partial<UserPreferences>,
   ): Promise<UserRow | null>;
+  updateUserProfile(
+    userId: string,
+    patch: { displayName?: string | null; avatarUrl?: string | null },
+  ): Promise<UserRow | null>;
   softDeleteUser(userId: string): Promise<void>;
   consumeInvite(code: string): Promise<boolean>;
   seedInvite(code: string, maxUses?: number): Promise<void>;
@@ -362,9 +367,12 @@ export interface Store {
         | "confidence"
         | "classificationSource"
         | "upiId"
+        | "type"
+        | "fingerprint"
       >
     >,
   ): Promise<TransactionRow | null>;
+  deleteTransaction(userId: string, id: string): Promise<boolean>;
   reclassifyByRule(
     userId: string,
     matcher: (tx: TransactionRow) => boolean,
@@ -399,6 +407,7 @@ export interface Store {
     userId: string,
     gmailMessageId: string,
   ): Promise<MailMessageRow | null>;
+  oldestMailReceivedAt(userId: string): Promise<string | null>;
 
   createPoolingRun(
     input: Omit<PoolingRunRow, "id" | "startedAt" | "finishedAt" | "status"> & {

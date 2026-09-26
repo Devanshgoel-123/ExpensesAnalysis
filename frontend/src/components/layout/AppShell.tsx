@@ -16,6 +16,8 @@ interface AppShellProps {
   hasData: boolean;
   hasAnyData: boolean;
   userEmail?: string | null;
+  avatarUrl?: string | null;
+  displayName?: string | null;
   fetchError?: string | null;
   onImportAnother: () => void;
   onRefresh: () => void;
@@ -31,6 +33,8 @@ export function AppShell({
   hasData,
   hasAnyData,
   userEmail,
+  avatarUrl,
+  displayName,
   fetchError,
   onImportAnother,
   onRefresh,
@@ -63,6 +67,8 @@ export function AppShell({
         }}
         onClose={() => setSidebarOpen(false)}
         userEmail={userEmail}
+        avatarUrl={avatarUrl}
+        displayName={displayName}
         hasAnyData={hasAnyData}
       />
       <div className="app-main">
@@ -72,6 +78,8 @@ export function AppShell({
           monthControl={monthControl}
           hasData={hasData}
           userEmail={userEmail}
+          avatarUrl={avatarUrl}
+          displayName={displayName}
           onMenuOpen={() => setSidebarOpen(true)}
           onOpenSearch={() => setPaletteOpen(true)}
           onImportAnother={onImportAnother}

@@ -99,6 +99,24 @@
   gap: 1rem;
 }
 
+.profile-form {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 24rem;
+  margin-top: 0.85rem;
+}
+
+.profile-photo-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.profile-photo-btn input {
+  display: none;
+}
+
 .settings-section {
   padding: 1.15rem 1.25rem;
   border: 1px solid var(--border);

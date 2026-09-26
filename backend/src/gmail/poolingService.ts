@@ -28,6 +28,7 @@ import {
   SCAN_SUCCESS_BATCH,
 } from "../constants/index.js";
 import {
+  addIsoDays,
   currentMonth,
   fromAddressMatchesSenders,
   gmailFromClause,
@@ -118,7 +119,15 @@ async function processAlertMessage(input: {
     input.userId,
     input.messageId,
   );
-  if (existingMail?.amount != null && existingMail.txType && existingMail.receivedAt) {
+  const retryAsCredit =
+    existingMail?.txType === "debit" &&
+    /\b(credited|credit|received|imps|neft|deposit)\b/i.test(existingMail.subject);
+  if (
+    !retryAsCredit &&
+    existingMail?.amount != null &&
+    existingMail.txType &&
+    existingMail.receivedAt
+  ) {
     const txDate = toIstCalendarDate(existingMail.receivedAt);
     if (!txDate) return "skipped";
     const txFingerprint = transactionFingerprint({
@@ -139,7 +148,11 @@ async function processAlertMessage(input: {
     ) {
       return "skipped";
     }
-  } else if (existingMail?.amount != null && existingMail.txType) {
+  } else if (
+    !retryAsCredit &&
+    existingMail?.amount != null &&
+    existingMail.txType
+  ) {
     return "skipped";
   }
 
@@ -212,6 +225,34 @@ async function processAlertMessage(input: {
     description: parsed.description,
     upiId: null,
   });
+
+  if (parsed.type === TxType.Credit) {
+    const debitTwin = await store.findTransactionByFingerprint(
+      input.userId,
+      transactionFingerprint({
+        date: txDate,
+        amount: parsed.amount,
+        type: TxType.Debit,
+        description: parsed.description,
+        upiId: null,
+      }),
+    );
+    if (debitTwin) {
+      await store.updateTransaction(input.userId, debitTwin.id, {
+        type: TxType.Credit,
+        fingerprint: txFingerprint,
+        merchant: classification.merchant,
+        payee: classification.payee,
+        providerId: classification.providerId,
+        categorySlug: classification.categorySlug,
+        counterparty: classification.counterparty,
+        upiId: party.upiId,
+        confidence: classification.confidence,
+        classificationSource: classification.classificationSource,
+      });
+      return "imported";
+    }
+  }
 
   const imp = await store.createImport({
     userId: input.userId,
@@ -433,7 +474,33 @@ async function startRun(input: {
   });
 }
 
-const STALE_RUN_MS = 2 * 60 * 1000;
+const STALE_RUN_MS = 8 * 60 * 1000;
+
+/** Inclusive Gmail windows, newest gap first, each about a month. */
+function historyWindows(input: {
+  scanFrom: string;
+  oldestMail: string | null;
+  forwardAfter: string;
+  forwardBefore: string;
+}): { after: string; before: string }[] {
+  const windows: { after: string; before: string }[] = [];
+  if (input.oldestMail && input.oldestMail > input.scanFrom) {
+    let before = addIsoDays(input.oldestMail, 1);
+    while (before > input.scanFrom) {
+      const start = addIsoDays(before, -31);
+      const after = start < input.scanFrom ? input.scanFrom : start;
+      windows.push({ after, before });
+      before = after;
+    }
+  }
+  if (input.forwardAfter <= input.forwardBefore) {
+    windows.push({
+      after: input.forwardAfter,
+      before: input.forwardBefore,
+    });
+  }
+  return windows;
+}
 
 export async function failStaleRunningRuns(
   userId: string,
@@ -445,14 +512,20 @@ export async function failStaleRunningRuns(
   for (const run of recent) {
     if (run.status !== PoolingRunStatus.Running) continue;
     if (activeScans.get(userId) === run.id) continue;
-    const started = runLastActivityMs(run);
-    if (!Number.isFinite(started) || started > cutoff) continue;
+    // A restart empties activeScans. A "running" row from the old process
+    // would otherwise block every new scan until the stale timer elapsed.
+    const ownedByThisProcess = activeScans.has(userId);
+    if (ownedByThisProcess) {
+      const started = runLastActivityMs(run);
+      if (!Number.isFinite(started) || started > cutoff) continue;
+    }
     await store.updatePoolingRun(run.id, {
       status: PoolingRunStatus.Failed,
-      errorMessage:
-        maxAgeMs === 0
+      errorMessage: ownedByThisProcess
+        ? maxAgeMs === 0
           ? "Replaced by a new scan"
-          : "Scan stalled — Gmail stopped responding. Try Scan again.",
+          : "Scan stalled — Gmail stopped responding. Try Scan again."
+        : "Previous scan process exited before it finished.",
       finishedAt: new Date().toISOString(),
     });
   }
@@ -589,7 +662,15 @@ export async function runPoolingSync(input: {
   try {
     input.onStarted?.(run.id);
 
-    if (resumed?.covered) {
+    const storeForWindow = await getStore();
+    const oldestRaw = month
+      ? null
+      : await storeForWindow.oldestMailReceivedAt(input.userId);
+    const oldestMail = toIstCalendarDate(oldestRaw);
+    const scan = poolingScanWindow();
+    const historyOpen = !month && (!oldestMail || oldestMail > scan.from);
+
+    if (resumed?.covered && !historyOpen) {
       await finishRun(run, {
         status: PoolingRunStatus.Completed,
         scanned: 0,
@@ -609,25 +690,47 @@ export async function runPoolingSync(input: {
       input.account.statementSenderEmails,
     );
     const statementQuery = buildStatementQuery(senders, dateWindow);
-    const alertQuery = buildAlertQuery(senders, dateWindow);
+    const alertWindows = month
+      ? [dateWindow]
+      : historyWindows({
+          scanFrom: scan.from,
+          oldestMail,
+          forwardAfter: oldestMail
+            ? resumed && resumed.after > oldestMail
+              ? resumed.after
+              : oldestMail
+            : scan.from,
+          forwardBefore: addIsoDays(scan.to, 1),
+        });
 
-    // Alert emails are primary; PDF statements are a secondary backfill.
-    const alertScan = await scanQuery({
-      userId: input.userId,
-      accountId: input.account.id,
-      connection,
-      senders,
-      query: alertQuery,
-      password,
-      maxMessages,
-      mode: PoolingScanMode.Alert,
-      runId: run.id,
-      onTick: async (local) => {
-        parts.alerts = local;
-        return checkpoint();
-      },
-    });
-    parts.alerts = alertScan;
+    // Older mail first. Gmail lists newest first, so one query across the
+    // whole window only ever stored the latest mail and stopped on 15 Aug.
+    let alertExhausted = true;
+    for (const window of alertWindows) {
+      const alertBase = { ...parts.alerts };
+      const alertScan = await scanQuery({
+        userId: input.userId,
+        accountId: input.account.id,
+        connection,
+        senders,
+        query: buildAlertQuery(senders, window),
+        password,
+        maxMessages,
+        mode: PoolingScanMode.Alert,
+        runId: run.id,
+        onTick: async (local) => {
+          parts.alerts = {
+            scanned: alertBase.scanned + local.scanned,
+            imported: alertBase.imported + local.imported,
+            skipped: alertBase.skipped + local.skipped,
+          };
+          return checkpoint();
+        },
+      });
+      if (!alertScan.exhausted) alertExhausted = false;
+      if (!stillActive() || !alertScan.exhausted) break;
+    }
+    const alertScan = { exhausted: alertExhausted };
 
     if (!stillActive()) {
       return {
@@ -1070,6 +1173,34 @@ export async function runAllPoolingPolls(): Promise<{
     }
 
     try {
+      const oldestMail = toIstCalendarDate(
+        await store.oldestMailReceivedAt(account.userId),
+      );
+      const historyOpen =
+        !oldestMail || oldestMail > poolingScanWindow().from;
+      if (historyOpen) {
+        const sync = await runPoolingSync({
+          userId: account.userId,
+          connection,
+          account,
+          maxMessages: BACKFILL_DEFAULT_MAX_MESSAGES,
+          trigger: PoolingRunTrigger.Dispatcher,
+        });
+        gmailLog.dispatcherAccount({
+          userId: account.userId,
+          accountId: account.id,
+          runId: sync.runId,
+        });
+        succeeded += 1;
+        await store.audit(account.userId, "gmail.dispatcher_backfill", {
+          runId: sync.runId,
+          scanned: sync.alerts.scanned + sync.statements.scanned,
+          imported: sync.alerts.imported + sync.statements.imported,
+          skipped: sync.alerts.skipped + sync.statements.skipped,
+        });
+        return;
+      }
+
       const result = await runPoolingPoll(
         account,
         connection,

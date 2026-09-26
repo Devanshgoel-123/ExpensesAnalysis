@@ -80,6 +80,8 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       hasData={hasMonthData}
       hasAnyData={hasAnyData}
       userEmail={user?.email}
+      avatarUrl={user?.avatarUrl}
+      displayName={user?.displayName}
       fetchError={DATA_OPTIONAL_VIEWS.includes(view) ? fetchError : null}
       onImportAnother={goToImport}
       onRefresh={refresh}

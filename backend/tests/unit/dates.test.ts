@@ -19,14 +19,18 @@ import {
   toIstCalendarDate,
 } from "../../src/helpers/dates.js";
 
-describe("pooling scan window (today → 1st of month 2 months back)", () => {
-  it("uses 1 Jul through 26 Sep for 26 Sep 2026 IST", () => {
+describe("pooling scan window (today → 1st of month 6 months back)", () => {
+  it("uses 1 Mar through 26 Sep for 26 Sep 2026 IST", () => {
     const now = new Date("2026-09-26T12:00:00+05:30");
     assert.deepEqual(poolingScanWindow(now), {
-      from: "2026-07-01",
+      from: "2026-03-01",
       to: "2026-09-26",
     });
     assert.deepEqual(monthsInPoolingWindow(now), [
+      "2026-03",
+      "2026-04",
+      "2026-05",
+      "2026-06",
       "2026-07",
       "2026-08",
       "2026-09",
@@ -36,16 +40,16 @@ describe("pooling scan window (today → 1st of month 2 months back)", () => {
   it("crosses the year boundary from January", () => {
     const now = new Date("2026-01-15T12:00:00+05:30");
     assert.deepEqual(poolingScanWindow(now), {
-      from: "2025-11-01",
+      from: "2025-07-01",
       to: "2026-01-15",
     });
   });
 
   it("keeps mail inside the window and drops mail outside it", () => {
     const now = new Date("2026-09-26T12:00:00+05:30");
-    assert.equal(isWithinPoolingWindow("2026-07-01", now), true);
+    assert.equal(isWithinPoolingWindow("2026-03-01", now), true);
     assert.equal(isWithinPoolingWindow("2026-09-26", now), true);
-    assert.equal(isWithinPoolingWindow("2026-06-30", now), false);
+    assert.equal(isWithinPoolingWindow("2026-02-28", now), false);
     assert.equal(isWithinPoolingWindow("2026-09-27", now), false);
   });
 
@@ -55,7 +59,7 @@ describe("pooling scan window (today → 1st of month 2 months back)", () => {
   });
 
   it("uses Gmail after:YYYY/MM/DD the day before the inclusive start", () => {
-    assert.equal(toGmailQueryAfter("2026-07-01"), "2026/06/30");
+    assert.equal(toGmailQueryAfter("2026-03-01"), "2026/02/28");
     assert.equal(toGmailQueryAfter("2026-08-01"), "2026/07/31");
   });
 
@@ -145,7 +149,7 @@ describe("date helpers", () => {
   it("starts the next scan the day after the last fully scanned date", () => {
     const now = new Date("2026-09-26T12:00:00+05:30");
     assert.deepEqual(nextScanWindow(null, now), {
-      after: "2026-07-01",
+      after: "2026-03-01",
       before: "2026-09-27",
       covered: false,
       through: "2026-09-26",
@@ -157,7 +161,7 @@ describe("date helpers", () => {
       through: "2026-09-26",
     });
     assert.deepEqual(nextScanWindow("2026-09-26", now).covered, true);
-    assert.deepEqual(nextScanWindow("2026-06-01", now).after, "2026-07-01");
+    assert.deepEqual(nextScanWindow("2026-02-01", now).after, "2026-03-01");
   });
 
   it("caps statement scans between the minimum and maximum budget", () => {

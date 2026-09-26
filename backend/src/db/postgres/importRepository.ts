@@ -191,6 +191,8 @@ export class PostgresImportRepository {
       "confidence",
       "classificationSource",
       "upiId",
+      "type",
+      "fingerprint",
     ] as const;
     for (const key of keys) {
       if (key in patch) (set as Record<string, unknown>)[key] = patch[key];
@@ -202,6 +204,13 @@ export class PostgresImportRepository {
       .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
       .returning();
     return row ? mapTransaction(row) : null;
+  }
+  async deleteTransaction(userId: string, id: string): Promise<boolean> {
+    const [row] = await this.db
+      .delete(transactions)
+      .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
+      .returning({ id: transactions.id });
+    return Boolean(row);
   }
   async reclassifyByRule(
     userId: string,

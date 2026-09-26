@@ -282,6 +282,20 @@ export async function listImportsForUser(userId: string) {
   return store.listImports(userId);
 }
 
+export async function deleteTransactionForUser(
+  userId: string,
+  transactionId: string,
+): Promise<{ ok: true }> {
+  const store = await getStore();
+  const existing = await store.getTransaction(userId, transactionId);
+  if (!existing) {
+    throw AppError.notFound("Transaction not found");
+  }
+  await store.deleteTransaction(userId, transactionId);
+  await store.audit(userId, "transaction.deleted", { transactionId });
+  return { ok: true };
+}
+
 export async function correctTransactionForUser(input: {
   userId: string;
   transactionId: string;

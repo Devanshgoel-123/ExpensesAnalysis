@@ -21,6 +21,17 @@ export function createApiClient(token: string) {
     fetchMe: (): Promise<AuthUser> =>
       requestJson<AuthUser>("/api/auth/me", auth),
 
+    updateProfile: (body: {
+      displayName?: string | null;
+      avatarUrl?: string | null;
+    }): Promise<AuthUser> =>
+      requestJson<AuthUser>("/api/auth/me", {
+        method: "PATCH",
+        ...auth,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+
     /** Permanently delete the signed-in account. */
     deleteAccount: (): Promise<void> =>
       requestVoid("/api/auth/me", { method: "DELETE", ...auth }),
@@ -175,6 +186,12 @@ export function createApiClient(token: string) {
         ...auth,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+      }),
+
+    deleteTransaction: (id: string) =>
+      requestJson<{ ok: true }>(`/api/imports/transactions/${id}`, {
+        method: "DELETE",
+        ...auth,
       }),
 
     correctTransaction: (

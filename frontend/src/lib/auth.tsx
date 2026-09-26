@@ -23,6 +23,10 @@ interface AuthContextValue {
   clearAuthError: () => void;
   logout: () => void;
   destroyAccount: () => Promise<void>;
+  saveProfile: (patch: {
+    displayName?: string | null;
+    avatarUrl?: string | null;
+  }) => Promise<AuthUser>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -171,6 +175,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     logout();
   }, [token, logout]);
 
+  const saveProfile = useCallback(
+    async (patch: { displayName?: string | null; avatarUrl?: string | null }) => {
+      if (!token) throw new Error("Sign in to update your profile");
+      const me = await createApiClient(token).updateProfile(patch);
+      setUser(me);
+      return me;
+    },
+    [token],
+  );
+
   const value = useMemo(
     () => ({
       user,
@@ -180,8 +194,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearAuthError,
       logout,
       destroyAccount,
+      saveProfile,
     }),
-    [user, token, loading, authError, clearAuthError, logout, destroyAccount],
+    [user, token, loading, authError, clearAuthError, logout, destroyAccount, saveProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

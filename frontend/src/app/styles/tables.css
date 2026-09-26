@@ -100,6 +100,30 @@
   max-width: 280px;
 }
 
+.type-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.type-filter .sort-chip.debit.active {
+  color: #dc2626;
+  border-color: color-mix(in srgb, #dc2626 45%, var(--border));
+}
+
+.type-filter .sort-chip.credit.active {
+  color: #15803d;
+  border-color: color-mix(in srgb, #15803d 45%, var(--border));
+}
+
+[data-theme="dark"] .type-filter .sort-chip.debit.active {
+  color: #ff5c5c;
+}
+
+[data-theme="dark"] .type-filter .sort-chip.credit.active {
+  color: #3ddc84;
+}
+
 .table-scroll {
   overflow-x: hidden;
   overflow-y: auto;
@@ -263,12 +287,49 @@ th.num {
   border-color: color-mix(in srgb, var(--primary) 25%, transparent);
 }
 
-td.debit {
-  color: var(--debit);
+td.debit,
+.txn-card strong.debit {
+  color: #dc2626;
 }
 
-td.credit {
-  color: var(--credit);
+td.credit,
+.txn-card strong.credit {
+  color: #15803d;
+}
+
+[data-theme="dark"] td.debit,
+[data-theme="dark"] .txn-card strong.debit {
+  color: #ff5c5c;
+}
+
+[data-theme="dark"] td.credit,
+[data-theme="dark"] .txn-card strong.credit {
+  color: #3ddc84;
+}
+
+.txn-amount {
+  display: grid;
+  justify-items: end;
+  gap: 0.15rem;
+}
+
+.txn-delete {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.68rem;
+  cursor: pointer;
+  padding: 0;
+}
+
+.txn-delete:hover {
+  color: #ff5c5c;
+}
+
+.txn-delete:disabled {
+  cursor: progress;
+  opacity: 0.6;
 }
 
 .txn-cards {

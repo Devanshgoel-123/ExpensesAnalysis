@@ -69,6 +69,7 @@ export class MemoryStore implements Store {
       email,
       passwordHash: input.passwordHash,
       displayName: input.displayName ?? null,
+      avatarUrl: null,
       dailySpendLimit: null,
       telegramChatId: null,
       telegramLinkToken: null,
@@ -102,6 +103,17 @@ export class MemoryStore implements Store {
     if ("dailySpendLimit" in patch) {
       user.dailySpendLimit = patch.dailySpendLimit ?? null;
     }
+    return user;
+  }
+
+  async updateUserProfile(
+    userId: string,
+    patch: { displayName?: string | null; avatarUrl?: string | null },
+  ): Promise<UserRow | null> {
+    const user = await this.findUserById(userId);
+    if (!user) return null;
+    if ("displayName" in patch) user.displayName = patch.displayName ?? null;
+    if ("avatarUrl" in patch) user.avatarUrl = patch.avatarUrl ?? null;
     return user;
   }
 
@@ -442,6 +454,19 @@ export class MemoryStore implements Store {
     return row;
   }
 
+  async deleteTransaction(userId: string, id: string): Promise<boolean> {
+    const index = this.transactions.findIndex(
+      (row) => row.id === id && row.userId === userId,
+    );
+    if (index < 0) return false;
+    this.transactions.splice(index, 1);
+    this.overrides = this.overrides.filter((row) => row.transactionId !== id);
+    this.telegramPrompts = this.telegramPrompts.filter(
+      (row) => row.transactionId !== id,
+    );
+    return true;
+  }
+
   async reclassifyByRule(
     userId: string,
     matcher: (tx: TransactionRow) => boolean,
@@ -552,6 +577,15 @@ export class MemoryStore implements Store {
         (m) => m.userId === userId && m.gmailMessageId === gmailMessageId,
       ) ?? null
     );
+  }
+
+  async oldestMailReceivedAt(userId: string): Promise<string | null> {
+    let oldest: string | null = null;
+    for (const mail of this.mailMessages) {
+      if (mail.userId !== userId || !mail.receivedAt) continue;
+      if (!oldest || mail.receivedAt < oldest) oldest = mail.receivedAt;
+    }
+    return oldest;
   }
 
   async createPoolingRun(

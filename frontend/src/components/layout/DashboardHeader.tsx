@@ -12,6 +12,8 @@ interface DashboardHeaderProps {
   monthControl: React.ReactNode;
   hasData: boolean;
   userEmail?: string | null;
+  avatarUrl?: string | null;
+  displayName?: string | null;
   onMenuOpen: () => void;
   onOpenSearch: () => void;
   onImportAnother: () => void;
@@ -25,6 +27,8 @@ export function DashboardHeader({
   monthControl,
   hasData,
   userEmail,
+  avatarUrl,
+  displayName,
   onMenuOpen,
   onOpenSearch,
   onImportAnother,
@@ -78,8 +82,9 @@ export function DashboardHeader({
           <LogOut size={16} /> Log out
         </button>
         <UserAvatar
-          initials={userInitials({ email: userEmail })}
-          title={userEmail ?? undefined}
+          initials={userInitials({ email: userEmail, displayName })}
+          src={avatarUrl}
+          title={displayName ?? userEmail ?? undefined}
         />
       </div>
     </header>

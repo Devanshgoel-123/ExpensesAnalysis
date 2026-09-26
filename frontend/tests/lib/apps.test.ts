@@ -164,6 +164,7 @@ describe("logoForAppName", () => {
     expect(logoForAppName("Zepto")).toBe("/providers/zepto.png");
     expect(logoForAppName("Pronto")).toBe("/providers/pronto.png");
     expect(logoForAppName("Furlenco")).toBe("/providers/furlenco.png");
+    expect(logoForAppName("Jio WiFi")).toBe("/providers/jio.svg");
     expect(logoForAppName("unknown cafe")).toBeNull();
   });
 });

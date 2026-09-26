@@ -3,9 +3,9 @@ export const IST_TIME_ZONE = "Asia/Kolkata";
 
 /**
  * Scan starts at today (IST) and walks backward to the 1st of the month
- * this many calendar months earlier. 26 Sep → 1 Jul.
+ * this many calendar months earlier. 26 Sep → 1 Mar.
  */
-export const POOLING_LOOKBACK_MONTHS = 2;
+export const POOLING_LOOKBACK_MONTHS = 6;
 
 /** Log progress every N messages scanned. */
 export const POOLING_PROGRESS_EVERY = 50;

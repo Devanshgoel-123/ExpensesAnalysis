@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import type { AppDb } from "../client.js";
 import {
   accounts,
@@ -147,6 +147,18 @@ export class PostgresGmailRepository {
       )
       .limit(1);
     return row ? mapMailMessage(row) : null;
+  }
+  async oldestMailReceivedAt(userId: string): Promise<string | null> {
+    const [row] = await this.db
+      .select({ receivedAt: mailMessages.receivedAt })
+      .from(mailMessages)
+      .where(eq(mailMessages.userId, userId))
+      .orderBy(asc(mailMessages.receivedAt))
+      .limit(1);
+    if (!row?.receivedAt) return null;
+    return row.receivedAt instanceof Date
+      ? row.receivedAt.toISOString()
+      : String(row.receivedAt);
   }
   async createPoolingRun(
     input: Omit<PoolingRunRow, "id" | "startedAt" | "finishedAt" | "status"> & {

@@ -24,9 +24,21 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Ledgerline — Your money, finally understandable",
+  title: {
+    default: "Ledgerline",
+    template: "%s · Ledgerline",
+  },
   description:
-    "Personal UPI expense intelligence for Indian users. Import statements, understand spending, and see where your money actually went.",
+    "Personal ledger for Indian UPI spend. Read HDFC mail, label each payment by app and category, and separate money in from money out.",
+  applicationName: "Ledgerline",
+  openGraph: {
+    title: "Ledgerline",
+    description:
+      "See where UPI money actually went. Label spends, keep credits separate, and scan HDFC alerts into one ledger.",
+    type: "website",
+    locale: "en_IN",
+    siteName: "Ledgerline",
+  },
 };
 
 export default function RootLayout({

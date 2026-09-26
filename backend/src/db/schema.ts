@@ -23,6 +23,7 @@ export const users = pgTable(
     email: text("email").notNull().unique(),
     passwordHash: text("password_hash").notNull(),
     displayName: text("display_name"),
+    avatarUrl: text("avatar_url"),
     dailySpendLimit: numeric("daily_spend_limit"),
     telegramChatId: text("telegram_chat_id"),
     telegramLinkToken: text("telegram_link_token"),

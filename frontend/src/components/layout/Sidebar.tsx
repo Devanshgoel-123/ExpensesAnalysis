@@ -21,6 +21,8 @@ interface SidebarProps {
   onNavigate: (view: DashboardView) => void;
   onClose: () => void;
   userEmail?: string | null;
+  avatarUrl?: string | null;
+  displayName?: string | null;
   hasAnyData?: boolean;
 }
 
@@ -30,6 +32,8 @@ export function Sidebar({
   onNavigate,
   onClose,
   userEmail,
+  avatarUrl,
+  displayName,
   hasAnyData = true,
 }: SidebarProps) {
   const navById = new Map(DASHBOARD_NAV.map((item) => [item.id, item]));
@@ -59,8 +63,9 @@ export function Sidebar({
         <div className="sidebar-top">
           <div className="sidebar-brand-row">
             <UserAvatar
-              initials={userInitials({ email: userEmail })}
-              title={userEmail ?? undefined}
+              initials={userInitials({ email: userEmail, displayName })}
+              src={avatarUrl}
+              title={displayName ?? userEmail ?? undefined}
             />
             <div>
               <p className="brand compact">Ledgerline</p>

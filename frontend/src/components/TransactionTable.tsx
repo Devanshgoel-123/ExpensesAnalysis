@@ -20,10 +20,13 @@ interface TransactionTableProps {
     txn: Transaction,
     patch: { categorySlug?: string; providerId?: string },
   ) => void;
+  deletingId?: string | null;
+  onDelete?: (txn: Transaction) => void;
 }
 
 type SortKey = "date" | "amount" | "merchant" | "category";
 type SortDir = "asc" | "desc";
+type TypeFilter = "all" | "debit" | "credit";
 
 function merchantOf(txn: Transaction): string {
   return txn.merchant ?? txn.payee ?? txn.upiId ?? "Other";
@@ -60,11 +63,14 @@ export function TransactionTable({
   assigningId,
   assignError,
   onAssign,
+  deletingId,
+  onDelete,
 }: TransactionTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
 
   const categoryOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -80,6 +86,7 @@ export function TransactionTable({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items.filter((txn) => {
+      if (typeFilter !== "all" && txn.type !== typeFilter) return false;
       if (categoryFilter !== "all" && (txn.category ?? "other") !== categoryFilter) {
         return false;
       }
@@ -96,7 +103,7 @@ export function TransactionTable({
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [items, query, categoryFilter]);
+  }, [items, query, categoryFilter, typeFilter]);
 
   const sorted = useMemo(() => {
     const next = [...filtered];
@@ -154,6 +161,8 @@ export function TransactionTable({
           <h2 className="ui-header">Transactions</h2>
           <p className="meta">
             {sorted.length} of {items.length} rows
+            {" · "}
+            {items.filter((txn) => txn.type === "credit").length} credits
             {assignError ? ` · ${assignError}` : ""}
           </p>
         </div>
@@ -184,6 +193,24 @@ export function TransactionTable({
             placeholder="Search merchant, UPI, narration…"
           />
         </label>
+        <div className="type-filter" role="group" aria-label="Debit or credit">
+          {(
+            [
+              ["all", "All"],
+              ["debit", "Debits"],
+              ["credit", "Credits"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className={`sort-chip ${value} ${typeFilter === value ? "active" : ""}`}
+              onClick={() => setTypeFilter(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <label className="field field-compact" style={{ minWidth: 160 }}>
           <span className="sr-only">Filter by category</span>
           <select
@@ -258,8 +285,22 @@ export function TransactionTable({
                       <td>{assignControls(txn)}</td>
                       <td className="mono upi-cell">{txn.upiId ?? "—"}</td>
                       <td className={`num mono ${txn.type}`}>
-                        {txn.type === "debit" ? "−" : "+"}
-                        {formatInrExact(txn.amount)}
+                        <div className="txn-amount">
+                          <span>
+                            {txn.type === "debit" ? "−" : "+"}
+                            {formatInrExact(txn.amount)}
+                          </span>
+                          {txn.id && onDelete ? (
+                            <button
+                              type="button"
+                              className="txn-delete"
+                              disabled={deletingId === txn.id}
+                              onClick={() => onDelete(txn)}
+                            >
+                              {deletingId === txn.id ? "Deleting" : "Delete"}
+                            </button>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -310,6 +351,16 @@ export function TransactionTable({
                       <p className="meta mono" style={{ marginTop: "0.45rem" }}>
                         {txn.upiId}
                       </p>
+                    ) : null}
+                    {txn.id && onDelete ? (
+                      <button
+                        type="button"
+                        className="txn-delete"
+                        disabled={deletingId === txn.id}
+                        onClick={() => onDelete(txn)}
+                      >
+                        {deletingId === txn.id ? "Deleting" : "Delete"}
+                      </button>
                     ) : null}
                   </article>
                 );

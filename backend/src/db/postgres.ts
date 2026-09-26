@@ -182,6 +182,21 @@ export class PostgresStore implements Store {
       .returning();
     return r ? mapUser(r) : null;
   }
+  async updateUserProfile(
+    userId: string,
+    patch: { displayName?: string | null; avatarUrl?: string | null },
+  ) {
+    const set: Partial<typeof s.users.$inferInsert> = {};
+    if ("displayName" in patch) set.displayName = patch.displayName ?? null;
+    if ("avatarUrl" in patch) set.avatarUrl = patch.avatarUrl ?? null;
+    if (!Object.keys(set).length) return this.findUserById(userId);
+    const [r] = await this.db
+      .update(s.users)
+      .set(set)
+      .where(and(eq(s.users.id, userId), isNull(s.users.deletedAt)))
+      .returning();
+    return r ? mapUser(r) : null;
+  }
   async softDeleteUser(userId: string) {
     await this.db
       .update(s.users)
@@ -502,6 +517,9 @@ export class PostgresStore implements Store {
   updateTransaction(u: string, id: string, p: Partial<TransactionRow>) {
     return this.imports.updateTransaction(u, id, p);
   }
+  deleteTransaction(u: string, id: string) {
+    return this.imports.deleteTransaction(u, id);
+  }
   reclassifyByRule(
     u: string,
     m: (t: TransactionRow) => boolean,
@@ -534,6 +552,9 @@ export class PostgresStore implements Store {
   }
   findMailMessageByGmailId(u: string, g: string) {
     return this.gmail.findMailMessageByGmailId(u, g);
+  }
+  oldestMailReceivedAt(u: string) {
+    return this.gmail.oldestMailReceivedAt(u);
   }
   createPoolingRun(
     i: Omit<PoolingRunRow, "id" | "startedAt" | "finishedAt" | "status"> & {

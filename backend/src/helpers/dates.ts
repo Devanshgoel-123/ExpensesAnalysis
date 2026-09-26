@@ -61,7 +61,7 @@ export function toIstCalendarDate(raw: string | null | undefined): string | null
 }
 
 export type PoolingScanWindow = {
-  /** Inclusive oldest date (1st of the month two months back). */
+  /** Inclusive oldest date (1st of the month six months back). */
   from: string;
   /** Inclusive newest date (today, IST). */
   to: string;
@@ -69,7 +69,7 @@ export type PoolingScanWindow = {
 
 /**
  * Today (IST) back to the 1st of the month `POOLING_LOOKBACK_MONTHS` earlier.
- * 26 Sep 2026 → { from: 2026-07-01, to: 2026-09-26 }.
+ * 26 Sep 2026 → { from: 2026-03-01, to: 2026-09-26 }.
  */
 export function poolingScanWindow(now: Date = new Date()): PoolingScanWindow {
   const to =

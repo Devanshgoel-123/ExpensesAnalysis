@@ -4,7 +4,7 @@ export const SCAN_SUCCESS_BATCH = 100;
 export const BACKFILL_DEFAULT_MAX_MESSAGES = 2000;
 
 /** Today back to the 1st of the month this many months earlier. */
-export const POOLING_LOOKBACK_MONTHS = 2;
+export const POOLING_LOOKBACK_MONTHS = 6;
 
 function pad2(value: number): string {
   return String(value).padStart(2, "0");
@@ -12,7 +12,7 @@ function pad2(value: number): string {
 
 export type ScanWindow = { from: string; to: string };
 
-/** 26 Sep 2026 → { from: 2026-07-01, to: 2026-09-26 }. */
+/** 26 Sep 2026 → { from: 2026-03-01, to: 2026-09-26 }. */
 export function poolingScanWindow(now: Date = new Date()): ScanWindow {
   const to = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   const [year, month] = to.split("-").map(Number);

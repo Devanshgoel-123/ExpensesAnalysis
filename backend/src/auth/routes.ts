@@ -36,14 +36,64 @@ authRouter.get("/me", requireAuth, async (req, res) => {
   if (!user) {
     throw AppError.notFound("User not found");
   }
-  res.json({
+  res.json(publicUser(user));
+});
+
+const AVATAR_RE = /^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/=\s]+$/i;
+const AVATAR_MAX = 180_000;
+
+authRouter.patch("/me", requireAuth, async (req, res) => {
+  const body = req.body as { displayName?: unknown; avatarUrl?: unknown };
+  const patch: { displayName?: string | null; avatarUrl?: string | null } = {};
+  if ("displayName" in body) {
+    if (body.displayName == null || body.displayName === "") {
+      patch.displayName = null;
+    } else if (typeof body.displayName === "string" && body.displayName.trim().length <= 80) {
+      patch.displayName = body.displayName.trim();
+    } else {
+      throw AppError.badRequest("Name must be 80 characters or fewer");
+    }
+  }
+  if ("avatarUrl" in body) {
+    if (body.avatarUrl == null || body.avatarUrl === "") {
+      patch.avatarUrl = null;
+    } else if (
+      typeof body.avatarUrl === "string" &&
+      body.avatarUrl.length <= AVATAR_MAX &&
+      AVATAR_RE.test(body.avatarUrl)
+    ) {
+      patch.avatarUrl = body.avatarUrl;
+    } else {
+      throw AppError.badRequest("Profile photo must be a small JPEG, PNG, or WebP");
+    }
+  }
+  const store = await getStore();
+  const user = await store.updateUserProfile(req.user!.id, patch);
+  if (!user) throw AppError.notFound("User not found");
+  await store.audit(req.user!.id, "auth.profile_updated", {
+    displayName: "displayName" in patch,
+    avatar: "avatarUrl" in patch,
+  });
+  res.json(publicUser(user));
+});
+
+function publicUser(user: {
+  id: string;
+  email: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  dailySpendLimit: number | null;
+  createdAt: string;
+}) {
+  return {
     id: user.id,
     email: user.email,
     displayName: user.displayName,
+    avatarUrl: user.avatarUrl,
     dailySpendLimit: user.dailySpendLimit,
     createdAt: user.createdAt,
-  });
-});
+  };
+}
 
 authRouter.delete("/me", requireAuth, async (req, res) => {
   const store = await getStore();

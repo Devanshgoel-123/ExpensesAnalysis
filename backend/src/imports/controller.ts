@@ -12,6 +12,7 @@ import { assertPdfUpload, mapPdfImportError } from "./pdfErrors.js";
 import {
   clearImportedDataForUser,
   correctTransactionForUser,
+  deleteTransactionForUser,
   getDashboardForUser,
   getImportStatusForUser,
   listImportsForUser,
@@ -71,6 +72,10 @@ export const parseEphemeralController: RequestHandler = async (req, res) => {
   } catch (error) {
     mapPdfImportError(error);
   }
+};
+
+export const deleteTransactionController: RequestHandler = async (req, res) => {
+  res.json(await deleteTransactionForUser(req.user!.id, String(req.params.id)));
 };
 
 export const correctTransactionController: RequestHandler = async (req, res) => {

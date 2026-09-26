@@ -25,15 +25,30 @@ const DEBIT_PATTERNS = [
   new RegExp(String.raw`debited\s*(?:with|by|for)?\s*${MONEY}?\s*${AMOUNT}`, "i"),
   new RegExp(String.raw`(?:spent|paid)\s*${MONEY}?\s*${AMOUNT}`, "i"),
   new RegExp(String.raw`debit\s*(?:of|inr|rs\.?)?\s*${AMOUNT}`, "i"),
-  new RegExp(String.raw`(?:upi\s*txn|txn)\s+of\s*${MONEY}\s*${AMOUNT}`, "i"),
 ];
 
 const CREDIT_PATTERNS = [
   new RegExp(String.raw`${MONEY}\s*${AMOUNT}\s*(?:has been|is|was)?\s*credited`, "i"),
-  new RegExp(String.raw`credited\s*(?:with|by|to)?\s*${MONEY}?\s*${AMOUNT}`, "i"),
+  new RegExp(String.raw`credited\s*(?:with|by|to|for)?\s*${MONEY}?\s*${AMOUNT}`, "i"),
   new RegExp(String.raw`credit\s*(?:of|inr|rs\.?)?\s*${AMOUNT}`, "i"),
-  new RegExp(String.raw`received\s*${MONEY}?\s*${AMOUNT}`, "i"),
+  new RegExp(
+    String.raw`received(?:\s+[a-z]+){0,6}\s*${MONEY}\s*${AMOUNT}`,
+    "i",
+  ),
+  new RegExp(String.raw`(?:deposited|deposit)\s*(?:of\s*)?${MONEY}?\s*${AMOUNT}`, "i"),
 ];
+
+const RUPEE_AMOUNT = new RegExp(String.raw`${MONEY}\s*${AMOUNT}`, "i");
+
+function textLooksLikeCredit(text: string): boolean {
+  return /\b(credited|credit\s+of|you have received|payment received|money received|deposited|neft\s*cr|imps\s*cr|rtgs\s*cr)\b/i.test(
+    text,
+  );
+}
+
+function textLooksLikeDebit(text: string): boolean {
+  return /\b(debited|debit\s+of|has been debited|spent|withdrawn)\b/i.test(text);
+}
 
 const MONTHS: Record<string, number> = {
   jan: 1,
@@ -120,35 +135,51 @@ export function parseBankAlertEmail(
   const text = `${subject}\n${body}`.replace(/\s+/g, " ").trim();
   const description = subject.trim() || text.slice(0, 120);
   const date = parseAlertTransactionDate(text);
+  const creditish = textLooksLikeCredit(text) && !textLooksLikeDebit(text);
 
-  for (const pattern of DEBIT_PATTERNS) {
-    const match = text.match(pattern);
-    if (match?.[1]) {
-      const amount = parseInrAmount(match[1]);
-      if (amount != null) {
-        return { amount, type: TxType.Debit, currency: DEFAULT_CURRENCY, description, date };
-      }
+  function matchAmount(patterns: RegExp[]): number | null {
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      const raw = match?.[1];
+      if (!raw) continue;
+      const amount = parseInrAmount(raw);
+      if (amount != null) return amount;
+    }
+    return null;
+  }
+
+  if (creditish) {
+    const rupee = text.match(RUPEE_AMOUNT);
+    const amount =
+      matchAmount(CREDIT_PATTERNS) ??
+      (rupee?.[1] ? parseInrAmount(rupee[1]) : null);
+    if (amount != null && amount > 0) {
+      return { amount, type: TxType.Credit, currency: DEFAULT_CURRENCY, description, date };
     }
   }
 
-  for (const pattern of CREDIT_PATTERNS) {
-    const match = text.match(pattern);
-    if (match?.[1]) {
-      const amount = parseInrAmount(match[1]);
-      if (amount != null) {
-        return { amount, type: TxType.Credit, currency: DEFAULT_CURRENCY, description, date };
-      }
-    }
+  const debitAmount = matchAmount(DEBIT_PATTERNS);
+  if (debitAmount != null) {
+    return { amount: debitAmount, type: TxType.Debit, currency: DEFAULT_CURRENCY, description, date };
+  }
+
+  const creditAmount = matchAmount(CREDIT_PATTERNS);
+  if (creditAmount != null) {
+    return { amount: creditAmount, type: TxType.Credit, currency: DEFAULT_CURRENCY, description, date };
   }
 
   // HDFC UPI subjects rarely include the amount; body/snippet often only has ₹184.
   if (/upi\s*txn/i.test(text)) {
-    const rupee = text.match(new RegExp(String.raw`${MONEY}\s*${AMOUNT}`, "i"));
-    if (rupee?.[1]) {
-      const amount = parseInrAmount(rupee[1]);
-      if (amount != null) {
-        return { amount, type: TxType.Debit, currency: DEFAULT_CURRENCY, description, date };
-      }
+    const rupee = text.match(RUPEE_AMOUNT);
+    const amount = rupee?.[1] ? parseInrAmount(rupee[1]) : null;
+    if (amount != null && amount > 0) {
+      return {
+        amount,
+        type: creditish ? TxType.Credit : TxType.Debit,
+        currency: DEFAULT_CURRENCY,
+        description,
+        date,
+      };
     }
   }
 

@@ -22,6 +22,36 @@ function buildRuleMatchFields(matchText: string): {
   };
 }
 
+function resizeAvatar(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      const size = 256;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        URL.revokeObjectURL(url);
+        reject(new Error("Could not read that image"));
+        return;
+      }
+      const scale = Math.max(size / image.width, size / image.height);
+      const width = image.width * scale;
+      const height = image.height * scale;
+      ctx.drawImage(image, (size - width) / 2, (size - height) / 2, width, height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL("image/jpeg", 0.82));
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Could not read that image"));
+    };
+    image.src = url;
+  });
+}
+
 function ruleMatchLabel(rule: Record<string, unknown>): string {
   if (rule.matchUpiId) return `UPI: ${String(rule.matchUpiId)}`;
   if (rule.matchNarrationRe) return `contains: ${String(rule.matchNarrationRe)}`;
@@ -31,7 +61,9 @@ function ruleMatchLabel(rule: Record<string, unknown>): string {
 
 export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
   const api = useApi();
-  const { logout, destroyAccount, user } = useAuth();
+  const { logout, destroyAccount, user, saveProfile } = useAuth();
+  const [displayName, setDisplayName] = useState(user?.displayName ?? "");
+  const [avatarBusy, setAvatarBusy] = useState(false);
   const saveLimit = useSaveDailyLimit();
   const [rules, setRules] = useState<Array<Record<string, unknown>>>([]);
   const [suggestions, setSuggestions] = useState<
@@ -64,6 +96,10 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
   }, [api]);
 
   useEffect(() => {
+    setDisplayName(user?.displayName ?? "");
+  }, [user?.displayName]);
+
+  useEffect(() => {
     let cancelled = false;
     void Promise.resolve().then(async () => {
       if (!api || cancelled) return;
@@ -91,6 +127,80 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
           {error ? <p className="form-error">{error}</p> : null}
         </div>
       )}
+
+      <section className="settings-section">
+        <h3 className="ui-header">Profile</h3>
+        <p className="meta">
+          Your name and photo show in the sidebar and header.
+        </p>
+        <form
+          className="profile-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setError(null);
+            setMessage(null);
+            void saveProfile({ displayName: displayName.trim() || null })
+              .then(() => setMessage("Profile saved"))
+              .catch((err) =>
+                setError(err instanceof Error ? err.message : "Could not save profile"),
+              );
+          }}
+        >
+          <label className="field">
+            <span>Name</span>
+            <input
+              value={displayName}
+              maxLength={80}
+              onChange={(event) => setDisplayName(event.target.value)}
+              placeholder="Your name"
+            />
+          </label>
+          <div className="profile-photo-row">
+            <label className="ghost profile-photo-btn">
+              {avatarBusy ? "Saving photo…" : "Upload photo"}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                hidden
+                disabled={avatarBusy}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (!file) return;
+                  setAvatarBusy(true);
+                  setError(null);
+                  void resizeAvatar(file)
+                    .then((avatarUrl) => saveProfile({ avatarUrl }))
+                    .then(() => setMessage("Photo updated"))
+                    .catch((err) =>
+                      setError(err instanceof Error ? err.message : "Could not save photo"),
+                    )
+                    .finally(() => setAvatarBusy(false));
+                }}
+              />
+            </label>
+            {user?.avatarUrl ? (
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => {
+                  setError(null);
+                  void saveProfile({ avatarUrl: null })
+                    .then(() => setMessage("Photo removed"))
+                    .catch((err) =>
+                      setError(err instanceof Error ? err.message : "Could not remove photo"),
+                    );
+                }}
+              >
+                Remove photo
+              </button>
+            ) : null}
+          </div>
+          <button type="submit" className="cta">
+            Save name
+          </button>
+        </form>
+      </section>
 
       <section className="settings-section">
         <h3 className="ui-header">Daily limit</h3>

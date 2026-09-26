@@ -52,6 +52,25 @@ describe("parseBankAlertEmail", () => {
     assert.equal(result.amount, 1000.5);
   });
 
+  it("treats a received UPI payment as a credit", () => {
+    const result = parseBankAlertEmail(
+      "You have received a payment",
+      "You have received a payment of Rs.750.00 in your HDFC Bank A/c **1234 on 26-09-26 via UPI",
+    );
+    assert.equal(result.type, "credit");
+    assert.equal(result.amount, 750);
+    assert.equal(result.date, "2026-09-26");
+  });
+
+  it("does not mark a credited UPI txn as a debit", () => {
+    const result = parseBankAlertEmail(
+      "Account update",
+      "UPI txn of Rs.1,200.00 has been credited to your account on 26-09-26",
+    );
+    assert.equal(result.type, "credit");
+    assert.equal(result.amount, 1200);
+  });
+
   it("leaves amount empty when a UPI alert has no figure", () => {
     const result = parseBankAlertEmail(
       "You have done a UPI txn. Check details!",

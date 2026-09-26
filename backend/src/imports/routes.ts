@@ -12,6 +12,7 @@ import {
 import {
   clearImportedDataController,
   correctTransactionController,
+  deleteTransactionController,
   getDashboardController,
   getImportStatusController,
   listImportsController,
@@ -41,6 +42,12 @@ importRouter.post(
   upload.single("file"),
   validate(parsePasswordBodySchema),
   uploadImportController,
+);
+
+importRouter.delete(
+  "/transactions/:id",
+  validate(uuidParamSchema, "params"),
+  deleteTransactionController,
 );
 
 importRouter.patch(
