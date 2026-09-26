@@ -17,6 +17,10 @@ interface TxnAssignPickerProps {
   ) => void;
 }
 
+function isBank(provider: Provider | undefined): boolean {
+  return provider?.categorySlug === "banks";
+}
+
 export function TxnAssignPicker({
   txn,
   categories,
@@ -27,52 +31,50 @@ export function TxnAssignPicker({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [mounted, setMounted] = useState(false);
-  const [box, setBox] = useState({ top: 0, left: 0, width: 420 });
+  const [browse, setBrowse] = useState<string | null>(null);
+  const [box, setBox] = useState({ top: 0, left: 0, width: 420, height: 320 });
   const anchorRef = useRef<HTMLDivElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const categoryLabel =
-    categories.find(([slug]) => slug === txn.category)?.[1] ?? "Category";
-  const vendor = providers.find((provider) => provider.id === txn.providerId);
-  const vendorName = vendor?.canonicalName ?? "App";
-
-  const vendors = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const list = providers.filter((provider) => {
-      if (!provider.categorySlug) return false;
-      if (provider.canonicalName.toLowerCase() === "ayodhya") return false;
-      if (!q) return true;
-      return provider.canonicalName.toLowerCase().includes(q);
-    });
-    list.sort((a, b) => {
-      const aMatch = a.categorySlug === txn.category ? 0 : 1;
-      const bMatch = b.categorySlug === txn.category ? 0 : 1;
-      if (aMatch !== bMatch) return aMatch - bMatch;
-      return a.canonicalName.localeCompare(b.canonicalName);
-    });
-    return list;
-  }, [providers, query, txn.category]);
-
-  const firstOther = vendors.findIndex(
-    (provider) => provider.categorySlug !== txn.category,
+  const spendCategories = useMemo(
+    () => categories.filter(([slug]) => slug !== "banks"),
+    [categories],
   );
+  const current = providers.find((provider) => provider.id === txn.providerId);
+  const labeled = current && !isBank(current) ? current : null;
+  const categoryLabel =
+    spendCategories.find(([slug]) => slug === txn.category)?.[1] ??
+    (txn.category && txn.category !== "banks" ? txn.categoryLabel : null);
+
+  const apps = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return providers
+      .filter((provider) => {
+        if (!provider.categorySlug || provider.categorySlug === "banks") return false;
+        if (provider.canonicalName.toLowerCase() === "ayodhya") return false;
+        if (browse && provider.categorySlug !== browse) return false;
+        if (!q) return true;
+        return provider.canonicalName.toLowerCase().includes(q);
+      })
+      .sort((a, b) => a.canonicalName.localeCompare(b.canonicalName));
+  }, [providers, query, browse]);
 
   function place() {
     const el = anchorRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const width = Math.min(440, window.innerWidth - 16);
+    const width = Math.min(460, window.innerWidth - 16);
     let left = rect.left;
     if (left + width > window.innerWidth - 8) {
       left = Math.max(8, window.innerWidth - width - 8);
     }
-    const height = 340;
-    let top = rect.bottom + 6;
-    if (top + height > window.innerHeight - 8) {
-      top = Math.max(8, rect.top - height - 6);
-    }
-    setBox({ top, left, width });
+    const below = window.innerHeight - rect.bottom - 12;
+    const above = rect.top - 12;
+    const height = Math.max(220, Math.min(360, Math.max(below, above)));
+    const openUp = below < 220 && above > below;
+    const top = openUp ? Math.max(8, rect.top - height - 6) : rect.bottom + 6;
+    setBox({ top, left, width, height });
   }
 
   useEffect(() => {
@@ -81,8 +83,14 @@ export function TxnAssignPicker({
 
   useEffect(() => {
     if (!open) return;
+    const initial =
+      txn.category && txn.category !== "banks" && txn.category !== "other"
+        ? txn.category
+        : null;
+    setBrowse(initial);
+    setQuery("");
     place();
-    searchRef.current?.focus();
+    searchRef.current?.focus({ preventScroll: true });
 
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") setOpen(false);
@@ -93,59 +101,50 @@ export function TxnAssignPicker({
       if (popRef.current?.contains(target)) return;
       setOpen(false);
     }
-    function onScroll(event: Event) {
-      if (popRef.current?.contains(event.target as Node)) return;
-      setOpen(false);
-    }
 
     document.addEventListener("keydown", onKey);
     document.addEventListener("mousedown", onPointer);
     window.addEventListener("resize", place);
-    window.addEventListener("scroll", onScroll, true);
     return () => {
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("mousedown", onPointer);
       window.removeEventListener("resize", place);
-      window.removeEventListener("scroll", onScroll, true);
     };
   }, [open]);
 
   function chooseCategory(slug: string) {
+    setBrowse(slug);
     if (!txn.id || slug === txn.category) return;
     onAssign?.(txn, { categorySlug: slug });
   }
 
-  function chooseVendor(provider: Provider) {
-    if (!txn.id || provider.id === txn.providerId) return;
+  function chooseApp(provider: Provider) {
+    if (!txn.id) return;
     onAssign?.(txn, {
       providerId: provider.id,
       ...(provider.categorySlug ? { categorySlug: provider.categorySlug } : {}),
     });
+    setOpen(false);
   }
 
   return (
     <div className="txn-assign" ref={anchorRef}>
       <button
         type="button"
-        className={`txn-assign-btn ${open ? "open" : ""}`}
+        className={`txn-assign-trigger ${open ? "open" : ""} ${labeled ? "" : "empty"}`}
         aria-haspopup="dialog"
         aria-expanded={open}
         disabled={disabled}
         onClick={() => setOpen((value) => !value)}
       >
-        <span>{categoryLabel}</span>
-        <i className="txn-assign-caret" aria-hidden />
-      </button>
-      <button
-        type="button"
-        className={`txn-assign-btn ${open ? "open" : ""}`}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        disabled={disabled}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <BrandMark name={vendorName} logoUrl={vendor?.logoUrl} />
-        <span>{vendorName}</span>
+        <BrandMark
+          name={labeled?.canonicalName ?? "?"}
+          logoUrl={labeled?.logoUrl}
+        />
+        <span className="txn-assign-copy">
+          <strong>{labeled?.canonicalName ?? "Choose app"}</strong>
+          <em>{categoryLabel ?? "Unlabeled"}</em>
+        </span>
         <i className="txn-assign-caret" aria-hidden />
       </button>
       {open && mounted
@@ -154,17 +153,22 @@ export function TxnAssignPicker({
               ref={popRef}
               className="txn-picker"
               role="dialog"
-              aria-label="Category and app"
-              style={{ top: box.top, left: box.left, width: box.width }}
+              aria-label="Where this payment went"
+              style={{
+                top: box.top,
+                left: box.left,
+                width: box.width,
+                height: box.height,
+              }}
             >
               <div className="txn-picker-col">
                 <p className="txn-picker-label">Category</p>
                 <ul className="txn-picker-list">
-                  {categories.map(([slug, label]) => (
+                  {spendCategories.map(([slug, label]) => (
                     <li key={slug}>
                       <button
                         type="button"
-                        className={`txn-picker-item ${txn.category === slug ? "active" : ""}`}
+                        className={`txn-picker-item ${browse === slug ? "active" : ""}`}
                         onClick={() => chooseCategory(slug)}
                       >
                         <span>{label}</span>
@@ -184,18 +188,17 @@ export function TxnAssignPicker({
                   onChange={(event) => setQuery(event.target.value)}
                 />
                 <ul className="txn-picker-list">
-                  {vendors.length === 0 ? (
-                    <li className="txn-picker-empty">No matching apps</li>
+                  {apps.length === 0 ? (
+                    <li className="txn-picker-empty">
+                      {browse ? "No apps in this category" : "Pick a category, or search"}
+                    </li>
                   ) : (
-                    vendors.map((provider, index) => (
+                    apps.map((provider) => (
                       <li key={provider.id}>
-                        {index === firstOther && firstOther > 0 ? (
-                          <p className="txn-picker-split">Other apps</p>
-                        ) : null}
                         <button
                           type="button"
-                          className={`txn-picker-item ${txn.providerId === provider.id ? "active" : ""}`}
-                          onClick={() => chooseVendor(provider)}
+                          className={`txn-picker-item ${labeled?.id === provider.id ? "active" : ""}`}
+                          onClick={() => chooseApp(provider)}
                         >
                           <BrandMark
                             name={provider.canonicalName}

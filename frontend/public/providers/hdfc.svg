@@ -1,7 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <rect width="64" height="64" rx="14" fill="#004C8F"/>
-  <rect x="8" y="8" width="22" height="22" rx="3" fill="#ED232A"/>
-  <rect x="17" y="8" width="4" height="22" fill="#fff"/>
-  <rect x="8" y="17" width="22" height="4" fill="#fff"/>
-  <text x="32" y="52" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="#fff">HDFC</text>
+  <rect width="64" height="64" fill="#004C8F"/>
+  <text x="32" y="40" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#fff">HD</text>
 </svg>

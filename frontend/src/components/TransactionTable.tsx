@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { motion } from "framer-motion";
 import type { CategorySummary, Transaction } from "@/types";
 import type { Provider } from "@/lib/api/types";
 import { formatInrExact } from "@/helpers/currency";
@@ -16,6 +15,7 @@ interface TransactionTableProps {
   categories: CategorySummary[];
   providers?: Provider[];
   assigningId?: string | null;
+  assignError?: string | null;
   onAssign?: (
     txn: Transaction,
     patch: { categorySlug?: string; providerId?: string },
@@ -29,11 +29,36 @@ function merchantOf(txn: Transaction): string {
   return txn.merchant ?? txn.payee ?? txn.upiId ?? "Other";
 }
 
+function isAccountBank(name: string): boolean {
+  return /\b(hdfc|icici|axis|sbi|state bank)\b/i.test(name);
+}
+
+function spendTitle(txn: Transaction, providers: Provider[]): {
+  title: string;
+  logoUrl: string | null;
+  unnamed: boolean;
+} {
+  const provider = providers.find((item) => item.id === txn.providerId);
+  if (provider && provider.categorySlug !== "banks") {
+    return {
+      title: provider.canonicalName,
+      logoUrl: provider.logoUrl,
+      unnamed: false,
+    };
+  }
+  const merchant = merchantOf(txn);
+  if (isAccountBank(merchant) || merchant === "Other") {
+    return { title: "UPI payment", logoUrl: null, unnamed: true };
+  }
+  return { title: merchant, logoUrl: txn.logoUrl ?? null, unnamed: false };
+}
+
 export function TransactionTable({
   items,
   categories,
   providers = [],
   assigningId,
+  assignError,
   onAssign,
 }: TransactionTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("date");
@@ -128,8 +153,8 @@ export function TransactionTable({
         <div>
           <h2 className="ui-header">Transactions</h2>
           <p className="meta">
-            {sorted.length} of {items.length} rows · pick a category and app per
-            spend
+            {sorted.length} of {items.length} rows
+            {assignError ? ` · ${assignError}` : ""}
           </p>
         </div>
         <div className="sort-bar">
@@ -188,7 +213,7 @@ export function TransactionTable({
             <tr>
               <th>Date</th>
               <th>Merchant / narration</th>
-              <th>Category / app</th>
+              <th>Where it went</th>
               <th>UPI</th>
               <th className="num">Amount</th>
             </tr>
@@ -207,36 +232,24 @@ export function TransactionTable({
                   </td>
                 </tr>,
                 ...day.items.map((txn, i) => {
-                  const merchant = merchantOf(txn);
-                  const isOther =
-                    merchant === "Other" || (!txn.merchant && !txn.payee);
+                  const spend = spendTitle(txn, providers);
                   return (
-                    <motion.tr
-                      key={txn.id ?? `${txn.date}-${txn.amount}-${i}`}
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: Math.min(i * 0.008, 0.3) }}
-                    >
+                    <tr key={txn.id ?? `${txn.date}-${txn.amount}-${i}`}>
                       <td className="mono">{formatShortDate(txn.date)}</td>
                       <td>
                         <div className="provider-cell">
-                          {txn.merchant || txn.payee ? (
-                            <BrandMark
-                              name={txn.merchant ?? txn.payee ?? merchant}
-                              logoUrl={txn.logoUrl}
-                            />
-                          ) : null}
+                          <BrandMark name={spend.title} logoUrl={spend.logoUrl} />
                           <div>
                             <div
                               className={
-                                isOther
+                                spend.unnamed
                                   ? "badge-other"
                                   : "provider-name merchant-primary"
                               }
                             >
-                              {merchant}
+                              {spend.title}
                             </div>
-                            {txn.description && txn.description !== merchant ? (
+                            {txn.description && txn.description !== spend.title ? (
                               <div className="desc meta">{txn.description}</div>
                             ) : null}
                           </div>
@@ -248,7 +261,7 @@ export function TransactionTable({
                         {txn.type === "debit" ? "−" : "+"}
                         {formatInrExact(txn.amount)}
                       </td>
-                    </motion.tr>
+                    </tr>
                   );
                 }),
               ];
@@ -268,7 +281,7 @@ export function TransactionTable({
                 </span>
               </div>
               {day.items.map((txn, i) => {
-                const merchant = merchantOf(txn);
+                const spend = spendTitle(txn, providers);
                 return (
                   <article
                     key={txn.id ?? `${txn.date}-${i}`}
@@ -276,14 +289,9 @@ export function TransactionTable({
                   >
                     <div className="txn-card-top">
                       <div className="provider-cell">
-                        {txn.merchant || txn.payee ? (
-                          <BrandMark
-                            name={txn.merchant ?? txn.payee ?? merchant}
-                            logoUrl={txn.logoUrl}
-                          />
-                        ) : null}
+                        <BrandMark name={spend.title} logoUrl={spend.logoUrl} />
                         <div>
-                          <strong>{merchant}</strong>
+                          <strong>{spend.title}</strong>
                           <p className="meta">{formatShortDate(txn.date)}</p>
                         </div>
                       </div>
@@ -293,6 +301,11 @@ export function TransactionTable({
                       </strong>
                     </div>
                     {assignControls(txn)}
+                    {txn.description && txn.description !== spend.title ? (
+                      <p className="meta" style={{ marginTop: "0.45rem" }}>
+                        {txn.description}
+                      </p>
+                    ) : null}
                     {txn.upiId ? (
                       <p className="meta mono" style={{ marginTop: "0.45rem" }}>
                         {txn.upiId}

@@ -52,51 +52,74 @@
 }
 
 .txn-assign {
+  min-width: 0;
+}
+
+.txn-assign-trigger {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.5rem;
+  width: 100%;
   min-width: 0;
-}
-
-.txn-assign-btn {
-  flex: 1;
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  height: 1.9rem;
-  padding: 0 0.45rem;
-  border-radius: 8px;
+  height: 2.35rem;
+  padding: 0 0.45rem 0 0.3rem;
+  border-radius: 10px;
   border: 1px solid var(--border);
-  background: var(--surface-elevated);
+  background: transparent;
   color: var(--foreground);
-  font-size: 0.75rem;
   cursor: pointer;
-}
-
-.txn-assign-btn:hover,
-.txn-assign-btn.open {
-  border-color: var(--border-strong);
-}
-
-.txn-assign-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.txn-assign-btn > span {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   text-align: left;
 }
 
-.txn-assign-btn .brand-mark {
-  width: 1.15rem;
-  height: 1.15rem;
-  border-radius: 4px;
+.txn-assign-trigger:hover,
+.txn-assign-trigger.open {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--surface-elevated) 70%, transparent);
+}
+
+.txn-assign-trigger:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.txn-assign-trigger .brand-mark {
+  width: 1.55rem;
+  height: 1.55rem;
+  border-radius: 6px;
+}
+
+.txn-assign-trigger.empty .brand-mark {
+  opacity: 0.55;
+}
+
+.txn-assign-copy {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.txn-assign-copy strong,
+.txn-assign-copy em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: normal;
+}
+
+.txn-assign-copy strong {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.txn-assign-copy em {
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.txn-assign-trigger.empty .txn-assign-copy strong {
+  color: var(--muted);
+  font-weight: 500;
 }
 
 .txn-assign-caret {
@@ -111,10 +134,10 @@
 
 .txn-picker {
   position: fixed;
-  z-index: 70;
+  z-index: 80;
   display: grid;
-  grid-template-columns: minmax(9rem, 0.8fr) minmax(0, 1.2fr);
-  max-height: min(340px, calc(100dvh - 16px));
+  grid-template-columns: minmax(8.5rem, 0.78fr) minmax(0, 1.22fr);
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -127,7 +150,9 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  height: 100%;
   padding: 0.55rem;
+  overflow: hidden;
 }
 
 .txn-picker-col + .txn-picker-col {
@@ -159,8 +184,11 @@
   list-style: none;
   margin: 0;
   padding: 0;
+  flex: 1;
+  min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
   scrollbar-width: thin;
 }
 

@@ -13,6 +13,8 @@ export function TransactionsPage() {
   const api = useApi();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [assigningId, setAssigningId] = useState<string | null>(null);
+  const [assignError, setAssignError] = useState<string | null>(null);
+  const [overrides, setOverrides] = useState<Record<string, Transaction>>({});
 
   useEffect(() => {
     if (!api) return;
@@ -25,15 +27,49 @@ export function TransactionsPage() {
       patch: { categorySlug?: string; providerId?: string },
     ) => {
       if (!api || !txn.id) return;
+      const provider = providers.find((item) => item.id === patch.providerId);
+      const slug = patch.categorySlug ?? provider?.categorySlug ?? txn.category;
+      const label =
+        data?.categories?.find((category) => category.slug === slug)?.label ??
+        txn.categoryLabel;
+      const next: Transaction = {
+        ...txn,
+        category: slug,
+        categoryLabel: label,
+        providerId: patch.providerId ?? txn.providerId,
+        merchant:
+          provider && provider.categorySlug !== "banks"
+            ? provider.canonicalName
+            : txn.merchant,
+        logoUrl:
+          provider && provider.categorySlug !== "banks"
+            ? provider.logoUrl
+            : txn.logoUrl,
+      };
+      setOverrides((current) => ({ ...current, [txn.id!]: next }));
+      setAssignError(null);
       setAssigningId(txn.id);
       try {
         await api.correctTransaction(txn.id, patch);
         refresh();
+      } catch (error) {
+        setOverrides((current) => {
+          const copy = { ...current };
+          delete copy[txn.id!];
+          return copy;
+        });
+        setAssignError(
+          error instanceof Error ? error.message : "Could not save that label",
+        );
       } finally {
         setAssigningId(null);
       }
     },
-    [api, refresh],
+    [api, refresh, providers, data?.categories],
+  );
+
+  const items = (data?.transactions ?? []).map((txn) =>
+    txn.id && overrides[txn.id] ? { ...txn, ...overrides[txn.id] } : txn,
   );
 
   if (!data) return null;
@@ -41,10 +77,11 @@ export function TransactionsPage() {
   return (
     <LedgerlineFadeContent className="txn-fill">
       <TransactionTable
-        items={data.transactions}
+        items={items}
         categories={data.categories ?? []}
         providers={providers}
         assigningId={assigningId}
+        assignError={assignError}
         onAssign={onAssign}
       />
     </LedgerlineFadeContent>
