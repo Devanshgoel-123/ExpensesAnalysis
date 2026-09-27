@@ -7,6 +7,7 @@ import {
   LayoutGrid,
   List,
   Settings2,
+  FileSearch,
   Upload,
   Users,
   Wallet,
@@ -36,6 +37,7 @@ export const DASHBOARD_PATHS: Record<DashboardView, string> = {
   habits: "/habits",
   transactions: "/transactions",
   import: "/import",
+  "statement-match": "/statement-match",
   settings: "/settings",
 };
 
@@ -104,6 +106,13 @@ export const DASHBOARD_NAV: DashboardNavItem[] = [
     path: DASHBOARD_PATHS.import,
   },
   {
+    id: "statement-match",
+    label: "Statement match",
+    description: "Approve vendor UPI ids",
+    icon: FileSearch,
+    path: DASHBOARD_PATHS["statement-match"],
+  },
+  {
     id: "settings",
     label: "Settings",
     description: "Limits & account",
@@ -117,7 +126,7 @@ export const DASHBOARD_NAV_GROUPS: { label: string; ids: DashboardView[] }[] = [
     label: "Insights",
     ids: ["overview", "insights", "categories", "apps", "people", "upi", "habits"],
   },
-  { label: "Data", ids: ["transactions", "import"] },
+  { label: "Data", ids: ["transactions", "import", "statement-match"] },
   { label: "System", ids: ["settings"] },
 ];
 
@@ -140,6 +149,7 @@ export const MOBILE_NAV_SETUP_IDS: DashboardView[] = [
 /** Views accessible without imported transaction data. */
 export const DATA_OPTIONAL_VIEWS: DashboardView[] = [
   "import",
+  "statement-match",
   "settings",
   "insights",
 ];

@@ -157,16 +157,21 @@ export function buildAnalyticsFromRows(
   const debits = rows.filter((t) => t.type === "debit");
   const credits = rows.filter((t) => t.type === "credit");
 
-  const dailyMap = new Map<string, number>();
+  const debitByDay = new Map<string, number>();
+  const creditByDay = new Map<string, number>();
   for (const t of rows) {
-    if (t.type !== "debit" && t.type !== "credit") continue;
-    dailyMap.set(t.date, (dailyMap.get(t.date) ?? 0) + signedAmount(t));
+    if (t.type === "debit") {
+      debitByDay.set(t.date, (debitByDay.get(t.date) ?? 0) + Math.abs(t.amount));
+    } else if (t.type === "credit") {
+      creditByDay.set(t.date, (creditByDay.get(t.date) ?? 0) + Math.abs(t.amount));
+    }
   }
-  const daily: DailySpend[] = [...dailyMap.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, amount]) => ({
+  const dailyDates = new Set([...debitByDay.keys(), ...creditByDay.keys()]);
+  const daily: DailySpend[] = [...dailyDates]
+    .sort((a, b) => a.localeCompare(b))
+    .map((date) => ({
       date,
-      amount: round2(amount),
+      amount: round2((debitByDay.get(date) ?? 0) - (creditByDay.get(date) ?? 0)),
     }))
     .filter((day) => day.amount !== 0);
 

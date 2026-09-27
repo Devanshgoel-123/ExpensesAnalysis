@@ -70,7 +70,10 @@ export function OverviewPage() {
 
       <div className="grid-main">
         <LedgerlineFadeContent delay={80}>
-          <DailySpendChart data={data.daily} insights={dailyInsights} />
+          <DailySpendChart
+            transactions={data.transactions}
+            insights={dailyInsights}
+          />
         </LedgerlineFadeContent>
         <LedgerlineFadeContent delay={120}>
           <UpiRankingList

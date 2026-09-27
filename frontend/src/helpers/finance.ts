@@ -101,7 +101,8 @@ export function aggregateMonthlySpend(
     if (txn.type !== TxType.Debit && txn.type !== TxType.Credit) continue;
     const key = monthKey(txn.date);
     if (!ISO_MONTH_RE.test(key)) continue;
-    const signed = txn.type === TxType.Credit ? -txn.amount : txn.amount;
+    const amount = Math.abs(txn.amount);
+    const signed = txn.type === TxType.Credit ? -amount : amount;
     totals.set(key, (totals.get(key) ?? 0) + signed);
   }
   return [...totals.entries()]
@@ -111,6 +112,39 @@ export function aggregateMonthlySpend(
       label: formatMonthLabel(month),
       total: Math.round(total * 100) / 100,
     }));
+}
+
+export interface NetDay extends DailySpend {
+  debit: number;
+  credit: number;
+}
+
+function roundMoney(amount: number): number {
+  return Math.round(amount * 100) / 100;
+}
+
+/** Each day is that day's debit total minus its credit total. */
+export function netDailySpend(transactions: Transaction[]): NetDay[] {
+  const debits = new Map<string, number>();
+  const credits = new Map<string, number>();
+  for (const txn of transactions) {
+    const amount = Math.abs(txn.amount);
+    if (txn.type === TxType.Debit) {
+      debits.set(txn.date, (debits.get(txn.date) ?? 0) + amount);
+    } else if (txn.type === TxType.Credit) {
+      credits.set(txn.date, (credits.get(txn.date) ?? 0) + amount);
+    }
+  }
+  const dates = new Set([...debits.keys(), ...credits.keys()]);
+  return [...dates]
+    .filter((date) => toIsoDate(date) != null)
+    .sort((a, b) => dateSortKey(a).localeCompare(dateSortKey(b)))
+    .map((date) => {
+      const debit = roundMoney(debits.get(date) ?? 0);
+      const credit = roundMoney(credits.get(date) ?? 0);
+      return { date, debit, credit, amount: roundMoney(debit - credit) };
+    })
+    .filter((day) => day.amount !== 0);
 }
 
 /** Normalize daily rows for charts — valid dates, chronological order. */

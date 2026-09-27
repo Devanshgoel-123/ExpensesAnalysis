@@ -71,10 +71,16 @@ providersRouter.patch(
     ) {
       throw AppError.notFound("App not found");
     }
-    const body = req.body as { categorySlug: string };
+    const body = req.body as { categorySlug?: string; addUpiHandle?: string };
+    const upiHandles = body.addUpiHandle
+      ? Array.from(
+          new Set([...existing.upiHandles, body.addUpiHandle.trim().toLowerCase()]),
+        )
+      : existing.upiHandles;
     const provider = await store.upsertProvider({
       ...existing,
-      categorySlug: body.categorySlug,
+      categorySlug: body.categorySlug ?? existing.categorySlug,
+      upiHandles,
     });
     res.json({
       provider: {

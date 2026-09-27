@@ -84,20 +84,25 @@ export function AppsPage() {
               <div className="apps-grid">
                 {group.apps.map(({ provider, total, count }) => (
                   <article key={provider.id} className="app-card">
-                    <BrandMark
-                      name={provider.canonicalName}
-                      logoUrl={provider.logoUrl}
-                      size={36}
-                    />
-                    <strong>{provider.canonicalName}</strong>
-                    <p className="meta">
-                      {count > 0
-                        ? `${formatInr(total)} · ${count} txn${count === 1 ? "" : "s"}`
-                        : "No tagged spend yet"}
-                    </p>
-                    <label className="field">
+                    <header className="app-card-head">
+                      <BrandMark
+                        name={provider.canonicalName}
+                        logoUrl={provider.logoUrl}
+                        size={40}
+                      />
+                      <div className="app-card-id">
+                        <strong>{provider.canonicalName}</strong>
+                        <p className="meta">
+                          {count > 0
+                            ? `${formatInr(total)} · ${count} txn${count === 1 ? "" : "s"}`
+                            : "No tagged spend yet"}
+                        </p>
+                      </div>
+                    </header>
+                    <label className="field field-compact">
                       <span>Category</span>
                       <select
+                        aria-label={`Category for ${provider.canonicalName}`}
                         value={provider.categorySlug ?? ""}
                         onChange={async (event) => {
                           if (!api || !provider.id) return;
@@ -125,6 +130,50 @@ export function AppsPage() {
                         ))}
                       </select>
                     </label>
+                    <form
+                      className="app-upi"
+                      onSubmit={async (event) => {
+                        event.preventDefault();
+                        if (!api || !provider.id) return;
+                        const input = event.currentTarget.elements.namedItem("upi");
+                        if (!(input instanceof HTMLInputElement)) return;
+                        const handle = input.value.trim();
+                        if (!handle) return;
+                        try {
+                          setError(null);
+                          await api.patchProvider(provider.id, { addUpiHandle: handle });
+                          input.value = "";
+                          setMessage(`${handle} saved on ${provider.canonicalName}`);
+                          await loadProviders();
+                        } catch (err) {
+                          setError(
+                            err instanceof Error ? err.message : "Could not save UPI id",
+                          );
+                        }
+                      }}
+                    >
+                      <span className="app-upi-label">UPI ids</span>
+                      {provider.upiHandles.length > 0 ? (
+                        <ul className="app-upi-list">
+                          {provider.upiHandles.map((handle) => (
+                            <li key={handle} title={handle}>
+                              {handle}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="meta">No vendor UPI id yet</p>
+                      )}
+                      <div className="app-upi-add">
+                        <input
+                          name="upi"
+                          aria-label={`Add a UPI id for ${provider.canonicalName}`}
+                          placeholder="name@bank"
+                          autoComplete="off"
+                        />
+                        <button type="submit">Add</button>
+                      </div>
+                    </form>
                   </article>
                 ))}
               </div>

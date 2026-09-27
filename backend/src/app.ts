@@ -28,6 +28,7 @@ import { parsePasswordBodySchema } from "./validators/imports.js";
 import { preferencesRouter } from "./preferences/routes.js";
 import { adminRouter } from "./admin/routes.js";
 import { telegramRouter } from "./telegram/routes.js";
+import { statementMatchRouter } from "./statementMatch/routes.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -67,6 +68,7 @@ export function createApp(): express.Application {
   app.use("/api/admin", adminRouter);
   app.use("/api/gmail", gmailRouter);
   app.use("/api/telegram", telegramRouter);
+  app.use("/api/statement-match", statementMatchRouter);
   app.get("/api/v1/auth/google/callback", handleGmailOAuthCallback);
 
   /** Authenticated parse+persist (preferred). */

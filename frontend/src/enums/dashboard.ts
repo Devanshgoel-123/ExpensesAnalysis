@@ -8,6 +8,7 @@ export const DASHBOARD_VIEWS = [
   "habits",
   "transactions",
   "import",
+  "statement-match",
   "settings",
 ] as const;
 

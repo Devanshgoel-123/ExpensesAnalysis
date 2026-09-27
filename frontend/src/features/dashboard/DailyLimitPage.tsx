@@ -49,7 +49,10 @@ export function DailyLimitPage() {
 
       {daily.length > 0 ? (
         <LedgerlineFadeContent delay={80}>
-          <DailySpendChart data={daily} insights={dailyInsights} />
+          <DailySpendChart
+            transactions={data?.transactions ?? []}
+            insights={dailyInsights}
+          />
         </LedgerlineFadeContent>
       ) : null}
     </div>

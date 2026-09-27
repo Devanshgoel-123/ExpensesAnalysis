@@ -75,7 +75,7 @@ export function SpendingTrendChart({
       <Panel>
         <PanelHead
           title="Spending trend"
-          subtitle="Monthly totals appear after multiple months of data"
+          subtitle="Each month is debits minus credits"
         />
         <p className="meta">Import more statements to see month-over-month trends.</p>
       </Panel>
@@ -91,7 +91,7 @@ export function SpendingTrendChart({
             ? delta.direction === "flat"
               ? "Flat vs previous month"
               : `${delta.percent.toFixed(1)}% ${delta.direction === "up" ? "higher" : "lower"} vs previous month`
-            : "Monthly debit totals"
+            : "Debit minus credit, by month"
         }
       />
 

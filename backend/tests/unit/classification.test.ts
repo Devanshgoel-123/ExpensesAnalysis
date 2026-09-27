@@ -154,6 +154,40 @@ describe("classifyTransaction", () => {
     assert.equal(result.classificationSource, "parser");
   });
 
+  it("uses a saved UPI id on the next parse even when the narration has no vendor name", () => {
+    const result = classifyTransaction(
+      {
+        description: "UPI/myntra@ybl/YESB",
+        upiId: "myntra@ybl",
+        merchant: null,
+        amount: 999,
+        type: "debit",
+        payee: null,
+      },
+      {
+        providers: [
+          {
+            id: "provider-myntra",
+            userId: null,
+            canonicalName: "Myntra",
+            aliases: [],
+            upiHandles: ["myntra@ybl"],
+            senderDomains: [],
+            websiteDomain: null,
+            logoUrl: null,
+            categorySlug: "shopping",
+            isGlobal: true,
+          },
+        ],
+        categories,
+        rules: [],
+      },
+    );
+    assert.equal(result.merchant, "Myntra");
+    assert.equal(result.providerId, "provider-myntra");
+    assert.equal(result.categorySlug, "shopping");
+  });
+
   it("does not label every HDFC alert as the bank", () => {
     const result = classifyTransaction(
       {

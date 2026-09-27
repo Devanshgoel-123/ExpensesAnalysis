@@ -1,27 +1,125 @@
 .apps-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18.5rem), 1fr));
+  gap: 0.85rem;
 }
 
 .app-card {
-  display: grid;
-  gap: 0.45rem;
-  padding: 0.9rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-width: 0;
+  overflow: hidden;
+  padding: 1rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
-  min-height: 8.5rem;
+}
+
+.app-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
 }
 
 .app-card .brand-mark {
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: none;
+}
+
+.app-card-id {
+  min-width: 0;
+}
+
+.app-card-id strong,
+.app-card-id .meta {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-card strong {
-  font-size: 0.92rem;
+  font-size: 0.95rem;
   letter-spacing: -0.02em;
+}
+
+.app-card .field span,
+.app-upi-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.app-upi {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.app-upi-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 6.5rem;
+  overflow: auto;
+}
+
+.app-upi-list li {
+  max-width: 100%;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-upi-add {
+  display: flex;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.app-upi-add input {
+  min-width: 0;
+  flex: 1;
+  width: auto;
+  padding: 0.5rem 0.7rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.app-upi-add button {
+  flex: none;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.app-upi-add button:hover {
+  background: var(--bg-muted);
 }
 
 .apps-add {
@@ -256,9 +354,11 @@
 
 .app-card .field {
   margin: 0;
+  min-width: 0;
 }
 
 .app-card select {
   width: 100%;
-  font-size: 0.78rem;
+  max-width: 100%;
+  font-size: 0.8rem;
 }

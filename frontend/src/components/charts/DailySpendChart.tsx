@@ -1,14 +1,14 @@
 "use client";
 
 import { useMemo } from "react";
-import type { DailyInsights, DailySpend } from "@/types";
+import type { DailyInsights, DailySpend, Transaction } from "@/types";
 import { formatInr } from "@/helpers/currency";
 import {
   formatChartDate,
   formatChartDay,
   formatChartWeekday,
 } from "@/helpers/dates";
-import { normalizeDailySpend } from "@/helpers/finance";
+import { netDailySpend, normalizeDailySpend, type NetDay } from "@/helpers/finance";
 import { Panel, PanelHead } from "@/components/ui/Panel";
 import { DetailBarChart, type ChartGuide, type DetailBarPoint } from "@/components/charts/DetailBarChart";
 import {
@@ -19,7 +19,9 @@ import {
 } from "@/components/charts/chartTone";
 
 export interface DailySpendChartProps {
-  data: DailySpend[];
+  data?: DailySpend[];
+  /** When set, each bar is that day's debits minus its credits. */
+  transactions?: Transaction[];
   dailyLimit?: number | null;
   insights?: DailyInsights;
 }
@@ -30,11 +32,30 @@ function todayIso(): string {
 }
 
 export function DailySpendChart({
-  data,
+  data = [],
+  transactions,
   dailyLimit,
   insights,
 }: DailySpendChartProps) {
-  const rows = useMemo(() => normalizeDailySpend(data), [data]);
+  const netDays = useMemo(
+    () => (transactions ? netDailySpend(transactions) : null),
+    [transactions],
+  );
+  const rows = netDays ?? normalizeDailySpend(data);
+  const period = useMemo(() => {
+    if (!transactions) return null;
+    let debit = 0;
+    let credit = 0;
+    for (const txn of transactions) {
+      const amount = Math.abs(txn.amount);
+      if (txn.type === "debit") debit += amount;
+      else if (txn.type === "credit") credit += amount;
+    }
+    return {
+      debit: Math.round(debit * 100) / 100,
+      credit: Math.round(credit * 100) / 100,
+    };
+  }, [transactions]);
   const limit = dailyLimit ?? (insights?.enabled ? insights.limit : null);
   const today = todayIso();
   const overCount = insights?.daysOverLimit.length ?? 0;
@@ -49,7 +70,14 @@ export function DailySpendChart({
       const toneLabel = spendToneLabel(tone, day.amount, limit);
       const compared = versusAverageCopy(day.amount, avg);
       const limited = versusLimitCopy(day.amount, limit);
-      const details = [compared, limited].filter((line): line is string => Boolean(line));
+      const net = (day as NetDay).debit != null ? (day as NetDay) : null;
+      const formula =
+        net && net.credit > 0
+          ? `${formatInr(net.debit)} debit − ${formatInr(net.credit)} credit`
+          : null;
+      const details = [formula, compared, limited].filter(
+        (line): line is string => Boolean(line),
+      );
       const title = formatChartDate(day.date);
       return {
         key: day.date,
@@ -93,7 +121,13 @@ export function DailySpendChart({
       <PanelHead
         title="Daily spend"
         subtitle={
-          limit != null ? `Debits by day · limit ${formatInr(limit)}` : "Debits by day"
+          period
+            ? `${formatInr(period.debit)} debit − ${formatInr(period.credit)} credit${
+                limit != null ? ` · limit ${formatInr(limit)}` : ""
+              }`
+            : limit != null
+              ? `Debit minus credit · limit ${formatInr(limit)}`
+              : "Debit minus credit, by day"
         }
       />
 

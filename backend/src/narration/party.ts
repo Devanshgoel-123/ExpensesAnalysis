@@ -3,9 +3,9 @@ import type { ProviderRow } from "../db/types.js";
 const UPI_ID_RE =
   /\b(\d{6,15}@[a-zA-Z][a-zA-Z0-9]{1,20}|[a-zA-Z][a-zA-Z0-9._-]{1,40}@[a-zA-Z][a-zA-Z0-9]{1,20})\b/;
 
-/** Account banks are not merchants. They have no spending category. */
+/** Account banks are not merchants. They sit in the banks catalog, or have no category. */
 export function isAccountBank(provider: ProviderRow): boolean {
-  return provider.categorySlug == null;
+  return provider.categorySlug == null || provider.categorySlug === "banks";
 }
 
 export function merchantIsAccountBank(

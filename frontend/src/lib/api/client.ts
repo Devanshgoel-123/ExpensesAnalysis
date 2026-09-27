@@ -165,7 +165,72 @@ export function createApiClient(token: string) {
         },
       ),
 
-    patchProvider: (id: string, body: { categorySlug: string }) =>
+    previewStatementMatch: (file: File, password: string) => {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("password", password);
+      return requestJson<{
+        filename: string;
+        lineCount: number;
+        outsideWindow: number;
+        window: { from: string; to: string };
+        note: string;
+        suggestions: Array<{
+          upiId: string;
+          providerId: string | null;
+          providerName: string | null;
+          reason: "name" | "already-linked" | "business";
+          lineCount: number;
+          sample: string;
+          uniqueMatches: number;
+          timelineMatches: number;
+          ambiguous: number;
+          unmatched: number;
+        }>;
+        lines: Array<{
+          date: string;
+          amount: number;
+          type: "debit" | "credit";
+          description: string;
+          upiId: string | null;
+        }>;
+      }>("/api/statement-match/preview", {
+        method: "POST",
+        ...auth,
+        body: form,
+      });
+    },
+
+    applyStatementMatch: (body: {
+      upiId: string;
+      providerId: string;
+      lines: Array<{
+        date: string;
+        amount: number;
+        type: "debit" | "credit";
+        description: string;
+        upiId: string | null;
+      }>;
+    }) =>
+      requestJson<{
+        providerName: string;
+        updated: number;
+        timelineUpdated: number;
+        ambiguous: number;
+        unmatched: number;
+        outsideWindow: number;
+        window: { from: string; to: string };
+      }>("/api/statement-match/apply", {
+        method: "POST",
+        ...auth,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+
+    patchProvider: (
+      id: string,
+      body: { categorySlug?: string; addUpiHandle?: string },
+    ) =>
       requestJson<{ provider: Provider }>(`/api/providers/${id}`, {
         method: "PATCH",
         ...auth,

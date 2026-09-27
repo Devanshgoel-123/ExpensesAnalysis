@@ -152,17 +152,18 @@ export function detectFromProviders(
     .filter(Boolean);
 
   for (const provider of providers) {
-    if (!provider.categorySlug) continue;
-    const needles = [provider.canonicalName, ...provider.aliases];
-    for (const needle of needles) {
-      if (!needle) continue;
-      const re = new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-      if (haystacks.some((haystack) => re.test(haystack))) {
-        return {
-          merchant: provider.canonicalName,
-          providerId: provider.id,
-          categorySlug: provider.categorySlug,
-        };
+    if (provider.categorySlug) {
+      const needles = [provider.canonicalName, ...provider.aliases];
+      for (const needle of needles) {
+        if (!needle) continue;
+        const re = new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+        if (haystacks.some((haystack) => re.test(haystack))) {
+          return {
+            merchant: provider.canonicalName,
+            providerId: provider.id,
+            categorySlug: provider.categorySlug,
+          };
+        }
       }
     }
     for (const handle of provider.upiHandles) {

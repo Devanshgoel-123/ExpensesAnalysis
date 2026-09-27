@@ -105,6 +105,54 @@ describe("buildAnalyticsFromRows spend", () => {
     assert.equal(result.upiRanking[0]?.upiId, "swiggy@ybl");
     assert.equal(result.transactions[0]?.category, "food");
   });
+
+  it("counts an Apple VPA as Apple when the alert names the bank", () => {
+    const hdfc = {
+      id: "bank",
+      userId: null,
+      canonicalName: "HDFC Bank",
+      aliases: ["HDFC"],
+      upiHandles: [],
+      senderDomains: [],
+      websiteDomain: null,
+      logoUrl: null,
+      categorySlug: "banks",
+      isGlobal: true,
+    };
+    const apple = {
+      id: "apple",
+      userId: null,
+      canonicalName: "Apple",
+      aliases: ["Apple", "App Store"],
+      upiHandles: ["appleservices"],
+      senderDomains: [],
+      websiteDomain: "apple.com",
+      logoUrl: "/providers/apple.svg",
+      categorySlug: "shopping",
+      isGlobal: true,
+    };
+    const result = buildAnalyticsFromRows(
+      [
+        baseRow({
+          id: "apple-1",
+          amount: 799,
+          merchant: "HDFC Bank",
+          categorySlug: "banks",
+          providerId: "bank",
+          upiId: "appleservices.bdsi@hdfcbank",
+          description: "You have done a UPI txn. Check details!",
+          fingerprint: "apple-1",
+        }),
+      ],
+      [apple, hdfc],
+      [],
+      [],
+    );
+    assert.equal(result.transactions[0]?.merchant, "Apple");
+    assert.equal(result.transactions[0]?.category, "shopping");
+    assert.equal(result.merchantSpend[0]?.merchant, "Apple");
+    assert.equal(result.merchantSpend[0]?.total, 799);
+  });
 });
 
 describe("buildAnalyticsFromRows daily insights", () => {
