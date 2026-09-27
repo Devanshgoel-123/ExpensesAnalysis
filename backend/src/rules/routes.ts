@@ -101,6 +101,48 @@ rulesRouter.get("/suggestions", async (req, res) => {
   res.json({ suggestions });
 });
 
+rulesRouter.post("/untrack", async (req, res) => {
+  const name = String((req.body as { name?: string }).name ?? "").trim();
+  if (!name) {
+    res.status(400).json({ error: { message: "Enter a name" } });
+    return;
+  }
+  const store = await getStore();
+  const lower = name.toLowerCase();
+  const rules = await store.listRules(req.user!.id);
+  const matched = rules.filter((rule) => {
+    if (rule.setPayeeName?.toLowerCase() !== lower) return false;
+    return (
+      rule.setTags.includes("friend") ||
+      rule.setTags.includes("family") ||
+      rule.setCategorySlug === "family"
+    );
+  });
+  const txs = await store.listTransactions(req.user!.id);
+  let cleared = 0;
+  for (const tx of txs) {
+    const payeeMatch = tx.payee?.toLowerCase() === lower;
+    const familyMatch =
+      tx.categorySlug === "family" &&
+      (tx.payee?.toLowerCase() === lower || tx.merchant?.toLowerCase() === lower);
+    if (!payeeMatch && !familyMatch) continue;
+    await store.updateTransaction(req.user!.id, tx.id, {
+      ...(payeeMatch ? { payee: null } : {}),
+      ...(tx.categorySlug === "family" ? { categorySlug: null } : {}),
+    });
+    cleared += 1;
+  }
+  for (const rule of matched) {
+    await store.deleteRule(req.user!.id, rule.id);
+  }
+  await store.audit(req.user!.id, "person.removed", {
+    name,
+    removedRules: matched.length,
+    cleared,
+  });
+  res.json({ ok: true, removedRules: matched.length, cleared });
+});
+
 rulesRouter.delete(
   "/:id",
   validate(uuidParamSchema, "params"),

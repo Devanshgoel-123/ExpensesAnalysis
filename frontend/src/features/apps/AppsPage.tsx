@@ -82,11 +82,13 @@ export function AppsPage() {
             !(data.categories ?? []).some((category) => category.meta?.parent === group.slug) ? (
               <p className="meta">No apps in this category yet</p>
             ) : (
-              <div className="apps-grid">
+              <div className="apps-sections">
+                {(data.categories ?? []).some((category) => category.meta?.parent === group.slug) ? (
+                <div className="apps-subgrid">
                 {(data.categories ?? [])
                   .filter((category) => category.meta?.parent === group.slug)
                   .map((category) => (
-                    <article key={category.slug} className="app-card">
+                    <article key={category.slug} className="app-card app-card-sub">
                       <header className="app-card-head">
                         <BrandMark
                           name={category.label}
@@ -100,6 +102,10 @@ export function AppsPage() {
                       </header>
                     </article>
                   ))}
+                </div>
+                ) : null}
+                {group.apps.length > 0 ? (
+                <div className="apps-grid">
                 {group.apps.map(({ provider, total, count }) => (
                   <article key={provider.id} className="app-card">
                     <header className="app-card-head">
@@ -196,6 +202,8 @@ export function AppsPage() {
                     </form>
                   </article>
                 ))}
+                </div>
+                ) : null}
               </div>
             )}
           </Panel>

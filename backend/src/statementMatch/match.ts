@@ -94,19 +94,13 @@ export function findStatementGaps(input: {
   window: ScanWindow;
 }): StatementGaps {
   const lines = input.lines.filter((line) => inScanWindow(line.date, input.window));
-  const ledgerKeys = new Set(
-    input.ledger.map((row) => `${row.date}|${row.amount.toFixed(2)}|${row.type}`),
-  );
   const mailDays = new Set(input.mailDates);
 
   const missing: StatementGapLine[] = [];
   const noMail: StatementGapLine[] = [];
   for (const line of lines) {
     const around = [shiftIsoDate(line.date, -1), line.date, shiftIsoDate(line.date, 1)];
-    const inLedger = around.some((date) =>
-      ledgerKeys.has(`${date}|${line.amount.toFixed(2)}|${line.type}`),
-    );
-    if (!inLedger) missing.push(line);
+    if (!samePaymentRecorded(input.ledger, line)) missing.push(line);
     if (!around.some((date) => mailDays.has(date))) noMail.push(line);
   }
 
@@ -124,6 +118,44 @@ export function findStatementGaps(input: {
     noMailCount: noMail.length,
     noMail,
   };
+}
+
+/** Salary, tax refunds, and other bank credits are not the same event as a UPI debit. */
+export function isBankInflowNarration(description: string): boolean {
+  return /\b(neft|imps|rtgs|refund|payroll|salary)\b/i.test(description);
+}
+
+/**
+ * A statement or mail line is already in the ledger when the same amount and
+ * type exist that day or the day beside it. A UPI credit is also already
+ * recorded when that exact amount was stored as a debit the same day — that
+ * pair is one payment parsed twice, not money received.
+ */
+export function samePaymentRecorded(
+  ledger: Array<{ date: string; amount: number; type: string }>,
+  line: { date: string; amount: number; type: string; description: string },
+): boolean {
+  const around = new Set([
+    shiftIsoDate(line.date, -1),
+    line.date,
+    shiftIsoDate(line.date, 1),
+  ]);
+  const close = (amount: number) => Math.abs(amount - line.amount) < 0.009;
+  if (
+    ledger.some(
+      (row) => around.has(row.date) && close(row.amount) && row.type === line.type,
+    )
+  ) {
+    return true;
+  }
+  if (line.type === "credit" && isBankInflowNarration(line.description)) return false;
+  return ledger.some(
+    (row) =>
+      row.date === line.date &&
+      close(row.amount) &&
+      row.type !== line.type &&
+      (row.type === "debit" || row.type === "credit"),
+  );
 }
 
 /** Same VPA, ignoring case. A stored local part still matches the full id. */

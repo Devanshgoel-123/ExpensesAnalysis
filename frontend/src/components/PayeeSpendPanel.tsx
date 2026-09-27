@@ -8,14 +8,32 @@ import { formatShortDate } from "@/helpers/dates";
 import { LiveCounter } from "@/components/LiveCounter";
 import { SpotlightCard } from "@/components/SpotlightCard";
 
+interface PersonPayment {
+  date: string;
+  amount: number;
+  direction: "paid" | "received";
+}
+
 interface PayeeSpendPanelProps {
   items: PayeeSpend[];
   title: string;
   subtitle: string;
+  paymentsByName?: Record<string, PersonPayment[]>;
+  detailByName?: Record<string, string>;
+  onRemove?: (name: string) => void;
+  removingName?: string | null;
 }
 
-export function PayeeSpendPanel({ items, title, subtitle }: PayeeSpendPanelProps) {
-  const people = [...items].sort((a, b) => b.total - a.total);
+export function PayeeSpendPanel({
+  items,
+  title,
+  subtitle,
+  paymentsByName = {},
+  detailByName = {},
+  onRemove,
+  removingName,
+}: PayeeSpendPanelProps) {
+  const people = [...items].sort((a, b) => (b.lastDate || "").localeCompare(a.lastDate || ""));
 
   return (
     <SpotlightCard className="panel payee-panel">
@@ -41,34 +59,58 @@ export function PayeeSpendPanel({ items, title, subtitle }: PayeeSpendPanelProps
                 <div className="payee-top">
                   <div>
                     <h3 className="ui-header">{item.name}</h3>
+                    {detailByName[item.name.toLowerCase()] ? (
+                      <p className="meta">{detailByName[item.name.toLowerCase()]}</p>
+                    ) : null}
                     <p className="meta">
                       {item.count === 0
-                        ? "No payments found"
+                        ? "No payments yet"
                         : `${item.count} payment${item.count === 1 ? "" : "s"}`}
                     </p>
                   </div>
-                  <strong className="display-num sm">
-                    {item.count === 0 ? (
-                      "—"
-                    ) : (
-                      <LiveCounter
-                        value={item.total}
-                        format={(n) => formatInr(n)}
-                      />
-                    )}
-                  </strong>
+                  <div className="payee-flows">
+                    {item.paid > 0 ? (
+                      <strong className="display-num sm">
+                        Paid{" "}
+                        <LiveCounter value={item.paid} format={(n) => formatInr(n)} />
+                      </strong>
+                    ) : null}
+                    {item.received > 0 ? (
+                      <strong className="display-num sm payee-received">
+                        Received{" "}
+                        <LiveCounter value={item.received} format={(n) => formatInr(n)} />
+                      </strong>
+                    ) : null}
+                    {item.count === 0 ? <strong className="display-num sm">—</strong> : null}
+                  </div>
                 </div>
                 {item.lastDate ? (
                   <p className="meta" style={{ marginTop: "0.45rem" }}>
-                    Last paid {formatShortDate(item.lastDate)}
+                    Last on {formatShortDate(item.lastDate)}
                   </p>
                 ) : null}
-                {item.days.length > 0 ? (
-                  <div className="day-chips">
-                    {item.days.slice(0, 8).map((day) => (
-                      <span key={day}>{formatShortDate(day)}</span>
+                {onRemove ? (
+                  <button
+                    type="button"
+                    className="payee-remove"
+                    disabled={removingName === item.name}
+                    onClick={() => onRemove(item.name)}
+                  >
+                    {removingName === item.name ? "Removing…" : "Remove"}
+                  </button>
+                ) : null}
+                {(paymentsByName[item.name.toLowerCase()] ?? []).length > 0 ? (
+                  <ul className="payee-timeline">
+                    {(paymentsByName[item.name.toLowerCase()] ?? []).slice(0, 8).map((payment, index) => (
+                      <li key={`${payment.date}-${payment.direction}-${index}`}>
+                        <span>{formatShortDate(payment.date)}</span>
+                        <span className={payment.direction === "received" ? "payee-received" : undefined}>
+                          {payment.direction === "paid" ? "Paid" : "Received"}{" "}
+                          {formatInr(payment.amount)}
+                        </span>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 ) : null}
               </SpotlightCard>
             </motion.div>

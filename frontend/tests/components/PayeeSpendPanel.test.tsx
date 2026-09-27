@@ -12,6 +12,8 @@ describe("PayeeSpendPanel", () => {
           {
             name: "Deepan",
             total: 500,
+            paid: 500,
+            received: 0,
             count: 1,
             lastDate: "2026-08-01",
             days: ["2026-08-01"],

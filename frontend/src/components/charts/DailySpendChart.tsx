@@ -8,7 +8,7 @@ import {
   formatChartDay,
   formatChartWeekday,
 } from "@/helpers/dates";
-import { netDailySpend, normalizeDailySpend, type NetDay } from "@/helpers/finance";
+import { debitDailySpend, normalizeDailySpend } from "@/helpers/finance";
 import { Panel, PanelHead } from "@/components/ui/Panel";
 import { DetailBarChart, type ChartGuide, type DetailBarPoint } from "@/components/charts/DetailBarChart";
 import {
@@ -20,7 +20,7 @@ import {
 
 export interface DailySpendChartProps {
   data?: DailySpend[];
-  /** When set, each bar is that day's debits minus its credits. */
+  /** When set, each bar is that day's debits. */
   transactions?: Transaction[];
   dailyLimit?: number | null;
   insights?: DailyInsights;
@@ -37,11 +37,11 @@ export function DailySpendChart({
   dailyLimit,
   insights,
 }: DailySpendChartProps) {
-  const netDays = useMemo(
-    () => (transactions ? netDailySpend(transactions) : null),
+  const debitDays = useMemo(
+    () => (transactions ? debitDailySpend(transactions) : null),
     [transactions],
   );
-  const rows = netDays ?? normalizeDailySpend(data);
+  const rows = debitDays ?? normalizeDailySpend(data);
   const period = useMemo(() => {
     if (!transactions) return null;
     let debit = 0;
@@ -70,12 +70,7 @@ export function DailySpendChart({
       const toneLabel = spendToneLabel(tone, day.amount, limit);
       const compared = versusAverageCopy(day.amount, avg);
       const limited = versusLimitCopy(day.amount, limit);
-      const net = (day as NetDay).debit != null ? (day as NetDay) : null;
-      const formula =
-        net && net.credit > 0
-          ? `${formatInr(net.debit)} debit − ${formatInr(net.credit)} credit`
-          : null;
-      const details = [formula, compared, limited].filter(
+      const details = [compared, limited].filter(
         (line): line is string => Boolean(line),
       );
       const title = formatChartDate(day.date);
@@ -122,12 +117,12 @@ export function DailySpendChart({
         title="Daily spend"
         subtitle={
           period
-            ? `${formatInr(period.debit)} debit − ${formatInr(period.credit)} credit${
-                limit != null ? ` · limit ${formatInr(limit)}` : ""
-              }`
+            ? `${formatInr(period.debit)} spent${
+                period.credit > 0 ? ` · ${formatInr(period.credit)} received` : ""
+              }${limit != null ? ` · limit ${formatInr(limit)}` : ""}`
             : limit != null
-              ? `Debit minus credit · limit ${formatInr(limit)}`
-              : "Debit minus credit, by day"
+              ? `Money spent · limit ${formatInr(limit)}`
+              : "Money spent, by day"
         }
       />
 

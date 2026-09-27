@@ -301,7 +301,7 @@ export async function correctTransactionForUser(input: {
   transactionId: string;
   payee?: string;
   merchant?: string;
-  categorySlug?: string;
+  categorySlug?: string | null;
   providerId?: string | null;
   applyFuture?: boolean;
 }): Promise<{
@@ -316,7 +316,7 @@ export async function correctTransactionForUser(input: {
 
   let merchant = input.merchant;
   let categorySlug = input.categorySlug;
-  if (input.providerId) {
+  if (input.providerId && categorySlug !== null) {
     const provider = await store.getProviderById(input.providerId);
     if (provider) {
       merchant = merchant ?? provider.canonicalName;
@@ -327,7 +327,7 @@ export async function correctTransactionForUser(input: {
   const updated = await store.updateTransaction(input.userId, tx.id, {
     payee: input.payee,
     merchant,
-    categorySlug,
+    ...(categorySlug !== undefined ? { categorySlug } : {}),
     ...(input.providerId !== undefined ? { providerId: input.providerId } : {}),
     classificationSource: ClassificationSource.UserOverride,
     confidence: 1,

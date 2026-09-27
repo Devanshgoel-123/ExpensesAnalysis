@@ -112,6 +112,34 @@ describe("findStatementGaps", () => {
     assert.equal(gaps.noMailCount, 1);
   });
 
+  it("does not import a UPI credit that is already the same day's debit", () => {
+    const gaps = findStatementGaps({
+      lines: [credit],
+      ledger: [{ date: "2026-09-01", amount: 55000, type: "debit" }],
+      mailDates: ["2026-09-01"],
+      window,
+    });
+    assert.equal(gaps.missingCount, 0);
+  });
+
+  it("still lists a salary credit when a debit of the same amount exists", () => {
+    const gaps = findStatementGaps({
+      lines: [
+        {
+          ...credit,
+          date: "2026-09-02",
+          amount: 76955.6,
+          description: "NEFT CR-PAYROLL",
+        },
+      ],
+      ledger: [{ date: "2026-09-02", amount: 76955.6, type: "debit" }],
+      mailDates: ["2026-09-02"],
+      window,
+    });
+    assert.equal(gaps.missingCount, 1);
+    assert.equal(gaps.missingCreditCount, 1);
+  });
+
   it("treats a ledger row one day off as already imported", () => {
     const gaps = findStatementGaps({
       lines: [credit],

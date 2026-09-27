@@ -14,7 +14,7 @@ interface TxnAssignPickerProps {
   disabled?: boolean;
   onAssign?: (
     txn: Transaction,
-    patch: { categorySlug?: string; providerId?: string },
+    patch: { categorySlug?: string | null; providerId?: string | null },
   ) => void;
 }
 
@@ -141,6 +141,12 @@ export function TxnAssignPicker({
     setOpen(false);
   }
 
+  function resetCategory() {
+    if (!txn.id) return;
+    onAssign?.(txn, { categorySlug: null, providerId: null });
+    setOpen(false);
+  }
+
   function chooseApp(provider: Provider) {
     if (!txn.id || ignoreAppClick.current) return;
     onAssign?.(txn, {
@@ -205,6 +211,11 @@ export function TxnAssignPicker({
                     </li>
                   ))}
                 </ul>
+                {txn.category || labeled ? (
+                  <button type="button" className="txn-picker-reset" onClick={resetCategory}>
+                    Reset category
+                  </button>
+                ) : null}
               </div>
               <div className="txn-picker-col">
                 <p className="txn-picker-label">App</p>

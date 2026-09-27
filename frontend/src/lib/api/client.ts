@@ -126,6 +126,14 @@ export function createApiClient(token: string) {
     deleteRule: (id: string) =>
       requestVoid(`/api/rules/${id}`, { method: "DELETE", ...auth }),
 
+    untrackPerson: (name: string) =>
+      requestJson<{ ok: true; removedRules: number; cleared: number }>("/api/rules/untrack", {
+        method: "POST",
+        ...auth,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      }),
+
     fetchSuggestions: () =>
       requestJson<{
         suggestions: Array<{ label: string; count: number; sample: string }>;
@@ -329,7 +337,7 @@ export function createApiClient(token: string) {
     correctTransaction: (
       id: string,
       body: {
-        categorySlug?: string;
+        categorySlug?: string | null;
         providerId?: string | null;
         merchant?: string;
         applyFuture?: boolean;

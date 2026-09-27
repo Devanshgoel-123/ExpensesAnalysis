@@ -35,10 +35,7 @@ export function OverviewPage() {
   const categorySpend = positiveTotal(allCategoryRows.map((row) => row.total));
   const merchantSpend = positiveTotal((data.merchantSpend ?? []).map((row) => row.total));
   const upiSpend = positiveTotal((data.upiRanking ?? []).map((row) => row.total));
-  const netHint =
-    data.summary.net >= 0
-      ? `${formatInr(data.summary.net)} net in`
-      : `${formatInr(Math.abs(data.summary.net))} net out`;
+  const spentHint = `${formatInr(data.summary.totalSpent)} spent · ${formatInr(data.summary.totalReceived)} received`;
 
   return (
     <div className="view-stack relative">
@@ -52,7 +49,7 @@ export function OverviewPage() {
             <p className="stat-kicker mb-2">Overview</p>
             <h2 className="month-label">{formatMonthTitle(month)}</h2>
             <p className="meta mt-1.5 max-w-xl">
-              {netHint} · {data.summary.transactionCount} transactions ·{" "}
+              {spentHint} · {data.summary.transactionCount} transactions ·{" "}
               <Link
                 href={pathForView("insights")}
                 className="text-[var(--primary)] underline-offset-2 hover:underline"

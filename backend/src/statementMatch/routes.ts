@@ -11,7 +11,7 @@ import { parsePasswordBodySchema } from "../validators/imports.js";
 import { z } from "zod";
 import { poolingScanWindow, toIstCalendarDate } from "../helpers/index.js";
 import { applyUpiBatch, getMatchJob, startMatchJob } from "./applyBatch.js";
-import { importMissingLines } from "./importMissing.js";
+import { linkStatementParties } from "./linkStatementParties.js";
 import {
   findStatementGaps,
   inScanWindow,
@@ -82,10 +82,6 @@ statementMatchRouter.post(
     const store = await getStore();
     const providers = await store.listProviders(req.user!.id);
     const window = poolingScanWindow();
-    const ledger = await store.listTransactions(req.user!.id, {
-      from: window.from,
-      to: window.to,
-    });
     const vendors: VendorRef[] = providers.map((provider) => ({
       id: provider.id,
       canonicalName: provider.canonicalName,
@@ -102,7 +98,12 @@ statementMatchRouter.post(
         description: txn.description,
         upiId: txn.upiId,
       }));
-    const timeline: TimelineRow[] = ledger.map((row) => ({
+    const linked = await linkStatementParties(req.user!.id, lines);
+    const ledgerAfter = await store.listTransactions(req.user!.id, {
+      from: window.from,
+      to: window.to,
+    });
+    const timeline: TimelineRow[] = ledgerAfter.map((row) => ({
       id: row.id,
       date: row.date,
       amount: row.amount,
@@ -135,7 +136,9 @@ statementMatchRouter.post(
       suggestions,
       gaps,
       lines,
-      note: "Nothing was written yet. Approving saves the UPI id on the vendor, then labels every matching payment in the mail-tracking window.",
+      note: linked.linked > 0
+        ? `Filled the person and UPI id on ${linked.linked} payment${linked.linked === 1 ? "" : "s"} the bank mail had left blank.`
+        : "Approving saves the UPI id on the vendor, then labels every matching payment in the mail-tracking window.",
     });
   },
 );

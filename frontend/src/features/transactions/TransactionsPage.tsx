@@ -27,27 +27,36 @@ export function TransactionsPage() {
   const onAssign = useCallback(
     async (
       txn: Transaction,
-      patch: { categorySlug?: string; providerId?: string },
+      patch: { categorySlug?: string | null; providerId?: string | null },
     ) => {
       if (!api || !txn.id) return;
+      const clearing = patch.categorySlug === null;
       const provider = patch.providerId
         ? providers.find((item) => item.id === patch.providerId)
         : undefined;
-      const slug = patch.categorySlug ?? provider?.categorySlug ?? txn.category;
-      const label =
-        data?.categories?.find((category) => category.slug === slug)?.label ??
-        txn.categoryLabel;
+      const slug = clearing
+        ? null
+        : (patch.categorySlug ?? provider?.categorySlug ?? txn.category);
+      const label = clearing
+        ? null
+        : (data?.categories?.find((category) => category.slug === slug)?.label ??
+          txn.categoryLabel);
       const next: Transaction = {
         ...txn,
         category: slug,
         categoryLabel: label,
-        providerId: patch.providerId !== undefined ? patch.providerId : txn.providerId,
+        providerId: clearing
+          ? null
+          : patch.providerId !== undefined
+            ? patch.providerId
+            : txn.providerId,
         merchant:
           provider && provider.categorySlug !== "banks"
             ? provider.canonicalName
             : txn.merchant,
-        logoUrl:
-          provider && provider.categorySlug !== "banks"
+        logoUrl: clearing
+          ? null
+          : provider && provider.categorySlug !== "banks"
             ? provider.logoUrl
             : patch.providerId === null
               ? null

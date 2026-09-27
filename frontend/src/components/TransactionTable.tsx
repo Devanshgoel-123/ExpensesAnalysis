@@ -18,7 +18,7 @@ interface TransactionTableProps {
   assignError?: string | null;
   onAssign?: (
     txn: Transaction,
-    patch: { categorySlug?: string; providerId?: string },
+    patch: { categorySlug?: string | null; providerId?: string | null },
   ) => void;
   deletingId?: string | null;
   onDelete?: (txn: Transaction) => void;

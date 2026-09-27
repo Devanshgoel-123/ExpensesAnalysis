@@ -207,22 +207,14 @@ export function buildAnalyticsFromRows(
   const credits = rows.filter((t) => t.type === "credit");
 
   const debitByDay = new Map<string, number>();
-  const creditByDay = new Map<string, number>();
   for (const t of rows) {
-    if (t.type === "debit") {
-      debitByDay.set(t.date, (debitByDay.get(t.date) ?? 0) + Math.abs(t.amount));
-    } else if (t.type === "credit") {
-      creditByDay.set(t.date, (creditByDay.get(t.date) ?? 0) + Math.abs(t.amount));
-    }
+    if (t.type !== "debit") continue;
+    debitByDay.set(t.date, (debitByDay.get(t.date) ?? 0) + Math.abs(t.amount));
   }
-  const dailyDates = new Set([...debitByDay.keys(), ...creditByDay.keys()]);
-  const daily: DailySpend[] = [...dailyDates]
-    .sort((a, b) => a.localeCompare(b))
-    .map((date) => ({
-      date,
-      amount: round2((debitByDay.get(date) ?? 0) - (creditByDay.get(date) ?? 0)),
-    }))
-    .filter((day) => day.amount !== 0);
+  const daily: DailySpend[] = [...debitByDay.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, amount]) => ({ date, amount: round2(amount) }))
+    .filter((day) => day.amount > 0);
 
   const upiMap = new Map<string, UpiRanking>();
   for (const t of rows) {
@@ -302,6 +294,8 @@ export function buildAnalyticsFromRows(
     payeeMap.set(name, {
       name,
       total: 0,
+      paid: 0,
+      received: 0,
       count: 0,
       lastDate: "",
       days: [],
@@ -313,7 +307,9 @@ export function buildAnalyticsFromRows(
     const bucket = payeeMap.get(t.payee);
     if (!bucket) continue;
     bucket.total = round2(bucket.total + signedAmount(t));
-    if (t.type === "debit") bucket.count += 1;
+    bucket.count += 1;
+    if (t.type === "debit") bucket.paid = round2(bucket.paid + t.amount);
+    else bucket.received = round2(bucket.received + t.amount);
     if (!bucket.days.includes(t.date)) bucket.days.push(t.date);
     if (!bucket.lastDate || t.date > bucket.lastDate) bucket.lastDate = t.date;
   }
@@ -334,7 +330,7 @@ export function buildAnalyticsFromRows(
 
   const grossSpent = round2(debits.reduce((sum, t) => sum + t.amount, 0));
   const totalReceived = round2(credits.reduce((sum, t) => sum + t.amount, 0));
-  const totalSpent = round2(grossSpent - totalReceived);
+  const totalSpent = grossSpent;
   const days = daily.length || 1;
 
   const summary: Summary = {

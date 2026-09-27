@@ -45,7 +45,12 @@ export interface MerchantSpend {
 
 export interface PayeeSpend {
   name: string;
+  /** Debits minus credits. */
   total: number;
+  /** Money paid to this person. */
+  paid: number;
+  /** Money received from this person. */
+  received: number;
   count: number;
   lastDate: string;
   days: string[];

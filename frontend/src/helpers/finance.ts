@@ -141,14 +141,21 @@ export function mergeFamilyPeople(
       map.set(key, {
         name,
         total: signed,
-        count: txn.type === TxType.Debit ? 1 : 0,
+        paid: txn.type === TxType.Debit ? txn.amount : 0,
+        received: txn.type === TxType.Credit ? txn.amount : 0,
+        count: 1,
         lastDate: txn.date,
         days: [txn.date],
       });
       continue;
     }
     existing.total = Math.round((existing.total + signed) * 100) / 100;
-    if (txn.type === TxType.Debit) existing.count += 1;
+    existing.count += 1;
+    if (txn.type === TxType.Debit) {
+      existing.paid = Math.round((existing.paid + txn.amount) * 100) / 100;
+    } else {
+      existing.received = Math.round((existing.received + txn.amount) * 100) / 100;
+    }
     if (!existing.days.includes(txn.date)) existing.days.push(txn.date);
     if (!existing.lastDate || txn.date > existing.lastDate) existing.lastDate = txn.date;
   }
@@ -164,9 +171,9 @@ export function aggregateMonthlySpend(
     if (txn.type !== TxType.Debit && txn.type !== TxType.Credit) continue;
     const key = monthKey(txn.date);
     if (!ISO_MONTH_RE.test(key)) continue;
+    if (txn.type !== TxType.Debit) continue;
     const amount = Math.abs(txn.amount);
-    const signed = txn.type === TxType.Credit ? -amount : amount;
-    totals.set(key, (totals.get(key) ?? 0) + signed);
+    totals.set(key, (totals.get(key) ?? 0) + amount);
   }
   return [...totals.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
@@ -177,37 +184,23 @@ export function aggregateMonthlySpend(
     }));
 }
 
-export interface NetDay extends DailySpend {
-  debit: number;
-  credit: number;
-}
-
 function roundMoney(amount: number): number {
   return Math.round(amount * 100) / 100;
 }
 
-/** Each day is that day's debit total minus its credit total. */
-export function netDailySpend(transactions: Transaction[]): NetDay[] {
+/** Each day is the money that left the account. Credits stay on Received. */
+export function debitDailySpend(transactions: Transaction[]): DailySpend[] {
   const debits = new Map<string, number>();
-  const credits = new Map<string, number>();
   for (const txn of transactions) {
+    if (txn.type !== TxType.Debit) continue;
     const amount = Math.abs(txn.amount);
-    if (txn.type === TxType.Debit) {
-      debits.set(txn.date, (debits.get(txn.date) ?? 0) + amount);
-    } else if (txn.type === TxType.Credit) {
-      credits.set(txn.date, (credits.get(txn.date) ?? 0) + amount);
-    }
+    debits.set(txn.date, (debits.get(txn.date) ?? 0) + amount);
   }
-  const dates = new Set([...debits.keys(), ...credits.keys()]);
-  return [...dates]
-    .filter((date) => toIsoDate(date) != null)
-    .sort((a, b) => dateSortKey(a).localeCompare(dateSortKey(b)))
-    .map((date) => {
-      const debit = roundMoney(debits.get(date) ?? 0);
-      const credit = roundMoney(credits.get(date) ?? 0);
-      return { date, debit, credit, amount: roundMoney(debit - credit) };
-    })
-    .filter((day) => day.amount !== 0);
+  return [...debits.entries()]
+    .filter(([date]) => toIsoDate(date) != null)
+    .sort(([a], [b]) => dateSortKey(a).localeCompare(dateSortKey(b)))
+    .map(([date, amount]) => ({ date, amount: roundMoney(amount) }))
+    .filter((day) => day.amount > 0);
 }
 
 /** Normalize daily rows for charts — valid dates, chronological order. */

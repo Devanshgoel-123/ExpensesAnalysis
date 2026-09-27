@@ -412,10 +412,8 @@ export function buildAnalytics(
   const credits = transactions.filter((t) => t.type === "credit");
 
   const dailyMap = new Map<string, number>();
-  for (const t of transactions) {
-    if (t.type !== "debit" && t.type !== "credit") continue;
-    const signed = t.type === "credit" ? -t.amount : t.amount;
-    dailyMap.set(t.date, (dailyMap.get(t.date) ?? 0) + signed);
+  for (const t of debits) {
+    dailyMap.set(t.date, (dailyMap.get(t.date) ?? 0) + t.amount);
   }
 
   const daily: DailySpend[] = [...dailyMap.entries()]
@@ -424,7 +422,7 @@ export function buildAnalytics(
       date,
       amount: Math.round(amount * 100) / 100,
     }))
-    .filter((day) => day.amount !== 0);
+    .filter((day) => day.amount > 0);
 
   const upiMap = new Map<string, UpiRanking>();
   for (const t of transactions) {
@@ -483,6 +481,8 @@ export function buildAnalytics(
       bucket = {
         name: t.payee,
         total: 0,
+        paid: 0,
+        received: 0,
         count: 0,
         lastDate: "",
         days: [],
@@ -490,7 +490,9 @@ export function buildAnalytics(
       payeeMap.set(t.payee, bucket);
     }
     bucket.total = Math.round((bucket.total + signed) * 100) / 100;
-    if (t.type === "debit") bucket.count += 1;
+    bucket.count += 1;
+    if (t.type === "debit") bucket.paid = Math.round((bucket.paid + t.amount) * 100) / 100;
+    else bucket.received = Math.round((bucket.received + t.amount) * 100) / 100;
     if (!bucket.days.includes(t.date)) bucket.days.push(t.date);
     if (!bucket.lastDate || t.date > bucket.lastDate) bucket.lastDate = t.date;
   }
@@ -529,7 +531,7 @@ export function buildAnalytics(
     Math.round(debits.reduce((sum, t) => sum + t.amount, 0) * 100) / 100;
   const totalReceived =
     Math.round(credits.reduce((sum, t) => sum + t.amount, 0) * 100) / 100;
-  const totalSpent = Math.round((grossSpent - totalReceived) * 100) / 100;
+  const totalSpent = grossSpent;
   const days = daily.length || 1;
 
   const dailyInsights = buildDailyInsights(daily, null);

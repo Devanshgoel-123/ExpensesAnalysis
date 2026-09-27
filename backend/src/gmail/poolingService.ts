@@ -44,6 +44,7 @@ import {
 import { gmailLog } from "../logger/gmail.js";
 import { parseBankAlertEmail } from "./alertParser.js";
 import { counterpartyFromNarration, merchantIsAccountBank } from "../narration/party.js";
+import { isBankInflowNarration } from "../statementMatch/match.js";
 import {
   buildAlertQuery,
   buildStatementQuery,
@@ -196,6 +197,35 @@ async function processAlertMessage(input: {
 
   if (!parsed.amount || !parsed.type) {
     return "stored";
+  }
+
+  const sameDay = await store.listTransactions(input.userId, {
+    from: txDate,
+    to: txDate,
+  });
+  const mirrorsDebit =
+    parsed.type === TxType.Credit &&
+    !isBankInflowNarration(parsed.description) &&
+    !isBankInflowNarration(`${details.subject}\n${details.bodyText}`) &&
+    sameDay.some(
+      (tx) =>
+        tx.type === TxType.Debit &&
+        Math.abs(tx.amount - parsed.amount!) < 0.009 &&
+        tx.description !== parsed.description,
+    );
+  if (mirrorsDebit) return "skipped";
+
+  if (parsed.type === TxType.Debit) {
+    const mirrors = sameDay.filter(
+      (tx) =>
+        tx.type === TxType.Credit &&
+        Math.abs(tx.amount - parsed.amount!) < 0.009 &&
+        tx.description !== parsed.description &&
+        !isBankInflowNarration(tx.description),
+    );
+    for (const tx of mirrors) {
+      await store.deleteTransaction(input.userId, tx.id);
+    }
   }
 
   const account = await store.getOrCreateAccount(input.userId);

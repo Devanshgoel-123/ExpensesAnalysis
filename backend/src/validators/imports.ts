@@ -19,7 +19,7 @@ export const dashboardQuerySchema = z.object({
 export const correctTransactionBodySchema = z.object({
   payee: z.string().trim().min(1).max(200).optional(),
   merchant: z.string().trim().min(1).max(200).optional(),
-  categorySlug: z.string().trim().min(1).max(64).optional(),
+  categorySlug: z.string().trim().min(1).max(64).nullable().optional(),
   providerId: z.string().uuid().optional().nullable(),
   applyFuture: z.boolean().optional().default(false),
 });
