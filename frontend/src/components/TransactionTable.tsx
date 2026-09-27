@@ -56,6 +56,13 @@ function spendTitle(txn: Transaction, providers: Provider[]): {
   return { title: merchant, logoUrl: txn.logoUrl ?? null, unnamed: false };
 }
 
+function isUnclassified(txn: Transaction, providers: Provider[]): boolean {
+  const provider = providers.find((item) => item.id === txn.providerId);
+  if (provider && provider.categorySlug && provider.categorySlug !== "banks") return false;
+  if (txn.category && txn.category !== "other" && txn.category !== "banks") return false;
+  return true;
+}
+
 export function TransactionTable({
   items,
   categories,
@@ -71,6 +78,11 @@ export function TransactionTable({
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [minAmount, setMinAmount] = useState("");
+  const [maxAmount, setMaxAmount] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [unclassifiedOnly, setUnclassifiedOnly] = useState(false);
 
   const categoryOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -85,11 +97,18 @@ export function TransactionTable({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const min = minAmount.trim() === "" ? null : Number(minAmount);
+    const max = maxAmount.trim() === "" ? null : Number(maxAmount);
     return items.filter((txn) => {
       if (typeFilter !== "all" && txn.type !== typeFilter) return false;
+      if (unclassifiedOnly && !isUnclassified(txn, providers)) return false;
       if (categoryFilter !== "all" && (txn.category ?? "other") !== categoryFilter) {
         return false;
       }
+      if (min != null && Number.isFinite(min) && txn.amount < min) return false;
+      if (max != null && Number.isFinite(max) && txn.amount > max) return false;
+      if (fromDate && txn.date < fromDate) return false;
+      if (toDate && txn.date > toDate) return false;
       if (!q) return true;
       const hay = [
         txn.merchant,
@@ -103,7 +122,7 @@ export function TransactionTable({
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [items, query, categoryFilter, typeFilter]);
+  }, [items, query, categoryFilter, typeFilter, providers, unclassifiedOnly, minAmount, maxAmount, fromDate, toDate]);
 
   const sorted = useMemo(() => {
     const next = [...filtered];
@@ -146,7 +165,7 @@ export function TransactionTable({
     return (
       <TxnAssignPicker
         txn={txn}
-        categories={categoryOptions}
+        categories={categories}
         providers={providers}
         disabled={!txn.id || !onAssign || assigningId === txn.id}
         onAssign={onAssign}
@@ -224,6 +243,46 @@ export function TransactionTable({
               </option>
             ))}
           </select>
+        </label>
+        <button
+          type="button"
+          className={`sort-chip ${unclassifiedOnly ? "active" : ""}`}
+          aria-pressed={unclassifiedOnly}
+          onClick={() => setUnclassifiedOnly((current) => !current)}
+        >
+          Unclassified
+        </button>
+      </div>
+      <div className="txn-filters">
+        <label className="field field-compact">
+          <span>From</span>
+          <input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} />
+        </label>
+        <label className="field field-compact">
+          <span>To</span>
+          <input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} />
+        </label>
+        <label className="field field-compact">
+          <span>Min ₹</span>
+          <input
+            type="number"
+            min="0"
+            inputMode="decimal"
+            value={minAmount}
+            placeholder="0"
+            onChange={(event) => setMinAmount(event.target.value)}
+          />
+        </label>
+        <label className="field field-compact">
+          <span>Max ₹</span>
+          <input
+            type="number"
+            min="0"
+            inputMode="decimal"
+            value={maxAmount}
+            placeholder="Any"
+            onChange={(event) => setMaxAmount(event.target.value)}
+          />
         </label>
       </div>
 

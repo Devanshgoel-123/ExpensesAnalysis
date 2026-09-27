@@ -100,6 +100,24 @@
   max-width: 280px;
 }
 
+.txn-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: end;
+  margin-bottom: 0.85rem;
+}
+
+.txn-filters .field {
+  min-width: 7.5rem;
+}
+
+.txn-filters input {
+  min-height: 2.15rem;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.8rem;
+}
+
 .type-filter {
   display: flex;
   flex-wrap: wrap;
@@ -375,7 +393,8 @@ td.credit,
   width: 100%;
 }
 
-.statement-match-table col.col-upi { width: 32%; }
+.statement-match-table col.col-check { width: 2.4rem; }
+.statement-match-table col.col-upi { width: 30%; }
 .statement-match-table col.col-review { width: 28%; }
 .statement-match-table col.col-vendor { width: 22%; }
 .statement-match-table col.col-actions { width: 18%; }

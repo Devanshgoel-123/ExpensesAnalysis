@@ -5,16 +5,16 @@ import { requireAuth } from "../auth/service.js";
 import { getStore } from "../db/index.js";
 import { AppError } from "../errors/AppError.js";
 import { extractTextFromPdf } from "../parser.js";
-import { ClassificationSource } from "../enums/index.js";
 import { uploadRateLimiter } from "../middleware/rateLimit.js";
 import { validate } from "../middleware/validate.js";
 import { parsePasswordBodySchema } from "../validators/imports.js";
 import { z } from "zod";
-import { poolingScanWindow } from "../helpers/index.js";
+import { poolingScanWindow, toIstCalendarDate } from "../helpers/index.js";
+import { applyUpiBatch, getMatchJob, startMatchJob } from "./applyBatch.js";
 import {
+  findStatementGaps,
   inScanWindow,
-  normalizeToken,
-  planUpiApply,
+  shiftIsoDate,
   summarizeSuggestions,
   type StatementLine,
   type TimelineRow,
@@ -38,6 +38,19 @@ const applySchema = z.object({
   upiId: z.string().trim().min(3).max(120),
   providerId: z.string().uuid(),
   lines: z.array(lineSchema).max(5000),
+});
+
+const applyBatchSchema = z.object({
+  lines: z.array(lineSchema).max(5000),
+  items: z
+    .array(
+      z.object({
+        upiId: z.string().trim().min(3).max(120),
+        providerId: z.string().uuid(),
+      }),
+    )
+    .min(1)
+    .max(100),
 });
 
 export const statementMatchRouter = Router();
@@ -88,12 +101,27 @@ statementMatchRouter.post(
     }));
     const suggestions = summarizeSuggestions(lines, vendors, timeline, window);
     const outsideWindow = lines.filter((line) => !inScanWindow(line.date, window)).length;
+    const mails = await store.listMailMessages(
+      req.user!.id,
+      shiftIsoDate(window.from, -1),
+      shiftIsoDate(window.to, 1),
+    );
+    const mailDates = mails
+      .map((mail) => toIstCalendarDate(mail.receivedAt))
+      .filter((day): day is string => Boolean(day));
+    const gaps = findStatementGaps({
+      lines,
+      ledger: timeline,
+      mailDates,
+      window,
+    });
     res.json({
       filename: file.originalname,
       lineCount: lines.length,
       outsideWindow,
       window,
       suggestions,
+      gaps,
       lines,
       note: "Nothing was written yet. Approving saves the UPI id on the vendor, then labels every matching payment in the mail-tracking window.",
     });
@@ -110,69 +138,34 @@ statementMatchRouter.post(
     if (!provider || (!provider.isGlobal && provider.userId !== req.user!.id)) {
       throw AppError.notFound("App not found");
     }
-
-    const trimmed = body.upiId.trim();
-    const window = poolingScanWindow();
-    const alreadySaved = provider.upiHandles.some(
-      (handle) => normalizeToken(handle) === normalizeToken(trimmed),
-    );
-    if (!alreadySaved) {
-      await store.upsertProvider({
-        ...provider,
-        upiHandles: [...provider.upiHandles, trimmed],
-      });
-    }
-
-    const ledger = await store.listTransactions(req.user!.id, {
-      from: window.from,
-      to: window.to,
-    });
-    const plan = planUpiApply({
-      upiId: trimmed,
-      providerId: provider.id,
-      lines: body.lines,
-      ledger: ledger.map((row) => ({
-        id: row.id,
-        date: row.date,
-        amount: row.amount,
-        type: row.type,
-        upiId: row.upiId,
-        description: row.description,
-        providerId: row.providerId,
-      })),
-      window,
-    });
-
-    const patch = {
-      merchant: provider.canonicalName,
-      providerId: provider.id,
-      categorySlug: provider.categorySlug ?? undefined,
-      upiId: trimmed,
-      classificationSource: ClassificationSource.UserOverride,
-      confidence: 1,
-    };
-    for (const id of [...plan.statementIds, ...plan.timelineIds]) {
-      await store.updateTransaction(req.user!.id, id, patch);
-    }
-
-    await store.audit(req.user!.id, "statement.match_applied", {
-      upiId: trimmed,
-      providerId: provider.id,
-      updated: plan.statementIds.length,
-      timelineUpdated: plan.timelineIds.length,
-      ambiguous: plan.ambiguous,
-      unmatched: plan.unmatched,
-      window,
-    });
-
+    const result = await applyUpiBatch(req.user!.id, body.lines, [
+      { upiId: body.upiId, providerId: body.providerId },
+    ]);
+    const applied = result.applied[0];
     res.json({
       providerName: provider.canonicalName,
-      updated: plan.statementIds.length,
-      timelineUpdated: plan.timelineIds.length,
-      ambiguous: plan.ambiguous,
-      unmatched: plan.unmatched,
-      outsideWindow: plan.outsideWindow,
-      window,
+      updated: applied?.updated ?? 0,
+      timelineUpdated: applied?.timelineUpdated ?? 0,
+      ambiguous: applied?.ambiguous ?? 0,
+      unmatched: applied?.unmatched ?? 0,
+      outsideWindow: applied?.outsideWindow ?? 0,
+      window: poolingScanWindow(),
     });
   },
 );
+
+statementMatchRouter.post(
+  "/apply-batch",
+  validate(applyBatchSchema),
+  (req, res) => {
+    const body = req.body as z.infer<typeof applyBatchSchema>;
+    const job = startMatchJob(req.user!.id, body.lines, body.items);
+    res.status(202).json(job);
+  },
+);
+
+statementMatchRouter.get("/apply-batch/:jobId", (req, res) => {
+  const job = getMatchJob(req.user!.id, String(req.params.jobId ?? ""));
+  if (!job) throw AppError.notFound("Approval not found");
+  res.json(job);
+});

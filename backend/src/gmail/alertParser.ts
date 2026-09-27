@@ -20,25 +20,37 @@ const AMOUNT = String.raw`([0-9][0-9,]*(?:\.[0-9]{1,2})?)`;
 
 const MONEY = String.raw`(?:rs\.?|inr|₹)`;
 
-const DEBIT_PATTERNS = [
-  new RegExp(String.raw`${MONEY}\s*${AMOUNT}\s*(?:has been|is|was)?\s*debited`, "i"),
-  new RegExp(String.raw`debited\s*(?:with|by|for)?\s*${MONEY}?\s*${AMOUNT}`, "i"),
-  new RegExp(String.raw`(?:spent|paid)\s*${MONEY}?\s*${AMOUNT}`, "i"),
-  new RegExp(String.raw`debit\s*(?:of|inr|rs\.?)?\s*${AMOUNT}`, "i"),
-];
+/** A few ordinary words may sit between the verb and the amount. */
+const WORD_GAP = String.raw`(?:\s+\S+){0,8}\s*`;
 
-const CREDIT_PATTERNS = [
-  new RegExp(String.raw`${MONEY}\s*${AMOUNT}\s*(?:has been|is|was)?\s*credited`, "i"),
-  new RegExp(String.raw`credited\s*(?:with|by|to|for)?\s*${MONEY}?\s*${AMOUNT}`, "i"),
-  new RegExp(String.raw`credit\s*(?:of|inr|rs\.?)?\s*${AMOUNT}`, "i"),
-  new RegExp(
-    String.raw`received(?:\s+[a-z]+){0,6}\s*${MONEY}\s*${AMOUNT}`,
-    "i",
-  ),
-  new RegExp(String.raw`(?:deposited|deposit)\s*(?:of\s*)?${MONEY}?\s*${AMOUNT}`, "i"),
-];
+const CREDIT_WORDS = ["credited", "credit", "received", "deposited", "deposit"];
+const DEBIT_WORDS = ["debited", "debit", "spent", "paid", "withdrawn"];
 
 const RUPEE_AMOUNT = new RegExp(String.raw`${MONEY}\s*${AMOUNT}`, "i");
+
+function amountBeside(text: string, keyword: string): number | null {
+  const word = `\\b${keyword}\\b`;
+  const patterns = [
+    new RegExp(`${MONEY}\\s*${AMOUNT}${WORD_GAP}${word}`, "i"),
+    new RegExp(`${word}${WORD_GAP}${MONEY}\\s*${AMOUNT}`, "i"),
+    new RegExp(`${word}\\s+(?:of\\s+)?${AMOUNT}`, "i"),
+  ];
+  for (const pattern of patterns) {
+    const raw = text.match(pattern)?.[1];
+    if (!raw) continue;
+    const amount = parseInrAmount(raw);
+    if (amount != null && amount > 0) return amount;
+  }
+  return null;
+}
+
+function firstAmountBeside(text: string, words: string[]): number | null {
+  for (const word of words) {
+    const amount = amountBeside(text, word);
+    if (amount != null) return amount;
+  }
+  return null;
+}
 
 function textLooksLikeCredit(text: string): boolean {
   return /\b(credited|credit\s+of|you have received|payment received|money received|deposited|neft\s*cr|imps\s*cr|rtgs\s*cr)\b/i.test(
@@ -100,7 +112,7 @@ function parseAlertTransactionDate(text: string): string | null {
   const normalized = text.replace(/\s+/g, " ");
 
   const numeric = normalized.match(
-    /\bon\s+(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/i,
+    /\b(?:on|date)\s*:?\s*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/i,
   );
   if (numeric) {
     const day = Number(numeric[1]);
@@ -137,33 +149,22 @@ export function parseBankAlertEmail(
   const date = parseAlertTransactionDate(text);
   const creditish = textLooksLikeCredit(text) && !textLooksLikeDebit(text);
 
-  function matchAmount(patterns: RegExp[]): number | null {
-    for (const pattern of patterns) {
-      const match = text.match(pattern);
-      const raw = match?.[1];
-      if (!raw) continue;
-      const amount = parseInrAmount(raw);
-      if (amount != null) return amount;
-    }
-    return null;
-  }
-
   if (creditish) {
     const rupee = text.match(RUPEE_AMOUNT);
     const amount =
-      matchAmount(CREDIT_PATTERNS) ??
+      firstAmountBeside(text, CREDIT_WORDS) ??
       (rupee?.[1] ? parseInrAmount(rupee[1]) : null);
     if (amount != null && amount > 0) {
       return { amount, type: TxType.Credit, currency: DEFAULT_CURRENCY, description, date };
     }
   }
 
-  const debitAmount = matchAmount(DEBIT_PATTERNS);
+  const debitAmount = firstAmountBeside(text, DEBIT_WORDS);
   if (debitAmount != null) {
     return { amount: debitAmount, type: TxType.Debit, currency: DEFAULT_CURRENCY, description, date };
   }
 
-  const creditAmount = matchAmount(CREDIT_PATTERNS);
+  const creditAmount = firstAmountBeside(text, CREDIT_WORDS);
   if (creditAmount != null) {
     return { amount: creditAmount, type: TxType.Credit, currency: DEFAULT_CURRENCY, description, date };
   }

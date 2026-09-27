@@ -6,13 +6,16 @@ export const CategorySlug = {
   Healthcare: "healthcare",
   Family: "family",
   Furniture: "furniture",
-  Rent: "rent",
   CookMaid: "cook-maid",
   Household: "household",
+  Rent: "rent",
+  Brokerage: "brokerage",
   Outing: "outing",
   Investments: "investments",
   Cigarettes: "cigarettes",
   Banks: "banks",
+  Personal: "personal",
+  RandomExpense: "random-expense",
   Other: "other",
 } as const;
 

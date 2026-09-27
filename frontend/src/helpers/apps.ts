@@ -7,25 +7,24 @@ export const APP_CATEGORY_ORDER = [
   CategorySlug.Shopping,
   CategorySlug.Travel,
   CategorySlug.Healthcare,
-  CategorySlug.Family,
-  CategorySlug.Furniture,
-  CategorySlug.Rent,
-  CategorySlug.CookMaid,
   CategorySlug.Household,
   CategorySlug.Outing,
   CategorySlug.Investments,
   CategorySlug.Cigarettes,
-  CategorySlug.Banks,
   CategorySlug.Other,
 ] as const;
 
 const PINNED_EMPTY_SLUGS = new Set<string>([
   CategorySlug.Healthcare,
+  CategorySlug.Household,
+]);
+
+const HIDDEN_APP_SLUGS = new Set<string>([
   CategorySlug.Family,
   CategorySlug.Furniture,
-  CategorySlug.Rent,
   CategorySlug.CookMaid,
-  CategorySlug.Household,
+  CategorySlug.Rent,
+  CategorySlug.Banks,
 ]);
 
 const KNOWN_SLUGS = new Set<string>(Object.values(CategorySlug));
@@ -90,7 +89,7 @@ export function groupAppsByCategory(
 
   const groups = new Map<string, AppSpend[]>();
   for (const provider of providers) {
-    if (!provider.categorySlug) continue;
+    if (!provider.categorySlug || HIDDEN_APP_SLUGS.has(provider.categorySlug)) continue;
     if (isHiddenApp(provider.canonicalName)) continue;
     const slug = provider.categorySlug;
     const byId = provider.id ? spend.get(provider.id) : undefined;
@@ -107,6 +106,7 @@ export function groupAppsByCategory(
   const ordered = [...APP_CATEGORY_ORDER, ...extras];
 
   return ordered.flatMap((slug) => {
+    if (HIDDEN_APP_SLUGS.has(slug)) return [];
     const apps = (groups.get(slug) ?? []).sort((a, b) => {
       if (b.total !== a.total) return b.total - a.total;
       return a.provider.canonicalName.localeCompare(b.provider.canonicalName);
@@ -168,6 +168,15 @@ export function groupTransactionsByDay(
     .map(([date, items]) => ({ date, items }));
 }
 
+const CATEGORY_MARKS: Record<string, string> = {
+  rent: "/providers/rent.svg",
+  brokerage: "/providers/brokerage.svg",
+};
+
+export function logoForCategory(slug: string): string | null {
+  return CATEGORY_MARKS[slug] ?? null;
+}
+
 export function logoForAppName(name: string): string | null {
   const key = name.trim().toLowerCase().replace(/\s+/g, "");
   const map: Record<string, string> = {
@@ -208,6 +217,14 @@ export function logoForAppName(name: string): string | null {
     uber: "/providers/uber.svg",
     makemytrip: "/providers/makemytrip.svg",
     mmt: "/providers/makemytrip.svg",
+    officecafeteria: "/providers/office-cafeteria.png",
+    officecafetaria: "/providers/office-cafeteria.png",
+    cafeteria: "/providers/office-cafeteria.png",
+    cafetaria: "/providers/office-cafeteria.png",
+    apollo: "/providers/apollo.svg",
+    apollohospital: "/providers/apollo.svg",
+    apollohospitals: "/providers/apollo.svg",
+    apollopharmacy: "/providers/apollo.svg",
   };
   return map[key] ?? null;
 }

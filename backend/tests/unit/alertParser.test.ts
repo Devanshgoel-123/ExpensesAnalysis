@@ -14,6 +14,16 @@ describe("parseBankAlertEmail", () => {
     assert.equal(result.date, "2026-08-27");
   });
 
+  it("parses an HDFC credit that says successfully credited", () => {
+    const result = parseBankAlertEmail(
+      "HDFC Bank InstaAlerts",
+      "Rs.55000.00 has been successfully credited to your HDFC Bank account. a. Date: 01-09-26 b. Sender: ARYAN GOPAKUMAR (VPA: aryan.gopa04@okicici)",
+    );
+    assert.equal(result.type, "credit");
+    assert.equal(result.amount, 55000);
+    assert.equal(result.date, "2026-09-01");
+  });
+
   it("parses credit alert", () => {
     const result = parseBankAlertEmail(
       "Credit alert",
@@ -69,6 +79,29 @@ describe("parseBankAlertEmail", () => {
     );
     assert.equal(result.type, "credit");
     assert.equal(result.amount, 1200);
+  });
+
+  it("allows a few words between the verb and the amount", () => {
+    const debited = parseBankAlertEmail(
+      "Alert",
+      "Rs.2,000.00 has been successfully debited from your account",
+    );
+    assert.equal(debited.type, "debit");
+    assert.equal(debited.amount, 2000);
+
+    const withdrawn = parseBankAlertEmail(
+      "Alert",
+      "INR 90.00 was withdrawn from your account",
+    );
+    assert.equal(withdrawn.type, "debit");
+    assert.equal(withdrawn.amount, 90);
+
+    const deposited = parseBankAlertEmail(
+      "Alert",
+      "An amount of Rs.15,000.00 has been deposited in your account",
+    );
+    assert.equal(deposited.type, "credit");
+    assert.equal(deposited.amount, 15000);
   });
 
   it("leaves amount empty when a UPI alert has no figure", () => {

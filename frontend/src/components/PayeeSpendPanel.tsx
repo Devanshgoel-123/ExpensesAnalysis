@@ -22,7 +22,7 @@ export function PayeeSpendPanel({ items }: PayeeSpendPanelProps) {
         <p className="meta">
           {people.length === 0
             ? "Add tracking rules in Settings to follow who you pay"
-            : `${people.length} people from your rules`}
+            : `${people.length} people · family payments and tracking rules`}
         </p>
       </header>
 

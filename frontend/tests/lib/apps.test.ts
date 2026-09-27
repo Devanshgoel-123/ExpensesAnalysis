@@ -3,6 +3,7 @@ import {
   dayCategoryMix,
   groupAppsByCategory,
   logoForAppName,
+  logoForCategory,
 } from "@/helpers/apps";
 import type { Provider } from "@/lib/api/types";
 import type { CategorySummary, Transaction } from "@/types";
@@ -97,7 +98,7 @@ describe("groupAppsByCategory", () => {
     expect(groups[0]?.apps[0]?.total).toBe(300);
   });
 
-  it("hides Ayodhya and keeps empty Healthcare / Family / custom groups", () => {
+  it("hides Ayodhya and Family, and keeps empty Healthcare / custom groups", () => {
     const catalog = [
       ...categories,
       {
@@ -149,7 +150,7 @@ describe("groupAppsByCategory", () => {
       "Swiggy",
     ]);
     expect(groups.find((g) => g.slug === "healthcare")?.apps).toEqual([]);
-    expect(groups.find((g) => g.slug === "family")?.apps).toEqual([]);
+    expect(groups.find((g) => g.slug === "family")).toBeUndefined();
     expect(groups.find((g) => g.slug === "pets")?.apps).toEqual([]);
   });
 });
@@ -166,6 +167,14 @@ describe("logoForAppName", () => {
     expect(logoForAppName("Furlenco")).toBe("/providers/furlenco.png");
     expect(logoForAppName("Jio WiFi")).toBe("/providers/jio.svg");
     expect(logoForAppName("Apple")).toBe("/providers/apple.svg");
+    expect(logoForAppName("Apollo Hospital")).toBe("/providers/apollo.svg");
+    expect(logoForAppName("Office Cafeteria")).toBe("/providers/office-cafeteria.png");
     expect(logoForAppName("unknown cafe")).toBeNull();
+  });
+
+  it("maps household subcategories to local marks", () => {
+    expect(logoForCategory("rent")).toBe("/providers/rent.svg");
+    expect(logoForCategory("brokerage")).toBe("/providers/brokerage.svg");
+    expect(logoForCategory("food")).toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import type { AppDb } from "../client.js";
 import {
   accounts,
@@ -147,6 +147,23 @@ export class PostgresGmailRepository {
       )
       .limit(1);
     return row ? mapMailMessage(row) : null;
+  }
+  async listMailMessages(
+    userId: string,
+    fromIso: string,
+    toIso: string,
+  ): Promise<MailMessageRow[]> {
+    const rows = await this.db
+      .select()
+      .from(mailMessages)
+      .where(
+        and(
+          eq(mailMessages.userId, userId),
+          gte(mailMessages.receivedAt, new Date(`${fromIso}T00:00:00+05:30`)),
+          lte(mailMessages.receivedAt, new Date(`${toIso}T23:59:59+05:30`)),
+        ),
+      );
+    return rows.map(mapMailMessage);
   }
   async oldestMailReceivedAt(userId: string): Promise<string | null> {
     const [row] = await this.db

@@ -517,6 +517,9 @@ export class PostgresStore implements Store {
   updateTransaction(u: string, id: string, p: Partial<TransactionRow>) {
     return this.imports.updateTransaction(u, id, p);
   }
+  updateTransactions(u: string, ids: string[], p: Partial<TransactionRow>) {
+    return this.imports.updateTransactions(u, ids, p);
+  }
   deleteTransaction(u: string, id: string) {
     return this.imports.deleteTransaction(u, id);
   }
@@ -552,6 +555,9 @@ export class PostgresStore implements Store {
   }
   findMailMessageByGmailId(u: string, g: string) {
     return this.gmail.findMailMessageByGmailId(u, g);
+  }
+  listMailMessages(u: string, fromIso: string, toIso: string) {
+    return this.gmail.listMailMessages(u, fromIso, toIso);
   }
   oldestMailReceivedAt(u: string) {
     return this.gmail.oldestMailReceivedAt(u);

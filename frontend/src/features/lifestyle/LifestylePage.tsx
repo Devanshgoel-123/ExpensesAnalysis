@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useDashboard } from "@/lib/dashboard-context";
 import {
   buildCategorySpendRows,
+  positiveTotal,
   weekendInsight,
   formatMonthTitle,
   normalizeDailySpend,
@@ -51,7 +52,7 @@ export function LifestylePage() {
           rows={categoryRows}
           title="Category breakdown"
           subtitle="Where your money goes, ranked by spend"
-          spentTotal={data.summary.totalSpent}
+          spentTotal={positiveTotal(categoryRows.map((row) => row.total))}
         />
       </LedgerlineFadeContent>
 
@@ -68,7 +69,7 @@ export function LifestylePage() {
           title="Top merchants"
           subtitle="Where lifestyle spend concentrates"
           limit={8}
-          spentTotal={data.summary.totalSpent}
+          spentTotal={positiveTotal((data.merchantSpend ?? []).map((row) => row.total))}
         />
       </LedgerlineFadeContent>
 

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useDashboard } from "@/lib/dashboard-context";
 import { useSaveDailyLimit } from "@/components/DailyLimitForm";
-import { formatMonthTitle, aggregateMonthlySpend, buildCategorySpendRows } from "@/helpers/finance";
+import { formatMonthTitle, aggregateMonthlySpend, buildCategorySpendRows, positiveTotal } from "@/helpers/finance";
 import { pathForView } from "@/lib/dashboardViews";
 import { formatInr } from "@/helpers/currency";
 
@@ -26,11 +26,15 @@ export function OverviewPage() {
   if (!data) return null;
 
   const monthlyTrend = aggregateMonthlySpend(data.transactions);
-  const categoryRows = buildCategorySpendRows(
+  const allCategoryRows = buildCategorySpendRows(
     data.merchantSpend ?? [],
     data.amountBand25to60,
     data.categories ?? [],
-  ).slice(0, 5);
+  );
+  const categoryRows = allCategoryRows.slice(0, 5);
+  const categorySpend = positiveTotal(allCategoryRows.map((row) => row.total));
+  const merchantSpend = positiveTotal((data.merchantSpend ?? []).map((row) => row.total));
+  const upiSpend = positiveTotal((data.upiRanking ?? []).map((row) => row.total));
   const netHint =
     data.summary.net >= 0
       ? `${formatInr(data.summary.net)} net in`
@@ -79,7 +83,7 @@ export function OverviewPage() {
           <UpiRankingList
             items={data.upiRanking}
             month={month}
-            spentTotal={data.summary.totalSpent}
+            spentTotal={upiSpend}
           />
         </LedgerlineFadeContent>
       </div>
@@ -90,7 +94,7 @@ export function OverviewPage() {
             rows={categoryRows}
             title="Top categories"
             subtitle="Where most of your money went"
-            spentTotal={data.summary.totalSpent}
+            spentTotal={categorySpend}
           />
         </LedgerlineFadeContent>
       ) : null}
@@ -106,7 +110,7 @@ export function OverviewPage() {
           items={data.merchantSpend ?? []}
           categories={data.categories ?? []}
           limit={5}
-          spentTotal={data.summary.totalSpent}
+          spentTotal={merchantSpend}
         />
       </LedgerlineFadeContent>
     </div>

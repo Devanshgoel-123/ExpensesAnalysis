@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { Transaction } from "@/types";
+import type { CategorySummary, Transaction } from "@/types";
 import type { Provider } from "@/lib/api/types";
 import { BrandMark } from "@/components/BrandMark";
+import { logoForCategory } from "@/helpers/apps";
 
 interface TxnAssignPickerProps {
   txn: Transaction;
-  categories: Array<[string, string]>;
+  categories: CategorySummary[];
   providers: Provider[];
   disabled?: boolean;
   onAssign?: (
@@ -36,16 +37,26 @@ export function TxnAssignPicker({
   const anchorRef = useRef<HTMLDivElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const ignoreAppClick = useRef(false);
 
   const spendCategories = useMemo(
-    () => categories.filter(([slug]) => slug !== "banks"),
+    () => categories.filter((category) => category.slug !== "banks" && !category.meta?.parent),
     [categories],
   );
   const current = providers.find((provider) => provider.id === txn.providerId);
   const labeled = current && !isBank(current) ? current : null;
+  const category = categories.find((item) => item.slug === txn.category);
   const categoryLabel =
-    spendCategories.find(([slug]) => slug === txn.category)?.[1] ??
+    category?.label ??
     (txn.category && txn.category !== "banks" ? txn.categoryLabel : null);
+  const categoryMark = txn.category ? logoForCategory(txn.category) : null;
+  const parentLabel = category?.meta?.parent
+    ? categories.find((item) => item.slug === category.meta?.parent)?.label
+    : null;
+  const subcategories = useMemo(
+    () => categories.filter((category) => category.meta?.parent === browse),
+    [categories, browse],
+  );
 
   const apps = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -113,13 +124,23 @@ export function TxnAssignPicker({
   }, [open]);
 
   function chooseCategory(slug: string) {
+    // The app list re-renders under the pointer. Ignore the click that follows
+    // so a category press cannot select whichever app lands there.
+    ignoreAppClick.current = true;
+    window.setTimeout(() => {
+      ignoreAppClick.current = false;
+    }, 250);
     setBrowse(slug);
-    if (!txn.id || slug === txn.category) return;
-    onAssign?.(txn, { categorySlug: slug });
+  }
+
+  function chooseSubcategory(slug: string) {
+    if (!txn.id) return;
+    onAssign?.(txn, { categorySlug: slug, providerId: null });
+    setOpen(false);
   }
 
   function chooseApp(provider: Provider) {
-    if (!txn.id) return;
+    if (!txn.id || ignoreAppClick.current) return;
     onAssign?.(txn, {
       providerId: provider.id,
       ...(provider.categorySlug ? { categorySlug: provider.categorySlug } : {}),
@@ -131,19 +152,21 @@ export function TxnAssignPicker({
     <div className="txn-assign" ref={anchorRef}>
       <button
         type="button"
-        className={`txn-assign-trigger ${open ? "open" : ""} ${labeled ? "" : "empty"}`}
+        className={`txn-assign-trigger ${open ? "open" : ""} ${labeled || categoryMark ? "" : "empty"}`}
         aria-haspopup="dialog"
         aria-expanded={open}
         disabled={disabled}
         onClick={() => setOpen((value) => !value)}
       >
         <BrandMark
-          name={labeled?.canonicalName ?? "?"}
-          logoUrl={labeled?.logoUrl}
+          name={labeled?.canonicalName ?? categoryLabel ?? "?"}
+          logoUrl={labeled?.logoUrl ?? categoryMark}
         />
         <span className="txn-assign-copy">
-          <strong>{labeled?.canonicalName ?? "Choose app"}</strong>
-          <em>{categoryLabel ?? "Unlabeled"}</em>
+          <strong>
+            {labeled?.canonicalName ?? (categoryMark ? categoryLabel : "Choose app")}
+          </strong>
+          <em>{(labeled ? categoryLabel : parentLabel) ?? categoryLabel ?? "Unlabeled"}</em>
         </span>
         <i className="txn-assign-caret" aria-hidden />
       </button>
@@ -164,14 +187,18 @@ export function TxnAssignPicker({
               <div className="txn-picker-col">
                 <p className="txn-picker-label">Category</p>
                 <ul className="txn-picker-list">
-                  {spendCategories.map(([slug, label]) => (
-                    <li key={slug}>
+                  {spendCategories.map((category) => (
+                    <li key={category.slug}>
                       <button
                         type="button"
-                        className={`txn-picker-item ${browse === slug ? "active" : ""}`}
-                        onClick={() => chooseCategory(slug)}
+                        className={`txn-picker-item ${browse === category.slug ? "active" : ""}`}
+                        onPointerDown={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          chooseCategory(category.slug);
+                        }}
                       >
-                        <span>{label}</span>
+                        <span>{category.label}</span>
                       </button>
                     </li>
                   ))}
@@ -188,7 +215,27 @@ export function TxnAssignPicker({
                   onChange={(event) => setQuery(event.target.value)}
                 />
                 <ul className="txn-picker-list">
-                  {apps.length === 0 ? (
+                  {subcategories
+                    .filter((category) => {
+                      const q = query.trim().toLowerCase();
+                      return !q || category.label.toLowerCase().includes(q);
+                    })
+                    .map((category) => (
+                    <li key={category.slug}>
+                      <button
+                        type="button"
+                        className={`txn-picker-item ${txn.category === category.slug ? "active" : ""}`}
+                        onClick={() => chooseSubcategory(category.slug)}
+                      >
+                        <BrandMark
+                          name={category.label}
+                          logoUrl={logoForCategory(category.slug)}
+                        />
+                        <span>{category.label}</span>
+                      </button>
+                    </li>
+                  ))}
+                  {apps.length === 0 && subcategories.length === 0 ? (
                     <li className="txn-picker-empty">
                       {browse ? "No apps in this category" : "Pick a category, or search"}
                     </li>

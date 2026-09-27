@@ -153,6 +153,68 @@ describe("buildAnalyticsFromRows spend", () => {
     assert.equal(result.merchantSpend[0]?.merchant, "Apple");
     assert.equal(result.merchantSpend[0]?.total, 799);
   });
+
+  it("does not count money sent through the bank as spend to the bank or Other", () => {
+    const hdfc = {
+      id: "bank",
+      userId: null,
+      canonicalName: "HDFC Bank",
+      aliases: ["HDFC"],
+      upiHandles: [],
+      senderDomains: [],
+      websiteDomain: null,
+      logoUrl: null,
+      categorySlug: "banks",
+      isGlobal: true,
+    };
+    const swiggy = {
+      id: "swiggy",
+      userId: null,
+      canonicalName: "Swiggy",
+      aliases: ["SWIGGY"],
+      upiHandles: ["swiggy"],
+      senderDomains: [],
+      websiteDomain: null,
+      logoUrl: "/providers/swiggy.png",
+      categorySlug: "food",
+      isGlobal: true,
+    };
+    const result = buildAnalyticsFromRows(
+      [
+        baseRow({
+          id: "rail",
+          amount: 212876,
+          merchant: "HDFC Bank",
+          categorySlug: "banks",
+          providerId: "bank",
+          upiId: null,
+          description: "NEFT Dr to savings",
+          fingerprint: "rail",
+        }),
+        baseRow({
+          id: "food",
+          amount: 6672,
+          merchant: "Swiggy",
+          categorySlug: "food",
+          providerId: "swiggy",
+          description: "UPI-SWIGGY",
+          fingerprint: "food",
+        }),
+      ],
+      [hdfc, swiggy],
+      [],
+      [],
+    );
+    assert.equal(
+      result.merchantSpend.find((row) => row.merchant === "HDFC Bank"),
+      undefined,
+    );
+    assert.equal(
+      result.merchantSpend.find((row) => row.merchant === "Other"),
+      undefined,
+    );
+    assert.equal(result.merchantSpend.find((row) => row.merchant === "Swiggy")?.total, 6672);
+  });
 });
 
 describe("buildAnalyticsFromRows daily insights", () => {

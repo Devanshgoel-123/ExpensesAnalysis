@@ -454,6 +454,22 @@ export class MemoryStore implements Store {
     return row;
   }
 
+  async updateTransactions(
+    userId: string,
+    ids: string[],
+    patch: Partial<TransactionRow>,
+  ): Promise<number> {
+    if (ids.length === 0) return 0;
+    const wanted = new Set(ids);
+    let updated = 0;
+    for (const row of this.transactions) {
+      if (row.userId !== userId || !wanted.has(row.id)) continue;
+      Object.assign(row, patch);
+      updated += 1;
+    }
+    return updated;
+  }
+
   async deleteTransaction(userId: string, id: string): Promise<boolean> {
     const index = this.transactions.findIndex(
       (row) => row.id === id && row.userId === userId,
@@ -577,6 +593,18 @@ export class MemoryStore implements Store {
         (m) => m.userId === userId && m.gmailMessageId === gmailMessageId,
       ) ?? null
     );
+  }
+
+  async listMailMessages(
+    userId: string,
+    fromIso: string,
+    toIso: string,
+  ): Promise<MailMessageRow[]> {
+    return this.mailMessages.filter((mail) => {
+      if (mail.userId !== userId || !mail.receivedAt) return false;
+      const day = mail.receivedAt.slice(0, 10);
+      return day >= fromIso && day <= toIso;
+    });
   }
 
   async oldestMailReceivedAt(userId: string): Promise<string | null> {

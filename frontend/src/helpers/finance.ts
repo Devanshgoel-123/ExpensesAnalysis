@@ -13,6 +13,7 @@ import type {
   CategorySummary,
   DailySpend,
   MerchantSpend,
+  PayeeSpend,
   Transaction,
 } from "@/types";
 
@@ -60,9 +61,15 @@ export function buildCategorySpendRows(
   cigaretteBand: AmountBand,
   categories: CategorySummary[],
 ): CategorySpendRow[] {
+  const parentOf = new Map(
+    categories
+      .filter((category) => category.meta?.parent)
+      .map((category) => [category.slug, category.meta.parent as string]),
+  );
   const byCategory = new Map<string, MerchantSpend[]>();
   for (const row of merchants) {
-    const cat = row.categorySlug ?? CategorySlug.Other;
+    const slug = row.categorySlug ?? CategorySlug.Other;
+    const cat = parentOf.get(slug) ?? slug;
     const list = byCategory.get(cat) ?? [];
     list.push(row);
     byCategory.set(cat, list);
@@ -70,6 +77,7 @@ export function buildCategorySpendRows(
 
   return [...categories]
     .sort((a, b) => a.sortOrder - b.sortOrder)
+    .filter((category) => category.slug !== CategorySlug.Banks)
     .map((category) => {
       if (category.slug === CategorySlug.Cigarettes) {
         return {
@@ -91,6 +99,52 @@ export function buildCategorySpendRows(
     })
     .filter((row) => row.total > 0 || row.count > 0)
     .sort((a, b) => b.total - a.total);
+}
+
+/** Share denominator for category and merchant charts. Net spend subtracts salary and makes one bucket look larger than 100%. */
+export function positiveTotal(amounts: number[]): number {
+  return Math.round(amounts.reduce((sum, amount) => sum + (amount > 0 ? amount : 0), 0) * 100) / 100;
+}
+
+function isAccountBankName(name: string): boolean {
+  return /\b(hdfc|icici|axis|sbi|state bank)\b/i.test(name);
+}
+
+/** Family payments belong with people, including ones stored only as a merchant. */
+export function mergeFamilyPeople(
+  payees: PayeeSpend[],
+  transactions: Transaction[],
+): PayeeSpend[] {
+  const map = new Map<string, PayeeSpend>();
+  for (const person of payees) {
+    map.set(person.name.toLowerCase(), { ...person, days: [...person.days] });
+  }
+  for (const txn of transactions) {
+    if (txn.category !== CategorySlug.Family) continue;
+    if (txn.type !== TxType.Debit && txn.type !== TxType.Credit) continue;
+    if (txn.payee) continue;
+    const name = txn.merchant?.trim() ?? "";
+    if (!name || name === "Other" || isAccountBankName(name)) continue;
+    const key = name.toLowerCase();
+    const signed = txn.type === TxType.Credit ? -txn.amount : txn.amount;
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, {
+        name,
+        total: signed,
+        count: txn.type === TxType.Debit ? 1 : 0,
+        lastDate: txn.date,
+        days: [txn.date],
+      });
+      continue;
+    }
+    existing.total = Math.round((existing.total + signed) * 100) / 100;
+    if (txn.type === TxType.Debit) existing.count += 1;
+    if (!existing.days.includes(txn.date)) existing.days.push(txn.date);
+    if (!existing.lastDate || txn.date > existing.lastDate) existing.lastDate = txn.date;
+  }
+  for (const person of map.values()) person.days.sort();
+  return [...map.values()].sort((a, b) => b.total - a.total);
 }
 
 export function aggregateMonthlySpend(

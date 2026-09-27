@@ -29,6 +29,7 @@ export interface CategorySummary {
     amountBandMin?: number;
     amountBandMax?: number;
     amountBandLabel?: string;
+    parent?: string;
   };
 }
 

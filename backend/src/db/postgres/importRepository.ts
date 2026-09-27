@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import type { AppDb } from "../client.js";
 import { imports, transactionOverrides, transactions } from "../schema.js";
 import type {
@@ -204,6 +204,37 @@ export class PostgresImportRepository {
       .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
       .returning();
     return row ? mapTransaction(row) : null;
+  }
+  async updateTransactions(
+    userId: string,
+    ids: string[],
+    patch: Partial<TransactionRow>,
+  ): Promise<number> {
+    if (ids.length === 0) return 0;
+    const set: Partial<typeof transactions.$inferInsert> = {};
+    const keys = [
+      "merchant",
+      "categorySlug",
+      "providerId",
+      "confidence",
+      "classificationSource",
+      "upiId",
+    ] as const;
+    for (const key of keys) {
+      if (key in patch) (set as Record<string, unknown>)[key] = patch[key];
+    }
+    if (!Object.keys(set).length) return 0;
+    let updated = 0;
+    for (let index = 0; index < ids.length; index += 200) {
+      const slice = ids.slice(index, index + 200);
+      const rows = await this.db
+        .update(transactions)
+        .set(set)
+        .where(and(eq(transactions.userId, userId), inArray(transactions.id, slice)))
+        .returning({ id: transactions.id });
+      updated += rows.length;
+    }
+    return updated;
   }
   async deleteTransaction(userId: string, id: string): Promise<boolean> {
     const [row] = await this.db

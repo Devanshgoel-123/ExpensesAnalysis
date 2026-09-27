@@ -328,7 +328,7 @@ export async function correctTransactionForUser(input: {
     payee: input.payee,
     merchant,
     categorySlug,
-    providerId: input.providerId ?? undefined,
+    ...(input.providerId !== undefined ? { providerId: input.providerId } : {}),
     classificationSource: ClassificationSource.UserOverride,
     confidence: 1,
   });

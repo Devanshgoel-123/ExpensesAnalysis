@@ -64,6 +64,68 @@ export function inScanWindow(date: string, window: ScanWindow): boolean {
   return date >= window.from && date <= window.to;
 }
 
+export function shiftIsoDate(iso: string, days: number): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  const next = new Date(Date.UTC(year!, (month ?? 1) - 1, (day ?? 1) + days));
+  const y = next.getUTCFullYear();
+  const m = String(next.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(next.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export type StatementGapLine = StatementLine;
+
+export type StatementGaps = {
+  missingCount: number;
+  missingCreditCount: number;
+  missing: StatementGapLine[];
+  noMailCount: number;
+  noMail: StatementGapLine[];
+};
+
+/**
+ * Statement lines the mail import never turned into a ledger row,
+ * and statement lines with no bank mail on that day or the day beside it.
+ */
+export function findStatementGaps(input: {
+  lines: StatementLine[];
+  ledger: Array<{ date: string; amount: number; type: string }>;
+  mailDates: string[];
+  window: ScanWindow;
+}): StatementGaps {
+  const lines = input.lines.filter((line) => inScanWindow(line.date, input.window));
+  const ledgerKeys = new Set(
+    input.ledger.map((row) => `${row.date}|${row.amount.toFixed(2)}|${row.type}`),
+  );
+  const mailDays = new Set(input.mailDates);
+
+  const missing: StatementGapLine[] = [];
+  const noMail: StatementGapLine[] = [];
+  for (const line of lines) {
+    const around = [shiftIsoDate(line.date, -1), line.date, shiftIsoDate(line.date, 1)];
+    const inLedger = around.some((date) =>
+      ledgerKeys.has(`${date}|${line.amount.toFixed(2)}|${line.type}`),
+    );
+    if (!inLedger) missing.push(line);
+    if (!around.some((date) => mailDays.has(date))) noMail.push(line);
+  }
+
+  const byAmount = (a: StatementGapLine, b: StatementGapLine) =>
+    Number(b.type === "credit") - Number(a.type === "credit") ||
+    b.amount - a.amount ||
+    a.date.localeCompare(b.date);
+  missing.sort(byAmount);
+  noMail.sort(byAmount);
+
+  return {
+    missingCount: missing.length,
+    missingCreditCount: missing.filter((line) => line.type === "credit").length,
+    missing,
+    noMailCount: noMail.length,
+    noMail,
+  };
+}
+
 /** Same VPA, ignoring case. A stored local part still matches the full id. */
 export function upiIdsMatch(approved: string, candidate: string | null | undefined): boolean {
   if (!candidate?.trim()) return false;
@@ -291,9 +353,11 @@ export function summarizeSuggestions(
   }
 
   appendTimelineSuggestions(suggestions, inWindowLedger, vendors);
-  return suggestions.sort(
-    (a, b) => b.lineCount - a.lineCount || b.timelineMatches - a.timelineMatches || a.upiId.localeCompare(b.upiId),
-  );
+  return suggestions
+    .filter((item) => item.reason !== "business")
+    .sort(
+      (a, b) => b.lineCount - a.lineCount || b.timelineMatches - a.timelineMatches || a.upiId.localeCompare(b.upiId),
+    );
 }
 
 function timelineMatchCount(

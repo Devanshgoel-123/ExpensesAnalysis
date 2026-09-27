@@ -1,6 +1,6 @@
 import type { CategoryRow, ProviderRow, TransactionRow } from "../db/types.js";
 import { resolveAmountBand } from "../categories/heuristics.js";
-import { counterpartyFromNarration, isAccountBank } from "../narration/party.js";
+import { counterpartyFromNarration, isAccountBank, merchantIsAccountBank } from "../narration/party.js";
 import { detectFromProviders } from "../rules/engine.js";
 import { buildDailyInsights } from "./dailyInsights.js";
 import type {
@@ -77,6 +77,34 @@ function resolveSpendIdentity(
       : (row.providerId ?? detected.providerId ?? provider?.id ?? null),
     logoUrl: provider?.logoUrl ?? null,
   };
+}
+
+/**
+ * Money that only moved through the account bank is not spend at that bank.
+ * A resolved vendor or a real category still counts.
+ */
+function isBankRailTransfer(
+  row: TransactionRow,
+  providers: ProviderRow[],
+  identity: SpendIdentity,
+): boolean {
+  const resolved = identity.providerId
+    ? providers.find((item) => item.id === identity.providerId) ?? null
+    : null;
+  if (resolved && resolved.categorySlug && resolved.categorySlug !== "banks") return false;
+  if (
+    identity.categorySlug &&
+    identity.categorySlug !== "other" &&
+    identity.categorySlug !== "banks"
+  ) {
+    return false;
+  }
+  if (identity.categorySlug === "banks") return true;
+  if (merchantIsAccountBank(identity.merchant, providers)) return true;
+  return (
+    merchantIsAccountBank(row.merchant, providers) &&
+    (identity.merchant === "Other" || !identity.providerId)
+  );
 }
 
 function rowToApiTransaction(
@@ -218,6 +246,7 @@ export function buildAnalyticsFromRows(
   for (const t of rows) {
     if (t.type !== "debit" && t.type !== "credit") continue;
     const identity = resolveSpendIdentity(t, providers);
+    if (isBankRailTransfer(t, providers, identity)) continue;
     let bucket = merchantMap.get(identity.merchant);
     if (!bucket) {
       bucket = {

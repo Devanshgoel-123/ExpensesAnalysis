@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Users } from "lucide-react";
 import { useDashboard } from "@/lib/dashboard-context";
+import { mergeFamilyPeople } from "@/helpers/finance";
 import { PayeeSpendPanel } from "@/components/PayeeSpendPanel";
 import { pathForView } from "@/lib/dashboardViews";
 import { LedgerlineFadeContent } from "@/components/animations/LedgerlineFadeContent";
@@ -12,7 +13,7 @@ export function PeoplePage() {
   const { data } = useDashboard();
   if (!data) return null;
 
-  const people = data.payeeSpend ?? [];
+  const people = mergeFamilyPeople(data.payeeSpend ?? [], data.transactions ?? []);
 
   if (people.length === 0) {
     return (
@@ -23,7 +24,7 @@ export function PeoplePage() {
           </div>
           <PanelHead
             title="No tracked people yet"
-            subtitle="Name the people you pay often — Ledgerline will group spend by them automatically."
+            subtitle="Family payments and people you track show up here, not under Apps."
           />
           <ol className="list-none m-0 mx-auto mb-6 p-0 max-w-md grid gap-2 text-sm text-[var(--muted)] text-left">
             <li>1. Open Settings → Tracking rules</li>

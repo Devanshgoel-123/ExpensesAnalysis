@@ -50,6 +50,8 @@ export interface CategoryMeta {
   amountBandMin?: number;
   amountBandMax?: number;
   amountBandLabel?: string;
+  /** When set, this category is shown under that parent in the transaction picker. */
+  parent?: string;
 }
 
 export interface CategoryRow {
@@ -372,6 +374,21 @@ export interface Store {
       >
     >,
   ): Promise<TransactionRow | null>;
+  updateTransactions(
+    userId: string,
+    ids: string[],
+    patch: Partial<
+      Pick<
+        TransactionRow,
+        | "merchant"
+        | "categorySlug"
+        | "providerId"
+        | "confidence"
+        | "classificationSource"
+        | "upiId"
+      >
+    >,
+  ): Promise<number>;
   deleteTransaction(userId: string, id: string): Promise<boolean>;
   reclassifyByRule(
     userId: string,
@@ -407,6 +424,11 @@ export interface Store {
     userId: string,
     gmailMessageId: string,
   ): Promise<MailMessageRow | null>;
+  listMailMessages(
+    userId: string,
+    fromIso: string,
+    toIso: string,
+  ): Promise<MailMessageRow[]>;
   oldestMailReceivedAt(userId: string): Promise<string | null>;
 
   createPoolingRun(

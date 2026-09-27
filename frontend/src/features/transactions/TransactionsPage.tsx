@@ -30,7 +30,9 @@ export function TransactionsPage() {
       patch: { categorySlug?: string; providerId?: string },
     ) => {
       if (!api || !txn.id) return;
-      const provider = providers.find((item) => item.id === patch.providerId);
+      const provider = patch.providerId
+        ? providers.find((item) => item.id === patch.providerId)
+        : undefined;
       const slug = patch.categorySlug ?? provider?.categorySlug ?? txn.category;
       const label =
         data?.categories?.find((category) => category.slug === slug)?.label ??
@@ -39,7 +41,7 @@ export function TransactionsPage() {
         ...txn,
         category: slug,
         categoryLabel: label,
-        providerId: patch.providerId ?? txn.providerId,
+        providerId: patch.providerId !== undefined ? patch.providerId : txn.providerId,
         merchant:
           provider && provider.categorySlug !== "banks"
             ? provider.canonicalName
@@ -47,7 +49,9 @@ export function TransactionsPage() {
         logoUrl:
           provider && provider.categorySlug !== "banks"
             ? provider.logoUrl
-            : txn.logoUrl,
+            : patch.providerId === null
+              ? null
+              : txn.logoUrl,
       };
       setOverrides((current) => ({ ...current, [txn.id!]: next }));
       setAssignError(null);

@@ -1,10 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { formatScanWindowLabel } from "@/constants/pooling";
 import { useApi } from "@/lib/useApi";
+import { useAuth } from "@/lib/auth";
 import { useDashboard } from "@/lib/dashboard-context";
+import type { StatementMatchJob } from "@/lib/api/client";
 import type { Provider } from "@/lib/api/types";
+import {
+  rememberMatchJob,
+  savedMatchJobId,
+  takeFinishedMatchJob,
+  watchMatchJob,
+} from "@/features/statement-match/matchJob";
+import { formatInr } from "@/helpers/currency";
 import { LedgerlineFadeContent } from "@/components/animations/LedgerlineFadeContent";
 import { Panel, PanelHead } from "@/components/ui/Panel";
 import { VendorLogoPicker } from "@/features/statement-match/VendorLogoPicker";
@@ -30,24 +39,70 @@ type StatementLine = {
   upiId: string | null;
 };
 
+type GapLine = StatementLine;
+
 type Preview = {
   filename: string;
   lineCount: number;
   outsideWindow: number;
   window: { from: string; to: string };
   suggestions: Suggestion[];
+  gaps: {
+    missingCount: number;
+    missingCreditCount: number;
+    missing: GapLine[];
+    noMailCount: number;
+    noMail: GapLine[];
+  };
   lines: StatementLine[];
   note: string;
 };
 
+function GapTable({ rows }: { rows: GapLine[] }) {
+  return (
+    <div className="statement-match-scroll">
+      <table className="statement-match-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Type</th>
+            <th>Details</th>
+            <th className="num">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((line, index) => (
+            <tr key={`${line.date}-${line.amount}-${line.type}-${index}`}>
+              <td>{line.date}</td>
+              <td>
+                <span className={`pill ${line.type}`}>{line.type}</span>
+              </td>
+              <td>
+                <div className="statement-upi">
+                  <strong>{line.upiId ?? "No UPI id"}</strong>
+                  <span title={line.description}>{line.description}</span>
+                </div>
+              </td>
+              <td className="num">{formatInr(line.amount)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function StatementMatchPage() {
   const api = useApi();
+  const { token } = useAuth();
   const { refresh } = useDashboard();
   const [password, setPassword] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [choices, setChoices] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [job, setJob] = useState<StatementMatchJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -68,6 +123,7 @@ export function StatementMatchPage() {
         if (suggestion.providerId) initial[suggestion.upiId] = suggestion.providerId;
       }
       setChoices(initial);
+      setSelected([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not read that statement");
     } finally {
@@ -83,6 +139,89 @@ export function StatementMatchPage() {
       suggestions: preview.suggestions.filter((item) => item.upiId !== suggestion.upiId),
     });
     setMessage(`Skipped ${suggestion.upiId}. Nothing was saved.`);
+    setSelected((current) => current.filter((id) => id !== suggestion.upiId));
+  }
+
+  function toggleSelected(upiId: string) {
+    setSelected((current) =>
+      current.includes(upiId) ? current.filter((id) => id !== upiId) : [...current, upiId],
+    );
+  }
+
+  const onMatchJob = useCallback(
+    (next: StatementMatchJob) => {
+      setJob(next.status === "done" ? null : next);
+      if (next.status !== "done") {
+        setMessage(
+          `Approving vendors ${next.completed} of ${next.total}, 3 at a time. This keeps going if you switch tabs.`,
+        );
+        return;
+      }
+      const windowLabel = formatScanWindowLabel(next.window);
+      const failed = next.failures.length;
+      setMessage(
+        `Approved ${next.doneIds.length} vendor${next.doneIds.length === 1 ? "" : "s"}. Labeled ${next.labeled} payment${next.labeled === 1 ? "" : "s"} in ${windowLabel}.`,
+      );
+      setError(
+        failed > 0
+          ? `${failed} vendor${failed === 1 ? "" : "s"} could not be saved. You can approve those again.`
+          : null,
+      );
+      setPreview((current) =>
+        current
+          ? {
+              ...current,
+              suggestions: current.suggestions.filter((item) => !next.doneIds.includes(item.upiId)),
+            }
+          : current,
+      );
+      setSelected((current) => current.filter((id) => !next.doneIds.includes(id)));
+      refresh();
+    },
+    [refresh],
+  );
+
+  useEffect(() => {
+    if (!token) return;
+    const finished = takeFinishedMatchJob();
+    if (finished) {
+      onMatchJob(finished);
+      return;
+    }
+    const jobId = savedMatchJobId();
+    if (!jobId) return;
+    return watchMatchJob(jobId, token, onMatchJob);
+  }, [token, onMatchJob]);
+
+  async function approveMany(items: Suggestion[]) {
+    if (!api || !preview || !token) return;
+    const ready = items.filter((item) => choices[item.upiId]);
+    if (ready.length === 0) {
+      setError("Choose a vendor for each row you want to approve");
+      return;
+    }
+    setBusy("bulk");
+    setError(null);
+    try {
+      const started = await api.startStatementMatchBatch({
+        lines: preview.lines,
+        items: ready.map((item) => ({
+          upiId: item.upiId,
+          providerId: choices[item.upiId]!,
+        })),
+      });
+      rememberMatchJob(started.id);
+      setJob(started);
+      setSelected([]);
+      setMessage(
+        `Approving ${started.total} vendor${started.total === 1 ? "" : "s"}, 3 at a time. This keeps going if you switch tabs.`,
+      );
+      watchMatchJob(started.id, token, onMatchJob);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start that approval");
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function approve(suggestion: Suggestion) {
@@ -138,7 +277,7 @@ export function StatementMatchPage() {
           <h2 className="month-label">Approve vendor UPI ids</h2>
           <ol className="meta mt-3" style={{ paddingLeft: "1.1rem", lineHeight: 1.6 }}>
             <li>Upload one PDF. It is read in memory and is not inserted as new transactions.</li>
-            <li>Review UPI ids that look like an app, from this file and from payments already in the mail-tracking window.</li>
+            <li>Review UPI ids that match a known vendor, from this file and from payments already in the mail-tracking window.</li>
             <li>Approve saves that UPI id on the vendor first, so later mail and statement parses label it on their own.</li>
             <li>Every payment in that window which already has the UPI id is labeled too. The month selected in the header does not limit this.</li>
             <li>A statement line with no UPI id on the ledger is applied only when that date and amount appear once.</li>
@@ -185,20 +324,65 @@ export function StatementMatchPage() {
         <Panel>
           <PanelHead
             title={preview.filename}
-            subtitle={`${preview.lineCount} statement lines · ${preview.suggestions.length} UPI ids · mail window ${formatScanWindowLabel(preview.window)}`}
+            subtitle={`${preview.lineCount} statement lines · ${preview.suggestions.filter((item) => item.reason !== "business").length} known vendors · mail window ${formatScanWindowLabel(preview.window)}`}
+            action={
+              <button
+                type="button"
+                className="statement-approve"
+                disabled={busy !== null || job?.status === "running" || selected.length === 0}
+                onClick={() =>
+                  void approveMany(
+                    preview.suggestions.filter((item) => selected.includes(item.upiId)),
+                  )
+                }
+              >
+                {job?.status === "running"
+                  ? `Approving ${job.completed} of ${job.total}`
+                  : busy === "bulk"
+                    ? "Starting…"
+                    : `Approve selected (${selected.length})`}
+              </button>
+            }
           />
+          <div className="statement-gap-summary">
+            <p className="meta">
+              <strong>{preview.gaps.missingCount}</strong> statement line
+              {preview.gaps.missingCount === 1 ? "" : "s"} are not in the Gmail ledger
+              {preview.gaps.missingCreditCount > 0
+                ? `, including ${preview.gaps.missingCreditCount} credit${preview.gaps.missingCreditCount === 1 ? "" : "s"}`
+                : ""}
+              .
+            </p>
+            <p className="meta">
+              <strong>{preview.gaps.noMailCount}</strong> statement line
+              {preview.gaps.noMailCount === 1 ? "" : "s"} have no bank mail on that day, the day before, or the day after.
+            </p>
+          </div>
+          {preview.gaps.missingCount > 0 ? (
+            <>
+              <h3 className="ui-header mt-4">Missing from Gmail</h3>
+              <GapTable rows={preview.gaps.missing} />
+            </>
+          ) : null}
+          {preview.gaps.noMailCount > 0 ? (
+            <>
+              <h3 className="ui-header mt-4">No mail nearby</h3>
+              <GapTable rows={preview.gaps.noMail} />
+            </>
+          ) : null}
           {preview.outsideWindow > 0 ? (
             <p className="meta">
               {preview.outsideWindow} statement line{preview.outsideWindow === 1 ? "" : "s"} fall
               outside the mail window and are left alone.
             </p>
           ) : null}
-          {preview.suggestions.length === 0 ? (
-            <p className="meta">No vendor-like UPI ids left to review.</p>
+          {preview.suggestions.filter((item) => item.reason !== "business").length === 0 ? (
+            <p className="meta">No known vendors left to review. Unrecognised handles stay unclassified until you assign them on Transactions.</p>
           ) : (
             <div className="statement-match-scroll">
               <table className="statement-match-table">
                 <colgroup>
+                  <col className="col-check" />
                   <col className="col-upi" />
                   <col className="col-review" />
                   <col className="col-vendor" />
@@ -206,6 +390,23 @@ export function StatementMatchPage() {
                 </colgroup>
                 <thead>
                   <tr>
+                    <th>
+                      <input
+                        type="checkbox"
+                        aria-label="Select all vendors"
+                        checked={
+                          preview.suggestions
+                            .filter((item) => item.reason !== "business")
+                            .every((item) => selected.includes(item.upiId))
+                        }
+                        onChange={(event) => {
+                          const ids = preview.suggestions
+                            .filter((item) => item.reason !== "business")
+                            .map((item) => item.upiId);
+                          setSelected(event.target.checked ? ids : []);
+                        }}
+                      />
+                    </th>
                     <th>UPI id</th>
                     <th>Review</th>
                     <th>Vendor</th>
@@ -213,10 +414,27 @@ export function StatementMatchPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {preview.suggestions.map((suggestion) => {
-                    const applying = busy === suggestion.upiId;
+                  {preview.suggestions.filter((item) => item.reason !== "business").map((suggestion) => {
+                    const applying = busy !== null || job?.status === "running" || busy === suggestion.upiId;
+                    const vendorChoices = providers.filter(
+                      (provider) =>
+                        provider.categorySlug &&
+                        provider.categorySlug !== "banks" &&
+                        provider.categorySlug !== "family" &&
+                        provider.categorySlug !== "cook-maid" &&
+                        provider.categorySlug !== "furniture",
+                    );
                     return (
                       <tr key={suggestion.upiId}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${suggestion.upiId}`}
+                            checked={selected.includes(suggestion.upiId)}
+                            disabled={applying}
+                            onChange={() => toggleSelected(suggestion.upiId)}
+                          />
+                        </td>
                         <td>
                           <div className="statement-upi">
                             <strong>{suggestion.upiId}</strong>
@@ -253,7 +471,7 @@ export function StatementMatchPage() {
                         </td>
                         <td>
                           <VendorLogoPicker
-                            providers={providers}
+                            providers={vendorChoices}
                             value={choices[suggestion.upiId] ?? ""}
                             disabled={applying}
                             onChange={(providerId) =>

@@ -9,6 +9,17 @@ import type {
   TelegramStatus,
 } from "./types";
 
+export type StatementMatchJob = {
+  id: string;
+  status: "running" | "done";
+  total: number;
+  completed: number;
+  labeled: number;
+  doneIds: string[];
+  failures: { upiId: string; message: string }[];
+  window: { from: string; to: string };
+};
+
 /**
  * Authenticated API client — all methods attach the session JWT automatically.
  * Create once per token via `createApiClient(token)` or consume via `useApi()`.
@@ -187,6 +198,25 @@ export function createApiClient(token: string) {
           ambiguous: number;
           unmatched: number;
         }>;
+        gaps: {
+          missingCount: number;
+          missingCreditCount: number;
+          missing: Array<{
+            date: string;
+            amount: number;
+            type: "debit" | "credit";
+            description: string;
+            upiId: string | null;
+          }>;
+          noMailCount: number;
+          noMail: Array<{
+            date: string;
+            amount: number;
+            type: "debit" | "credit";
+            description: string;
+            upiId: string | null;
+          }>;
+        };
         lines: Array<{
           date: string;
           amount: number;
@@ -226,6 +256,26 @@ export function createApiClient(token: string) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       }),
+
+    startStatementMatchBatch: (body: {
+      lines: Array<{
+        date: string;
+        amount: number;
+        type: "debit" | "credit";
+        description: string;
+        upiId: string | null;
+      }>;
+      items: Array<{ upiId: string; providerId: string }>;
+    }) =>
+      requestJson<StatementMatchJob>("/api/statement-match/apply-batch", {
+        method: "POST",
+        ...auth,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+
+    statementMatchJob: (jobId: string) =>
+      requestJson<StatementMatchJob>(`/api/statement-match/apply-batch/${jobId}`, auth),
 
     patchProvider: (
       id: string,

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { chunkMatchItems, MATCH_BATCH_SIZE } from "../../src/statementMatch/applyBatch.js";
 import {
+  findStatementGaps,
   matchLinesToLedger,
   planUpiApply,
   summarizeSuggestions,
@@ -76,6 +78,63 @@ function row(partial: Partial<TimelineRow> & Pick<TimelineRow, "id" | "date">): 
     ...partial,
   };
 }
+
+describe("findStatementGaps", () => {
+  const window = { from: "2026-03-01", to: "2026-09-27" };
+  const credit = {
+    date: "2026-09-01",
+    amount: 55000,
+    type: "credit" as const,
+    description: "UPI-ARYAN GOPAKUMAR",
+    upiId: "aryan.gopa04@okicici",
+  };
+
+  it("lists statement credits that never became a ledger row", () => {
+    const gaps = findStatementGaps({
+      lines: [credit],
+      ledger: [],
+      mailDates: ["2026-09-01"],
+      window,
+    });
+    assert.equal(gaps.missingCount, 1);
+    assert.equal(gaps.missingCreditCount, 1);
+    assert.equal(gaps.noMailCount, 0);
+  });
+
+  it("lists statement lines with no mail that day or the day beside it", () => {
+    const gaps = findStatementGaps({
+      lines: [credit],
+      ledger: [{ date: "2026-09-01", amount: 55000, type: "credit" }],
+      mailDates: ["2026-08-20"],
+      window,
+    });
+    assert.equal(gaps.missingCount, 0);
+    assert.equal(gaps.noMailCount, 1);
+  });
+
+  it("treats a ledger row one day off as already imported", () => {
+    const gaps = findStatementGaps({
+      lines: [credit],
+      ledger: [{ date: "2026-09-02", amount: 55000, type: "credit" }],
+      mailDates: ["2026-08-31"],
+      window,
+    });
+    assert.equal(gaps.missingCount, 0);
+    assert.equal(gaps.noMailCount, 0);
+  });
+});
+
+describe("chunkMatchItems", () => {
+  it("groups approvals into atomic batches of three", () => {
+    const items = ["a", "b", "c", "d", "e", "f", "g"];
+    assert.equal(MATCH_BATCH_SIZE, 3);
+    assert.deepEqual(chunkMatchItems(items), [
+      ["a", "b", "c"],
+      ["d", "e", "f"],
+      ["g"],
+    ]);
+  });
+});
 
 describe("planUpiApply", () => {
   it("labels March mail rows that already have the UPI id, not only the statement month", () => {

@@ -6,7 +6,7 @@ import { useDashboard } from "@/lib/dashboard-context";
 import { useApi } from "@/lib/useApi";
 import { pathForView } from "@/lib/dashboardViews";
 import type { Provider } from "@/lib/api/types";
-import { groupAppsByCategory, logoForAppName } from "@/helpers/apps";
+import { groupAppsByCategory, logoForAppName, logoForCategory } from "@/helpers/apps";
 import { formatInr } from "@/helpers/currency";
 import { formatMonthTitle } from "@/helpers/finance";
 import { BrandMark } from "@/components/BrandMark";
@@ -78,10 +78,28 @@ export function AppsPage() {
               title={group.label}
               subtitle={`${group.apps.length} app${group.apps.length === 1 ? "" : "s"}`}
             />
-            {group.apps.length === 0 ? (
+            {group.apps.length === 0 &&
+            !(data.categories ?? []).some((category) => category.meta?.parent === group.slug) ? (
               <p className="meta">No apps in this category yet</p>
             ) : (
               <div className="apps-grid">
+                {(data.categories ?? [])
+                  .filter((category) => category.meta?.parent === group.slug)
+                  .map((category) => (
+                    <article key={category.slug} className="app-card">
+                      <header className="app-card-head">
+                        <BrandMark
+                          name={category.label}
+                          logoUrl={logoForCategory(category.slug)}
+                          size={40}
+                        />
+                        <div className="app-card-id">
+                          <strong>{category.label}</strong>
+                          <p className="meta">{category.blurb || group.label}</p>
+                        </div>
+                      </header>
+                    </article>
+                  ))}
                 {group.apps.map(({ provider, total, count }) => (
                   <article key={provider.id} className="app-card">
                     <header className="app-card-head">
@@ -123,7 +141,9 @@ export function AppsPage() {
                           }
                         }}
                       >
-                        {(data.categories ?? []).map((category) => (
+                        {(data.categories ?? [])
+                          .filter((category) => !category.meta?.parent)
+                          .map((category) => (
                           <option key={category.slug} value={category.slug}>
                             {category.label}
                           </option>
@@ -231,7 +251,9 @@ export function AppsPage() {
                 value={categorySlug}
                 onChange={(e) => setCategorySlug(e.target.value)}
               >
-                {(data.categories ?? []).map((category) => (
+                {(data.categories ?? [])
+                  .filter((category) => !category.meta?.parent)
+                  .map((category) => (
                   <option key={category.slug} value={category.slug}>
                     {category.label}
                   </option>
