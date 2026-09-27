@@ -8,20 +8,6 @@ import { useApi } from "@/lib/useApi";
 import { pathForView } from "@/lib/dashboardViews";
 import { telegramConnectHint, type TelegramStatus } from "@/lib/telegram";
 
-function buildRuleMatchFields(matchText: string): {
-  matchNarrationRe?: string;
-  matchUpiId?: string;
-} {
-  const trimmed = matchText.trim();
-  if (!trimmed) return {};
-  if (trimmed.includes("@")) {
-    return { matchUpiId: trimmed.toLowerCase() };
-  }
-  return {
-    matchNarrationRe: trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-  };
-}
-
 function resizeAvatar(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -66,11 +52,6 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
   const [avatarBusy, setAvatarBusy] = useState(false);
   const saveLimit = useSaveDailyLimit();
   const [rules, setRules] = useState<Array<Record<string, unknown>>>([]);
-  const [suggestions, setSuggestions] = useState<
-    Array<{ label: string; count: number; sample: string }>
-  >([]);
-  const [payeeName, setPayeeName] = useState("");
-  const [matchText, setMatchText] = useState("");
   const [dailyLimit, setDailyLimit] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -80,14 +61,12 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
   const refresh = useCallback(async () => {
     if (!api) return;
     try {
-      const [rulesRes, suggestionsRes, prefsRes, telegramRes] = await Promise.all([
+      const [rulesRes, prefsRes, telegramRes] = await Promise.all([
         api.listRules(),
-        api.fetchSuggestions().catch(() => ({ suggestions: [] })),
         api.fetchPreferences(),
         api.telegramStatus().catch(() => null),
       ]);
       setRules(rulesRes.rules);
-      setSuggestions(suggestionsRes.suggestions);
       setDailyLimit(prefsRes.dailySpendLimit);
       setTelegram(telegramRes);
     } catch (err) {
@@ -304,119 +283,37 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
         </Link>
       </section>
 
-      <section className="settings-section">
-        <h3 className="ui-header">Tracking rules</h3>
-        <p className="meta">
-          Name people you care about. Matching is based on narration / UPI text
-          you control.
-        </p>
-        <div className="upload-panel" style={{ maxWidth: "100%" }}>
-          <label className="field">
-            <span>Name</span>
-            <input
-              value={payeeName}
-              onChange={(e) => setPayeeName(e.target.value)}
-              placeholder="Deepan"
-            />
-          </label>
-          <label className="field">
-            <span>Match narration / UPI contains</span>
-            <input
-              value={matchText}
-              onChange={(e) => setMatchText(e.target.value)}
-              placeholder="deepan"
-            />
-          </label>
-          <button
-            type="button"
-            className="cta"
-            onClick={async () => {
-              try {
-                setError(null);
-                const name = payeeName.trim();
-                const match = matchText.trim();
-                if (!name) {
-                  setError("Enter a name to track");
-                  return;
-                }
-                if (!match) {
-                  setError("Enter narration or UPI text to match");
-                  return;
-                }
-                const result = await api.createRule({
-                  name: `Track ${name}`,
-                  priority: 20,
-                  ...buildRuleMatchFields(match),
-                  setPayeeName: name,
-                });
-                setPayeeName("");
-                setMatchText("");
-                await refresh();
-                onChanged?.();
-                const count =
-                  typeof result.reclassified === "number" ? result.reclassified : 0;
-                setMessage(
-                  count > 0
-                    ? `Rule saved — matched ${count} existing transaction${count === 1 ? "" : "s"}`
-                    : "Rule saved",
-                );
-              } catch (err) {
-                setError(
-                  err instanceof Error ? err.message : "Could not save rule",
-                );
-              }
-            }}
-          >
-            Save tracking rule
-          </button>
-        </div>
-
-        {suggestions.length > 0 && (
-          <div style={{ marginTop: "1rem" }}>
-            <p className="meta">Frequent counterparties — click to track</p>
-            <div className="day-chips" style={{ marginTop: "0.5rem" }}>
-              {suggestions.slice(0, 8).map((s) => (
-                <button
-                  key={s.label + s.count}
-                  type="button"
-                  className="sort-chip"
-                  onClick={() => {
-                    setPayeeName(s.label);
-                    setMatchText(s.label);
-                  }}
-                >
-                  {s.label} · {s.count}
-                </button>
+      {rules.some((rule) => !rule.setPayeeName) ? (
+        <section className="settings-section">
+          <h3 className="ui-header">Other rules</h3>
+          <p className="meta">People are added on the People page.</p>
+          <ul className="upi-list" style={{ marginTop: "1rem", maxHeight: 180 }}>
+            {rules
+              .filter((rule) => !rule.setPayeeName)
+              .map((rule) => (
+                <li key={String(rule.id)} className="upi-row">
+                  <span className="upi-rank">rule</span>
+                  <div className="upi-meta">
+                    <strong>{String(rule.name)}</strong>
+                    <span className="meta">
+                      {String(rule.setCategorySlug || "custom")} · {ruleMatchLabel(rule)}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={async () => {
+                      await api.deleteRule(String(rule.id));
+                      await refresh();
+                    }}
+                  >
+                    Remove
+                  </button>
+                </li>
               ))}
-            </div>
-          </div>
-        )}
-
-        <ul className="upi-list" style={{ marginTop: "1rem", maxHeight: 180 }}>
-          {rules.map((rule) => (
-            <li key={String(rule.id)} className="upi-row">
-              <span className="upi-rank">rule</span>
-              <div className="upi-meta">
-                <strong>{String(rule.name)}</strong>
-                <span className="meta">
-                  {String(rule.setPayeeName || rule.setCategorySlug || "custom")} ·{" "}
-                  {ruleMatchLabel(rule)}
-                </span>
-              </div>
-              <button
-                type="button"
-                className="ghost"
-                onClick={async () => {
-                  await api.deleteRule(String(rule.id));
-                  await refresh();
-                }}
-              >
-                Remove
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
+          </ul>
+        </section>
+      ) : null}
 
       <section className="settings-section">
         <h3 className="ui-header">Account</h3>

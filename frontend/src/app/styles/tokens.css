@@ -73,8 +73,14 @@
   --cat-cook-maid: #f472b6;
   --cat-household: #22c55e;
   --cat-outing: #6a7058;
+  --cat-dinner: #d97706;
+  --cat-sports: #059669;
+  --cat-fun-activity: #7c3aed;
   --cat-investments: #4f6248;
+  --cat-vices: #9f1239;
+  --cat-booze: #e11d48;
   --cat-cigarettes: #8a6a3d;
+  --cat-scooty-rental: #0f766e;
   --cat-banks: #004c8f;
   --cat-other: #6b7368;
   --shadow-sm: 0 1px 2px rgba(9, 20, 12, 0.04);

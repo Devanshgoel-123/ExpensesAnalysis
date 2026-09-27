@@ -21,6 +21,12 @@ describe("parseCategoryReply", () => {
     assert.equal(parseCategoryReply("furlenco"), "household");
     assert.equal(parseCategoryReply("rent"), "rent");
     assert.equal(parseCategoryReply("brokerage"), "brokerage");
+    assert.equal(parseCategoryReply("booze"), "booze");
+    assert.equal(parseCategoryReply("beer"), "booze");
+    assert.equal(parseCategoryReply("dinner"), "dinner");
+    assert.equal(parseCategoryReply("sports"), "sports");
+    assert.equal(parseCategoryReply("fun activity"), "fun-activity");
+    assert.equal(parseCategoryReply("scooty rental"), "scooty-rental");
     assert.equal(parseCategoryReply("random expense"), "random-expense");
   });
 

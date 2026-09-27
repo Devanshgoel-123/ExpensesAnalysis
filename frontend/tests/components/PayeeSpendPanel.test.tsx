@@ -6,6 +6,8 @@ describe("PayeeSpendPanel", () => {
   it("renders tracked payee totals", () => {
     render(
       <PayeeSpendPanel
+        title="Friends"
+        subtitle="1 friend"
         items={[
           {
             name: "Deepan",
@@ -17,7 +19,7 @@ describe("PayeeSpendPanel", () => {
         ]}
       />,
     );
-    expect(screen.getByText("People")).toBeInTheDocument();
+    expect(screen.getByText("Friends")).toBeInTheDocument();
     expect(screen.getByText("Deepan")).toBeInTheDocument();
   });
 });

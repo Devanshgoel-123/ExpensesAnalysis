@@ -231,6 +231,23 @@ export function createApiClient(token: string) {
       });
     },
 
+    importMissingStatementLines: (
+      lines: Array<{
+        date: string;
+        amount: number;
+        type: "debit" | "credit";
+        description: string;
+        upiId: string | null;
+        categorySlug?: string | null;
+      }>,
+    ) =>
+      requestJson<{ inserted: number; skipped: number }>("/api/statement-match/import-missing", {
+        method: "POST",
+        ...auth,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lines }),
+      }),
+
     applyStatementMatch: (body: {
       upiId: string;
       providerId: string;

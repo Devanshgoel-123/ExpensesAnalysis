@@ -120,10 +120,17 @@ export async function applyUpiBatch(
   const claimed = new Set<string>();
   let labeled = 0;
   const applied: AppliedUpi[] = [];
+  // One live copy per vendor. A batch often has several UPI ids for Swiggy
+  // or Zepto; writing from the copy fetched at the start drops the earlier ids.
+  const live = new Map<string, ProviderRow>();
+  for (const provider of providers) {
+    if (!live.has(provider.id)) {
+      live.set(provider.id, { ...provider, upiHandles: [...provider.upiHandles] });
+    }
+  }
 
-  for (let index = 0; index < items.length; index += 1) {
-    const item = items[index]!;
-    const provider = providers[index]!;
+  for (const item of items) {
+    const provider = live.get(item.providerId)!;
     const trimmed = item.upiId.trim();
     const alreadySaved = provider.upiHandles.some(
       (handle) => normalizeToken(handle) === normalizeToken(trimmed),
@@ -133,7 +140,7 @@ export async function applyUpiBatch(
         ...provider,
         upiHandles: [...provider.upiHandles, trimmed],
       });
-      provider.upiHandles = saved.upiHandles;
+      live.set(provider.id, saved);
     }
 
     const plan = planUpiApply({

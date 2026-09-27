@@ -169,12 +169,20 @@ describe("logoForAppName", () => {
     expect(logoForAppName("Apple")).toBe("/providers/apple.svg");
     expect(logoForAppName("Apollo Hospital")).toBe("/providers/apollo.svg");
     expect(logoForAppName("Office Cafeteria")).toBe("/providers/office-cafeteria.png");
+    expect(logoForAppName("Dominos")).toBe("/providers/dominos.svg");
+    expect(logoForAppName("Pizza Hut")).toBe("/providers/pizzahut.svg");
     expect(logoForAppName("unknown cafe")).toBeNull();
   });
 
   it("maps household subcategories to local marks", () => {
     expect(logoForCategory("rent")).toBe("/providers/rent.svg");
     expect(logoForCategory("brokerage")).toBe("/providers/brokerage.svg");
+    expect(logoForCategory("booze")).toBe("/providers/booze.svg");
+    expect(logoForCategory("cigarettes")).toBe("/providers/cigarettes.svg");
+    expect(logoForCategory("scooty-rental")).toBe("/providers/scooty.svg");
+    expect(logoForCategory("dinner")).toBe("/providers/dinner.svg");
+    expect(logoForCategory("sports")).toBe("/providers/sports.svg");
+    expect(logoForCategory("fun-activity")).toBe("/providers/fun-activity.svg");
     expect(logoForCategory("food")).toBeNull();
   });
 });

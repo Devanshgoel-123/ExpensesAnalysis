@@ -67,8 +67,12 @@ export function buildCategorySpendRows(
       .map((category) => [category.slug, category.meta.parent as string]),
   );
   const byCategory = new Map<string, MerchantSpend[]>();
+  const cigaretteParent = categories.find(
+    (category) => category.slug === CategorySlug.Cigarettes,
+  )?.meta?.parent;
   for (const row of merchants) {
     const slug = row.categorySlug ?? CategorySlug.Other;
+    if (slug === CategorySlug.Cigarettes) continue;
     const cat = parentOf.get(slug) ?? slug;
     const list = byCategory.get(cat) ?? [];
     list.push(row);
@@ -77,7 +81,7 @@ export function buildCategorySpendRows(
 
   return [...categories]
     .sort((a, b) => a.sortOrder - b.sortOrder)
-    .filter((category) => category.slug !== CategorySlug.Banks)
+    .filter((category) => category.slug !== CategorySlug.Banks && !category.meta?.parent)
     .map((category) => {
       if (category.slug === CategorySlug.Cigarettes) {
         return {
@@ -89,11 +93,16 @@ export function buildCategorySpendRows(
         };
       }
       const rows = byCategory.get(category.slug) ?? [];
+      const band =
+        category.slug === cigaretteParent
+          ? cigaretteBand
+          : { total: 0, count: 0 };
       return {
         id: category.slug,
         label: category.label,
-        total: Math.round(rows.reduce((s, m) => s + m.total, 0) * 100) / 100,
-        count: rows.reduce((s, m) => s + m.count, 0),
+        total:
+          Math.round((rows.reduce((s, m) => s + m.total, 0) + band.total) * 100) / 100,
+        count: rows.reduce((s, m) => s + m.count, 0) + band.count,
         accent: category.accent,
       };
     })

@@ -14,6 +14,7 @@ import {
   watchMatchJob,
 } from "@/features/statement-match/matchJob";
 import { formatInr } from "@/helpers/currency";
+import type { CategorySummary } from "@/types";
 import { LedgerlineFadeContent } from "@/components/animations/LedgerlineFadeContent";
 import { Panel, PanelHead } from "@/components/ui/Panel";
 import { VendorLogoPicker } from "@/features/statement-match/VendorLogoPicker";
@@ -58,34 +59,111 @@ type Preview = {
   note: string;
 };
 
-function GapTable({ rows }: { rows: GapLine[] }) {
+function reviewLine(suggestion: Suggestion): string {
+  const parts: string[] = [];
+  if (suggestion.lineCount > 0) {
+    parts.push(
+      `${suggestion.lineCount} in this statement`,
+    );
+  }
+  if (suggestion.timelineMatches > 0) {
+    parts.push(`${suggestion.timelineMatches} already in mail`);
+  }
+  if (suggestion.uniqueMatches > 0) {
+    parts.push(`${suggestion.uniqueMatches} ready to label`);
+  }
+  if (suggestion.ambiguous > 0) parts.push(`${suggestion.ambiguous} shared day`);
+  if (suggestion.unmatched > 0) parts.push(`${suggestion.unmatched} unmatched`);
+  return parts.length > 0 ? parts.join(" · ") : "Already saved on this vendor";
+}
+
+function lineKey(line: GapLine, index: number): string {
+  return `${line.date}|${line.amount}|${line.type}|${index}`;
+}
+
+function assignOptions(categories: CategorySummary[], type: GapLine["type"]) {
+  const parents = categories.filter(
+    (category) => category.slug !== "banks" && !category.meta?.parent,
+  );
+  const salary = categories.find((category) => category.slug === "salary");
+  const fromHome = categories.find((category) => category.slug === "from-home");
+  if (type !== "credit") {
+    return parents.map((category) => ({ slug: category.slug, label: category.label }));
+  }
+  const rest = parents.filter((category) => category.slug !== "salary");
+  return [
+    ...(salary ? [{ slug: salary.slug, label: "Salary" }] : []),
+    ...(fromHome ? [{ slug: fromHome.slug, label: "Money from home" }] : []),
+    ...rest.map((category) => ({ slug: category.slug, label: category.label })),
+  ];
+}
+
+function GapTable({
+  rows,
+  categories = [],
+  choices = {},
+  onChoice,
+}: {
+  rows: GapLine[];
+  categories?: CategorySummary[];
+  choices?: Record<string, string>;
+  onChoice?: (key: string, slug: string) => void;
+}) {
   return (
-    <div className="statement-match-scroll">
-      <table className="statement-match-table">
+    <div className="statement-match-scroll statement-gap-scroll">
+      <table className="statement-gap-table">
+        <colgroup>
+          <col className="col-date" />
+          <col className="col-type" />
+          <col className="col-details" />
+          {onChoice ? <col className="col-category" /> : null}
+          <col className="col-amount" />
+        </colgroup>
         <thead>
           <tr>
             <th>Date</th>
             <th>Type</th>
             <th>Details</th>
+            {onChoice ? <th>Category</th> : null}
             <th className="num">Amount</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((line, index) => (
-            <tr key={`${line.date}-${line.amount}-${line.type}-${index}`}>
-              <td>{line.date}</td>
+          {rows.map((line, index) => {
+            const key = lineKey(line, index);
+            return (
+            <tr key={key}>
+              <td className="mono">{line.date.slice(5)}</td>
               <td>
                 <span className={`pill ${line.type}`}>{line.type}</span>
               </td>
               <td>
                 <div className="statement-upi">
-                  <strong>{line.upiId ?? "No UPI id"}</strong>
-                  <span title={line.description}>{line.description}</span>
+                  <strong title={line.description}>{line.description}</strong>
+                  <span>{line.upiId ?? "No UPI id"}</span>
                 </div>
               </td>
-              <td className="num">{formatInr(line.amount)}</td>
+              {onChoice ? (
+                <td>
+                  <select
+                    className="statement-gap-category"
+                    aria-label={`Category for ${line.description}`}
+                    value={choices[key] ?? ""}
+                    onChange={(event) => onChoice(key, event.target.value)}
+                  >
+                    <option value="">Unlabeled</option>
+                    {assignOptions(categories, line.type).map((option) => (
+                      <option key={option.slug} value={option.slug}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+              ) : null}
+              <td className="num mono">{formatInr(line.amount)}</td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -95,7 +173,7 @@ function GapTable({ rows }: { rows: GapLine[] }) {
 export function StatementMatchPage() {
   const api = useApi();
   const { token } = useAuth();
-  const { refresh } = useDashboard();
+  const { data, refresh } = useDashboard();
   const [password, setPassword] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -105,6 +183,7 @@ export function StatementMatchPage() {
   const [job, setJob] = useState<StatementMatchJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [gapChoices, setGapChoices] = useState<Record<string, string>>({});
 
   async function onFile(file: File) {
     if (!api) return;
@@ -131,6 +210,41 @@ export function StatementMatchPage() {
     }
   }
 
+  async function addMissing() {
+    if (!api || !preview || preview.gaps.missing.length === 0) return;
+    setBusy("import");
+    setError(null);
+    try {
+      const result = await api.importMissingStatementLines(
+        preview.gaps.missing.map((line, index) => ({
+          ...line,
+          categorySlug: gapChoices[lineKey(line, index)] || null,
+        })),
+      );
+      setPreview({
+        ...preview,
+        gaps: {
+          ...preview.gaps,
+          missing: [],
+          missingCount: 0,
+          missingCreditCount: 0,
+        },
+      });
+      setGapChoices({});
+      const added = `${result.inserted} payment${result.inserted === 1 ? "" : "s"}`;
+      const already =
+        result.skipped > 0
+          ? ` ${result.skipped} ${result.skipped === 1 ? "was" : "were"} already in Transactions.`
+          : "";
+      setMessage(`Added ${added} to Transactions.${already} Open Transactions to change a category.`);
+      refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not add those payments");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   function reject(suggestion: Suggestion) {
     if (!preview || busy === suggestion.upiId) return;
     setError(null);
@@ -152,9 +266,7 @@ export function StatementMatchPage() {
     (next: StatementMatchJob) => {
       setJob(next.status === "done" ? null : next);
       if (next.status !== "done") {
-        setMessage(
-          `Approving vendors ${next.completed} of ${next.total}, 3 at a time. This keeps going if you switch tabs.`,
-        );
+        setMessage(null);
         return;
       }
       const windowLabel = formatScanWindowLabel(next.window);
@@ -213,9 +325,7 @@ export function StatementMatchPage() {
       rememberMatchJob(started.id);
       setJob(started);
       setSelected([]);
-      setMessage(
-        `Approving ${started.total} vendor${started.total === 1 ? "" : "s"}, 3 at a time. This keeps going if you switch tabs.`,
-      );
+      setMessage(null);
       watchMatchJob(started.id, token, onMatchJob);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start that approval");
@@ -336,45 +446,26 @@ export function StatementMatchPage() {
                   )
                 }
               >
-                {job?.status === "running"
-                  ? `Approving ${job.completed} of ${job.total}`
-                  : busy === "bulk"
-                    ? "Starting…"
-                    : `Approve selected (${selected.length})`}
+                {busy === "bulk"
+                  ? "Starting…"
+                  : `Approve selected (${selected.length})`}
               </button>
             }
           />
-          <div className="statement-gap-summary">
-            <p className="meta">
-              <strong>{preview.gaps.missingCount}</strong> statement line
-              {preview.gaps.missingCount === 1 ? "" : "s"} are not in the Gmail ledger
-              {preview.gaps.missingCreditCount > 0
-                ? `, including ${preview.gaps.missingCreditCount} credit${preview.gaps.missingCreditCount === 1 ? "" : "s"}`
-                : ""}
-              .
-            </p>
-            <p className="meta">
-              <strong>{preview.gaps.noMailCount}</strong> statement line
-              {preview.gaps.noMailCount === 1 ? "" : "s"} have no bank mail on that day, the day before, or the day after.
-            </p>
-          </div>
-          {preview.gaps.missingCount > 0 ? (
-            <>
-              <h3 className="ui-header mt-4">Missing from Gmail</h3>
-              <GapTable rows={preview.gaps.missing} />
-            </>
-          ) : null}
-          {preview.gaps.noMailCount > 0 ? (
-            <>
-              <h3 className="ui-header mt-4">No mail nearby</h3>
-              <GapTable rows={preview.gaps.noMail} />
-            </>
-          ) : null}
-          {preview.outsideWindow > 0 ? (
-            <p className="meta">
-              {preview.outsideWindow} statement line{preview.outsideWindow === 1 ? "" : "s"} fall
-              outside the mail window and are left alone.
-            </p>
+          {job?.status === "running" ? (
+            <div className="statement-progress" aria-live="polite">
+              <div className="statement-progress-track">
+                <div
+                  className="statement-progress-bar"
+                  style={{
+                    width: `${Math.round((job.completed / Math.max(job.total, 1)) * 100)}%`,
+                  }}
+                />
+              </div>
+              <p className="meta">
+                Approving {job.completed} of {job.total}. You can leave this page.
+              </p>
+            </div>
           ) : null}
           {preview.suggestions.filter((item) => item.reason !== "business").length === 0 ? (
             <p className="meta">No known vendors left to review. Unrecognised handles stay unclassified until you assign them on Transactions.</p>
@@ -415,7 +506,8 @@ export function StatementMatchPage() {
                 </thead>
                 <tbody>
                   {preview.suggestions.filter((item) => item.reason !== "business").map((suggestion) => {
-                    const applying = busy !== null || job?.status === "running" || busy === suggestion.upiId;
+                    const rowBusy = busy === suggestion.upiId;
+                    const locked = busy !== null || job?.status === "running";
                     const vendorChoices = providers.filter(
                       (provider) =>
                         provider.categorySlug &&
@@ -431,7 +523,7 @@ export function StatementMatchPage() {
                             type="checkbox"
                             aria-label={`Select ${suggestion.upiId}`}
                             checked={selected.includes(suggestion.upiId)}
-                            disabled={applying}
+                            disabled={locked}
                             onChange={() => toggleSelected(suggestion.upiId)}
                           />
                         </td>
@@ -449,31 +541,13 @@ export function StatementMatchPage() {
                                 ? `Saved on ${suggestion.providerName}`
                                 : "Business handle"}
                           </p>
-                          <div className="statement-stats">
-                            <span>
-                              {suggestion.lineCount === 0
-                                ? "Already in mail"
-                                : `${suggestion.lineCount} ${suggestion.lineCount === 1 ? "line" : "lines"}`}
-                            </span>
-                            <span className="update" title="Statement lines whose date and amount match one ledger row">
-                              {suggestion.uniqueMatches} statement
-                            </span>
-                            <span className="timeline" title="Payments already in the mail window that carry this UPI id">
-                              {suggestion.timelineMatches} mail window
-                            </span>
-                            <span className="ambiguous" title="Same amount appeared more than once that day">
-                              {suggestion.ambiguous} shared
-                            </span>
-                            <span className="miss" title="No ledger row for that date and amount">
-                              {suggestion.unmatched} unmatched
-                            </span>
-                          </div>
+                          <p className="statement-review-line">{reviewLine(suggestion)}</p>
                         </td>
                         <td>
                           <VendorLogoPicker
                             providers={vendorChoices}
                             value={choices[suggestion.upiId] ?? ""}
-                            disabled={applying}
+                            disabled={locked}
                             onChange={(providerId) =>
                               setChoices((current) => ({
                                 ...current,
@@ -487,15 +561,15 @@ export function StatementMatchPage() {
                             <button
                               type="button"
                               className="statement-approve"
-                              disabled={applying || !choices[suggestion.upiId]}
+                              disabled={locked || !choices[suggestion.upiId]}
                               onClick={() => void approve(suggestion)}
                             >
-                              {applying ? "Applying…" : "Approve"}
+                              {rowBusy ? "Saving…" : "Approve"}
                             </button>
                             <button
                               type="button"
                               className="statement-reject"
-                              disabled={applying}
+                              disabled={locked}
                               onClick={() => reject(suggestion)}
                             >
                               Reject
@@ -509,6 +583,52 @@ export function StatementMatchPage() {
               </table>
             </div>
           )}
+          <div className="statement-gap-summary">
+            <p className="meta">
+              {preview.gaps.missingCount} not in Gmail
+              {preview.gaps.missingCreditCount > 0
+                ? ` · ${preview.gaps.missingCreditCount} credit${preview.gaps.missingCreditCount === 1 ? "" : "s"}`
+                : ""}
+              {preview.gaps.noMailCount > 0
+                ? ` · ${preview.gaps.noMailCount} with no mail that day`
+                : ""}
+              {preview.outsideWindow > 0
+                ? ` · ${preview.outsideWindow} outside the mail window`
+                : ""}
+            </p>
+          </div>
+          {preview.gaps.missingCount > 0 ? (
+            <details className="statement-gap-block" open>
+              <summary>Missing from Gmail ({preview.gaps.missingCount})</summary>
+              <div className="statement-gap-add">
+                <p className="meta">
+                  Credits can be Salary, Money from home, or any other category. Spend can be labeled now or later on Transactions.
+                </p>
+                <button
+                  type="button"
+                  className="statement-approve"
+                  disabled={busy !== null}
+                  onClick={() => void addMissing()}
+                >
+                  {busy === "import" ? "Adding…" : "Add to transactions"}
+                </button>
+              </div>
+              <GapTable
+                rows={preview.gaps.missing}
+                categories={data?.categories ?? []}
+                choices={gapChoices}
+                onChoice={(key, slug) =>
+                  setGapChoices((current) => ({ ...current, [key]: slug }))
+                }
+              />
+            </details>
+          ) : null}
+          {preview.gaps.noMailCount > 0 ? (
+            <details className="statement-gap-block">
+              <summary>No mail nearby ({preview.gaps.noMailCount})</summary>
+              <GapTable rows={preview.gaps.noMail} />
+            </details>
+          ) : null}
         </Panel>
       ) : null}
     </div>

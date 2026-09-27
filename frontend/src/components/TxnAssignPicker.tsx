@@ -94,10 +94,12 @@ export function TxnAssignPicker({
 
   useEffect(() => {
     if (!open) return;
+    const stored = categories.find((item) => item.slug === txn.category);
     const initial =
-      txn.category && txn.category !== "banks" && txn.category !== "other"
+      stored?.meta?.parent ??
+      (txn.category && txn.category !== "banks" && txn.category !== "other"
         ? txn.category
-        : null;
+        : null);
     setBrowse(initial);
     setQuery("");
     place();

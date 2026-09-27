@@ -195,4 +195,22 @@ describe("planUpiApply", () => {
     assert.equal(suggestions[0]?.timelineMatches, 1);
     assert.equal(suggestions[0]?.uniqueMatches, 0);
   });
+
+  it("does not ask again once the UPI id is already saved on the vendor", () => {
+    const suggestions = summarizeSuggestions(
+      [
+        {
+          date: "2026-09-02",
+          amount: 240,
+          type: "debit",
+          description: "UPI-SWIGGY",
+          upiId: "swiggy@ybl",
+        },
+      ],
+      [{ ...swiggy, upiHandles: ["swiggy@ybl"] }],
+      [],
+      window,
+    );
+    assert.equal(suggestions.length, 0);
+  });
 });

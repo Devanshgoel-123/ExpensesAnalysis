@@ -354,7 +354,7 @@ export function summarizeSuggestions(
 
   appendTimelineSuggestions(suggestions, inWindowLedger, vendors);
   return suggestions
-    .filter((item) => item.reason !== "business")
+    .filter((item) => item.reason === "name")
     .sort(
       (a, b) => b.lineCount - a.lineCount || b.timelineMatches - a.timelineMatches || a.upiId.localeCompare(b.upiId),
     );

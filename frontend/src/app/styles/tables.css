@@ -394,10 +394,10 @@ td.credit,
 }
 
 .statement-match-table col.col-check { width: 2.4rem; }
-.statement-match-table col.col-upi { width: 30%; }
-.statement-match-table col.col-review { width: 28%; }
-.statement-match-table col.col-vendor { width: 22%; }
-.statement-match-table col.col-actions { width: 18%; }
+.statement-match-table col.col-upi { width: 28%; }
+.statement-match-table col.col-review { width: 26%; }
+.statement-match-table col.col-vendor { width: 26%; }
+.statement-match-table col.col-actions { width: 16%; }
 
 .statement-match-table th {
   background: color-mix(in srgb, var(--surface) 92%, transparent);
@@ -430,10 +430,91 @@ td.credit,
 }
 
 .statement-reason {
-  margin: 0 0 0.35rem;
-  font-size: 0.75rem;
+  margin: 0 0 0.2rem;
+  font-size: 0.78rem;
   font-weight: 600;
   color: var(--foreground);
+}
+
+.statement-review-line {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.statement-progress {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0 0 0.9rem;
+}
+
+.statement-progress-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--bg-muted);
+  overflow: hidden;
+}
+
+.statement-progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: #c46b3a;
+}
+
+.statement-gap-summary {
+  margin-top: 1rem;
+}
+
+.statement-gap-block {
+  margin-top: 0.65rem;
+}
+
+.statement-gap-block summary {
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.statement-gap-scroll {
+  max-height: 280px;
+  margin-top: 0.55rem;
+}
+
+.statement-gap-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.statement-gap-table col.col-date { width: 5.5rem; }
+.statement-gap-table col.col-type { width: 5.5rem; }
+.statement-gap-table col.col-category { width: 11rem; }
+.statement-gap-table col.col-amount { width: 7rem; }
+
+.statement-gap-add {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.65rem;
+}
+
+.statement-gap-category {
+  width: 100%;
+  min-height: 2rem;
+  padding: 0.3rem 0.45rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.statement-gap-table .statement-upi strong,
+.statement-gap-table .statement-upi span {
+  display: block;
 }
 
 .statement-reason.reason-name {
@@ -567,7 +648,7 @@ td.credit,
 
 .statement-approve:disabled,
 .statement-reject:disabled {
-  opacity: 0.42;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 

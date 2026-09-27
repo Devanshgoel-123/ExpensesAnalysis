@@ -10,13 +10,15 @@ export const APP_CATEGORY_ORDER = [
   CategorySlug.Household,
   CategorySlug.Outing,
   CategorySlug.Investments,
-  CategorySlug.Cigarettes,
+  CategorySlug.Vices,
   CategorySlug.Other,
 ] as const;
 
 const PINNED_EMPTY_SLUGS = new Set<string>([
   CategorySlug.Healthcare,
   CategorySlug.Household,
+  CategorySlug.Outing,
+  CategorySlug.Vices,
 ]);
 
 const HIDDEN_APP_SLUGS = new Set<string>([
@@ -25,6 +27,13 @@ const HIDDEN_APP_SLUGS = new Set<string>([
   CategorySlug.CookMaid,
   CategorySlug.Rent,
   CategorySlug.Banks,
+  CategorySlug.Booze,
+  CategorySlug.Cigarettes,
+  CategorySlug.ScootyRental,
+  CategorySlug.Dinner,
+  CategorySlug.Sports,
+  CategorySlug.FunActivity,
+  CategorySlug.FromHome,
 ]);
 
 const KNOWN_SLUGS = new Set<string>(Object.values(CategorySlug));
@@ -171,6 +180,14 @@ export function groupTransactionsByDay(
 const CATEGORY_MARKS: Record<string, string> = {
   rent: "/providers/rent.svg",
   brokerage: "/providers/brokerage.svg",
+  booze: "/providers/booze.svg",
+  cigarettes: "/providers/cigarettes.svg",
+  "scooty-rental": "/providers/scooty.svg",
+  dinner: "/providers/dinner.svg",
+  sports: "/providers/sports.svg",
+  "fun-activity": "/providers/fun-activity.svg",
+  salary: "/providers/salary.svg",
+  "from-home": "/providers/from-home.svg",
 };
 
 export function logoForCategory(slug: string): string | null {
@@ -221,6 +238,11 @@ export function logoForAppName(name: string): string | null {
     officecafetaria: "/providers/office-cafeteria.png",
     cafeteria: "/providers/office-cafeteria.png",
     cafetaria: "/providers/office-cafeteria.png",
+    dominos: "/providers/dominos.svg",
+    "domino's": "/providers/dominos.svg",
+    dominoz: "/providers/dominos.svg",
+    dominospizza: "/providers/dominos.svg",
+    pizzahut: "/providers/pizzahut.svg",
     apollo: "/providers/apollo.svg",
     apollohospital: "/providers/apollo.svg",
     apollohospitals: "/providers/apollo.svg",

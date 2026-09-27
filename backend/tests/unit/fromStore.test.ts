@@ -154,6 +154,45 @@ describe("buildAnalyticsFromRows spend", () => {
     assert.equal(result.merchantSpend[0]?.total, 799);
   });
 
+  it("keeps a manual subcategory when the alert names the bank", () => {
+    const hdfc = {
+      id: "bank",
+      userId: null,
+      canonicalName: "HDFC Bank",
+      aliases: ["HDFC"],
+      upiHandles: [],
+      senderDomains: [],
+      websiteDomain: null,
+      logoUrl: null,
+      categorySlug: "banks",
+      isGlobal: true,
+    };
+    const result = buildAnalyticsFromRows(
+      [
+        baseRow({
+          id: "rent-1",
+          amount: 25000,
+          merchant: "HDFC Bank",
+          categorySlug: "rent",
+          providerId: null,
+          classificationSource: "user_override",
+          upiId: null,
+          description: "You have done a UPI txn. Check details!",
+          fingerprint: "rent-1",
+        }),
+      ],
+      [hdfc],
+      [],
+      [],
+    );
+    assert.equal(result.transactions[0]?.category, "rent");
+    assert.equal(result.transactions[0]?.providerId, null);
+    assert.equal(
+      result.merchantSpend.find((row) => row.categorySlug === "rent")?.total,
+      25000,
+    );
+  });
+
   it("does not count money sent through the bank as spend to the bank or Other", () => {
     const hdfc = {
       id: "bank",

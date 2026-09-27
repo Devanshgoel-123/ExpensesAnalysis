@@ -11,6 +11,7 @@ import { parsePasswordBodySchema } from "../validators/imports.js";
 import { z } from "zod";
 import { poolingScanWindow, toIstCalendarDate } from "../helpers/index.js";
 import { applyUpiBatch, getMatchJob, startMatchJob } from "./applyBatch.js";
+import { importMissingLines } from "./importMissing.js";
 import {
   findStatementGaps,
   inScanWindow,
@@ -32,6 +33,17 @@ const lineSchema = z.object({
   type: z.enum(["debit", "credit"]),
   description: z.string().max(500),
   upiId: z.string().max(120).nullable(),
+});
+
+const importMissingSchema = z.object({
+  lines: z
+    .array(
+      lineSchema.extend({
+        categorySlug: z.string().trim().min(1).max(64).nullable().optional(),
+      }),
+    )
+    .min(1)
+    .max(500),
 });
 
 const applySchema = z.object({
@@ -125,6 +137,16 @@ statementMatchRouter.post(
       lines,
       note: "Nothing was written yet. Approving saves the UPI id on the vendor, then labels every matching payment in the mail-tracking window.",
     });
+  },
+);
+
+statementMatchRouter.post(
+  "/import-missing",
+  validate(importMissingSchema),
+  async (req, res) => {
+    const body = req.body as z.infer<typeof importMissingSchema>;
+    const result = await importMissingLines(req.user!.id, body.lines);
+    res.json(result);
   },
 );
 

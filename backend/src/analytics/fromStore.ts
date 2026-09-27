@@ -1,5 +1,6 @@
 import type { CategoryRow, ProviderRow, TransactionRow } from "../db/types.js";
 import { resolveAmountBand } from "../categories/heuristics.js";
+import { ClassificationSource } from "../enums/classification.js";
 import { counterpartyFromNarration, isAccountBank, merchantIsAccountBank } from "../narration/party.js";
 import { detectFromProviders } from "../rules/engine.js";
 import { buildDailyInsights } from "./dailyInsights.js";
@@ -28,6 +29,14 @@ interface SpendIdentity {
   categorySlug: string | null;
   providerId: string | null;
   logoUrl: string | null;
+}
+
+function isManualClassification(source: string): boolean {
+  return (
+    source === ClassificationSource.UserOverride ||
+    source === ClassificationSource.Telegram ||
+    source.startsWith("rule:")
+  );
 }
 
 /** Banks named in the alert template are not the merchant. Use the VPA or app. */
@@ -65,6 +74,18 @@ function resolveSpendIdentity(
   const merchant = storedIsBank
     ? (detected.merchant ?? party.name ?? "Other")
     : (row.merchant ?? detected.merchant ?? party.name ?? "Other");
+  if (isManualClassification(row.classificationSource) && row.categorySlug) {
+    const chosen = row.providerId
+      ? providers.find((item) => item.id === row.providerId) ?? null
+      : null;
+    return {
+      merchant,
+      upiId: row.upiId ?? party.upiId,
+      categorySlug: row.categorySlug,
+      providerId: row.providerId,
+      logoUrl: chosen?.logoUrl ?? null,
+    };
+  }
   const categorySlug = storedIsBank
     ? (detected.categorySlug ?? "other")
     : (row.categorySlug ?? detected.categorySlug ?? provider?.categorySlug ?? "other");

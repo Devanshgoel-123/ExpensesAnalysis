@@ -122,7 +122,8 @@
   background: var(--bg-muted);
 }
 
-.apps-add {
+.apps-add,
+.people-add {
   display: grid;
   gap: 0.75rem;
 }
@@ -130,6 +131,11 @@
 @media (min-width: 720px) {
   .apps-add {
     grid-template-columns: 1fr 10rem auto;
+    align-items: end;
+  }
+
+  .people-add {
+    grid-template-columns: 1fr 1.2fr 9rem auto;
     align-items: end;
   }
 }
@@ -347,8 +353,14 @@
 .pill.lifestyle.cat-cook-maid { color: var(--cat-cook-maid); }
 .pill.lifestyle.cat-household { color: var(--cat-household); }
 .pill.lifestyle.cat-outing { color: var(--cat-outing); }
+.pill.lifestyle.cat-dinner { color: var(--cat-dinner); }
+.pill.lifestyle.cat-sports { color: var(--cat-sports); }
+.pill.lifestyle.cat-fun-activity { color: var(--cat-fun-activity); }
 .pill.lifestyle.cat-investments { color: var(--cat-investments); }
+.pill.lifestyle.cat-vices { color: var(--cat-vices); }
+.pill.lifestyle.cat-booze { color: var(--cat-booze); }
 .pill.lifestyle.cat-cigarettes { color: var(--cat-cigarettes); }
+.pill.lifestyle.cat-scooty-rental { color: var(--cat-scooty-rental); }
 .pill.lifestyle.cat-banks { color: var(--cat-banks); }
 .pill.lifestyle.cat-other { color: var(--cat-other); }
 

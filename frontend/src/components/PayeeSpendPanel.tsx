@@ -10,24 +10,22 @@ import { SpotlightCard } from "@/components/SpotlightCard";
 
 interface PayeeSpendPanelProps {
   items: PayeeSpend[];
+  title: string;
+  subtitle: string;
 }
 
-export function PayeeSpendPanel({ items }: PayeeSpendPanelProps) {
+export function PayeeSpendPanel({ items, title, subtitle }: PayeeSpendPanelProps) {
   const people = [...items].sort((a, b) => b.total - a.total);
 
   return (
     <SpotlightCard className="panel payee-panel">
       <header className="panel-head">
-        <h2 className="ui-header">People</h2>
-        <p className="meta">
-          {people.length === 0
-            ? "Add tracking rules in Settings to follow who you pay"
-            : `${people.length} people · family payments and tracking rules`}
-        </p>
+        <h2 className="ui-header">{title}</h2>
+        <p className="meta">{subtitle}</p>
       </header>
 
       {people.length === 0 ? (
-        <p className="meta">No tracked people yet. Create a rule to start.</p>
+        <p className="meta">No one in this group yet.</p>
       ) : (
         <div className="payee-list">
           {people.map((item, index) => (
