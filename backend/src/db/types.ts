@@ -298,6 +298,11 @@ export interface Store {
   createRule(
     input: Omit<UserRuleRow, "id"> & { id?: string },
   ): Promise<UserRuleRow>;
+  updateRuleMatchUpi(
+    userId: string,
+    ruleId: string,
+    matchUpiId: string,
+  ): Promise<UserRuleRow | null>;
   deleteRule(userId: string, ruleId: string): Promise<void>;
 
   getOrCreateAccount(userId: string, bank?: string | null): Promise<AccountRow>;

@@ -91,7 +91,7 @@ describe("classifyTransaction", () => {
     assert.equal(result.classificationSource, "provider_registry");
   });
 
-  it("falls back to amount-band heuristics before other", () => {
+  it("does not guess cigarettes from the amount alone", () => {
     const result = classifyTransaction(
       {
         description: "Local shop",
@@ -108,8 +108,8 @@ describe("classifyTransaction", () => {
       },
     );
 
-    assert.equal(result.categorySlug, "cigarettes");
-    assert.equal(result.classificationSource, "amount_band");
+    assert.notEqual(result.categorySlug, "cigarettes");
+    assert.notEqual(result.classificationSource, "amount_band");
   });
 
   it("applies user rules when no provider matches", () => {

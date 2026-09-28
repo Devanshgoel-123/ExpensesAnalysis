@@ -8,6 +8,7 @@ import { formatShortDate } from "@/helpers/dates";
 import { groupTransactionsByDay } from "@/helpers/apps";
 import { BrandMark } from "@/components/BrandMark";
 import { SpotlightCard } from "@/components/SpotlightCard";
+import { CategoryMenu } from "@/components/CategoryMenu";
 import { TxnAssignPicker } from "@/components/TxnAssignPicker";
 
 interface TransactionTableProps {
@@ -57,6 +58,8 @@ function spendTitle(txn: Transaction, providers: Provider[]): {
 }
 
 function isUnclassified(txn: Transaction, providers: Provider[]): boolean {
+  if (txn.payee?.trim()) return false;
+  if (txn.category === "family") return false;
   const provider = providers.find((item) => item.id === txn.providerId);
   if (provider && provider.categorySlug && provider.categorySlug !== "banks") return false;
   if (txn.category && txn.category !== "other" && txn.category !== "banks") return false;
@@ -83,17 +86,6 @@ export function TransactionTable({
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [unclassifiedOnly, setUnclassifiedOnly] = useState(false);
-
-  const categoryOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const c of categories) seen.set(c.slug, c.label);
-    for (const txn of items) {
-      if (txn.category && txn.categoryLabel) {
-        seen.set(txn.category, txn.categoryLabel);
-      }
-    }
-    return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  }, [categories, items]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -230,20 +222,11 @@ export function TransactionTable({
             </button>
           ))}
         </div>
-        <label className="field field-compact" style={{ minWidth: 160 }}>
-          <span className="sr-only">Filter by category</span>
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-          >
-            <option value="all">All categories</option>
-            {categoryOptions.map(([slug, label]) => (
-              <option key={slug} value={slug}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <CategoryMenu
+          categories={categories}
+          value={categoryFilter}
+          onChange={setCategoryFilter}
+        />
         <button
           type="button"
           className={`sort-chip ${unclassifiedOnly ? "active" : ""}`}

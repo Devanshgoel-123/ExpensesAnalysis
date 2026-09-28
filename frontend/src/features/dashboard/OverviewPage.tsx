@@ -12,7 +12,6 @@ import { DailySpendChart } from "@/components/charts/DailySpendChart";
 import { CategorySpendChart } from "@/components/charts/CategorySpendChart";
 import { SpendingTrendChart } from "@/components/charts/SpendingTrendChart";
 import { MerchantSpendChart } from "@/components/charts/MerchantSpendChart";
-import { UpiRankingList } from "@/components/UpiRankingList";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { LedgerlineFadeContent } from "@/components/animations/LedgerlineFadeContent";
 
@@ -34,7 +33,6 @@ export function OverviewPage() {
   const categoryRows = allCategoryRows.slice(0, 5);
   const categorySpend = positiveTotal(allCategoryRows.map((row) => row.total));
   const merchantSpend = positiveTotal((data.merchantSpend ?? []).map((row) => row.total));
-  const upiSpend = positiveTotal((data.upiRanking ?? []).map((row) => row.total));
   const spentHint = `${formatInr(data.summary.totalSpent)} spent · ${formatInr(data.summary.totalReceived)} received`;
 
   return (
@@ -69,21 +67,13 @@ export function OverviewPage() {
         />
       </LedgerlineFadeContent>
 
-      <div className="grid-main">
-        <LedgerlineFadeContent delay={80}>
-          <DailySpendChart
-            transactions={data.transactions}
-            insights={dailyInsights}
-          />
-        </LedgerlineFadeContent>
-        <LedgerlineFadeContent delay={120}>
-          <UpiRankingList
-            items={data.upiRanking}
-            month={month}
-            spentTotal={upiSpend}
-          />
-        </LedgerlineFadeContent>
-      </div>
+      <LedgerlineFadeContent delay={80}>
+        <DailySpendChart
+          transactions={data.transactions}
+          categories={data.categories ?? []}
+          insights={dailyInsights}
+        />
+      </LedgerlineFadeContent>
 
       {categoryRows.length > 0 ? (
         <LedgerlineFadeContent delay={160}>

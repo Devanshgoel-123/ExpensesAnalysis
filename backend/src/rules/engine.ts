@@ -2,9 +2,7 @@ import type { CategoryRow, ProviderRow, TransactionRow, UserRuleRow } from "../d
 import {
   ClassificationSource,
   ruleClassificationSource,
-  TxType,
 } from "../enums/index.js";
-import { resolveAmountBand } from "../categories/heuristics.js";
 
 export interface ClassifiedFields {
   merchant: string | null;
@@ -79,7 +77,7 @@ export function applyRules(
   rules: UserRuleRow[],
   providers: ProviderRow[],
   defaults: Partial<ClassifiedFields> = {},
-  categories: CategoryRow[] = [],
+  _categories: CategoryRow[] = [],
 ): ClassifiedFields {
   let result: ClassifiedFields = {
     merchant: defaults.merchant ?? tx.merchant ?? null,
@@ -105,20 +103,6 @@ export function applyRules(
     }
     result.classificationSource = ruleClassificationSource(rule.id);
     break;
-  }
-
-  const amountBand = resolveAmountBand(categories);
-  if (
-    amountBand &&
-    !result.categorySlug &&
-    tx.type === TxType.Debit &&
-    tx.amount >= amountBand.min &&
-    tx.amount <= amountBand.max &&
-    !result.merchant &&
-    !result.payee
-  ) {
-    result.categorySlug = amountBand.slug;
-    result.classificationSource = ClassificationSource.AmountBand;
   }
 
   return result;

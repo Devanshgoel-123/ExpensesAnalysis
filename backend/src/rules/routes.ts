@@ -101,6 +101,69 @@ rulesRouter.get("/suggestions", async (req, res) => {
   res.json({ suggestions });
 });
 
+rulesRouter.post("/attach-upi", async (req, res) => {
+  const name = String((req.body as { name?: string }).name ?? "").trim();
+  const upiId = String((req.body as { upiId?: string }).upiId ?? "")
+    .trim()
+    .toLowerCase();
+  if (!name || !upiId.includes("@")) {
+    res.status(400).json({ error: { message: "Name and UPI id are required" } });
+    return;
+  }
+  const store = await getStore();
+  const rules = await store.listRules(req.user!.id);
+  const owned = rules.filter(
+    (rule) => rule.setPayeeName?.toLowerCase() === name.toLowerCase(),
+  );
+  if (owned.length === 0) {
+    res.status(404).json({ error: { message: "That person is not in your list" } });
+    return;
+  }
+  const already = owned.some((rule) => rule.matchUpiId?.toLowerCase() === upiId);
+  if (already) {
+    res.json({ ok: true, attached: false });
+    return;
+  }
+  const open = owned.find((rule) => !rule.matchUpiId);
+  let rule = open ?? null;
+  if (open) {
+    rule = await store.updateRuleMatchUpi(req.user!.id, open.id, upiId);
+  } else {
+    const sample = owned[0]!;
+    rule = await store.createRule({
+      userId: req.user!.id,
+      name: sample.name,
+      priority: sample.priority,
+      enabled: true,
+      matchNarrationRe: null,
+      matchUpiId: upiId,
+      matchMerchantAlias: null,
+      matchAmountMin: null,
+      matchAmountMax: null,
+      matchType: null,
+      setProviderId: sample.setProviderId,
+      setPayeeName: sample.setPayeeName,
+      setCategorySlug: sample.setCategorySlug ?? "family",
+      setTags: sample.setTags,
+    });
+  }
+  if (rule) {
+    await store.reclassifyByRule(
+      req.user!.id,
+      (candidate) =>
+        candidate.classificationSource !== "user_override" && matchRule(rule!, candidate),
+      {
+        payee: rule.setPayeeName ?? undefined,
+        categorySlug: rule.setCategorySlug ?? undefined,
+        providerId: rule.setProviderId ?? undefined,
+        classificationSource: ruleClassificationSource(rule.id),
+      },
+    );
+  }
+  await store.audit(req.user!.id, "person.upi_attached", { name, upiId });
+  res.json({ ok: true, attached: true });
+});
+
 rulesRouter.post("/untrack", async (req, res) => {
   const name = String((req.body as { name?: string }).name ?? "").trim();
   if (!name) {

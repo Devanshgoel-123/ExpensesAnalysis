@@ -26,6 +26,10 @@ const HIDDEN_APP_SLUGS = new Set<string>([
   CategorySlug.Furniture,
   CategorySlug.CookMaid,
   CategorySlug.Rent,
+  CategorySlug.Grocery,
+  CategorySlug.Petrol,
+  CategorySlug.Salon,
+  CategorySlug.Pharmacy,
   CategorySlug.Banks,
   CategorySlug.Booze,
   CategorySlug.Cigarettes,
@@ -44,6 +48,11 @@ function isHiddenApp(name: string): boolean {
 
 export interface AppSpend {
   provider: Provider;
+  total: number;
+  count: number;
+}
+
+export interface CategorySpend {
   total: number;
   count: number;
 }
@@ -67,6 +76,26 @@ export interface DayCategoryMix {
   date: string;
   total: number;
   segments: DayCategorySegment[];
+}
+
+/** Debit totals for a category slug. Credits in that slug reduce the total. */
+export function spendByCategorySlug(
+  transactions: Transaction[],
+): Map<string, CategorySpend> {
+  const spend = new Map<string, CategorySpend>();
+  for (const txn of transactions) {
+    const slug = txn.category;
+    if (!slug) continue;
+    if (txn.type !== "debit" && txn.type !== "credit") continue;
+    const current = spend.get(slug) ?? { total: 0, count: 0 };
+    current.total += txn.type === "credit" ? -txn.amount : txn.amount;
+    if (txn.type === "debit") current.count += 1;
+    spend.set(slug, current);
+  }
+  for (const row of spend.values()) {
+    row.total = Math.round(row.total * 100) / 100;
+  }
+  return spend;
 }
 
 function categoryMeta(
@@ -114,6 +143,12 @@ export function groupAppsByCategory(
     .filter((slug) => !APP_CATEGORY_ORDER.includes(slug as (typeof APP_CATEGORY_ORDER)[number]));
   const ordered = [...APP_CATEGORY_ORDER, ...extras];
 
+  const parentsWithChildren = new Set(
+    categories
+      .map((category) => category.meta?.parent)
+      .filter((parent): parent is string => Boolean(parent)),
+  );
+
   return ordered.flatMap((slug) => {
     if (HIDDEN_APP_SLUGS.has(slug)) return [];
     const apps = (groups.get(slug) ?? []).sort((a, b) => {
@@ -122,7 +157,10 @@ export function groupAppsByCategory(
     });
     const inCatalog = categories.some((category) => category.slug === slug);
     const showEmpty =
-      inCatalog && (PINNED_EMPTY_SLUGS.has(slug) || !KNOWN_SLUGS.has(slug));
+      inCatalog &&
+      (PINNED_EMPTY_SLUGS.has(slug) ||
+        !KNOWN_SLUGS.has(slug) ||
+        parentsWithChildren.has(slug));
     if (apps.length === 0 && !showEmpty) return [];
     const meta = categoryMeta(slug, categories);
     return [{ slug, label: meta.label, accent: meta.accent, apps }];
@@ -188,6 +226,10 @@ const CATEGORY_MARKS: Record<string, string> = {
   "fun-activity": "/providers/fun-activity.svg",
   salary: "/providers/salary.svg",
   "from-home": "/providers/from-home.svg",
+  grocery: "/providers/grocery.svg",
+  petrol: "/providers/petrol.svg",
+  salon: "/providers/salon.svg",
+  pharmacy: "/providers/pharmacy.svg",
 };
 
 export function logoForCategory(slug: string): string | null {
@@ -243,6 +285,10 @@ export function logoForAppName(name: string): string | null {
     dominoz: "/providers/dominos.svg",
     dominospizza: "/providers/dominos.svg",
     pizzahut: "/providers/pizzahut.svg",
+    lapinoz: "/providers/lapinoz.svg",
+    lapinozpizza: "/providers/lapinoz.svg",
+    airtel: "/providers/airtel.svg",
+    airtelpayments: "/providers/airtel.svg",
     apollo: "/providers/apollo.svg",
     apollohospital: "/providers/apollo.svg",
     apollohospitals: "/providers/apollo.svg",

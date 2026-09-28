@@ -22,6 +22,8 @@ export interface DetailBarPoint {
   emphasized?: boolean;
   /** Day spent more than the daily limit. Clay, unless this bar is the tallest. */
   overLimit?: boolean;
+  /** Category slices drawn inside the bar, bottom to top. */
+  segments?: { key: string; label: string; amount: number; color: string }[];
 }
 
 type BarMark = "calm" | "high" | "over" | "peak";
@@ -50,6 +52,14 @@ interface DetailBarChartProps {
   points: DetailBarPoint[];
   guides?: ChartGuide[];
   ariaLabel: string;
+  /** Sqrt keeps a single large day from flattening the rest of the month. */
+  scale?: "linear" | "sqrt";
+}
+
+function plotRatio(value: number, ceiling: number, scale: "linear" | "sqrt"): number {
+  if (value <= 0 || ceiling <= 0) return 0;
+  if (scale === "sqrt") return Math.sqrt(value) / Math.sqrt(ceiling);
+  return value / ceiling;
 }
 
 interface Tip {
@@ -64,6 +74,7 @@ export function DetailBarChart({
   points,
   guides = [],
   ariaLabel,
+  scale = "linear",
 }: DetailBarChartProps) {
   const ceiling = chartCeiling([
     ...points.map((point) => point.value),
@@ -111,7 +122,7 @@ export function DetailBarChart({
                 className="detail-y-label"
                 style={{ bottom: `${tick * 100}%` }}
               >
-                {formatInrCompact(tick * ceiling)}
+                {formatInrCompact(scale === "sqrt" ? tick * tick * ceiling : tick * ceiling)}
               </span>
             ))}
           </div>
@@ -129,7 +140,7 @@ export function DetailBarChart({
               />
             ))}
             {guides.map((guide) => {
-              const bottom = (guide.value / ceiling) * 100;
+              const bottom = plotRatio(guide.value, ceiling, scale) * 100;
               if (bottom <= 0 || bottom > 104) return null;
               return (
                 <div
@@ -143,8 +154,8 @@ export function DetailBarChart({
             })}
             <div className="detail-bars">
               {points.map((point, index) => {
-                const pct = (point.value / ceiling) * 100;
-                const height = point.value > 0 ? Math.max(pct, 3.5) : 0;
+                const pct = plotRatio(point.value, ceiling, scale) * 100;
+                const height = point.value > 0 ? Math.max(pct, 8) : 0;
                 const mark = barMark(point, peak);
                 return (
                   <div
@@ -183,8 +194,20 @@ export function DetailBarChart({
                         />
                       ) : null}
                       <span
-                        className={`lollipop-stem mark-${mark}${point.value <= 0 ? " is-empty" : ""}`}
-                      />
+                        className={`lollipop-stem mark-${mark}${point.segments && point.segments.length > 0 ? " is-stack" : ""}${point.value <= 0 ? " is-empty" : ""}`}
+                      >
+                        {point.segments?.map((segment) => (
+                          <span
+                            key={segment.key}
+                            className="lollipop-slice"
+                            style={{
+                              flexGrow: segment.amount,
+                              background: segment.color,
+                            }}
+                            title={`${segment.label} ${formatInrCompact(segment.amount)}`}
+                          />
+                        ))}
+                      </span>
                     </motion.div>
                   </div>
                 );

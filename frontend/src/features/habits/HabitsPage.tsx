@@ -1,7 +1,6 @@
 "use client";
 
 import { useDashboard } from "@/lib/dashboard-context";
-import { AmountBandPanel } from "@/components/AmountBandPanel";
 import { SpendingHeatmap } from "@/components/charts/SpendingHeatmap";
 import { weekendInsight } from "@/helpers/finance";
 import { formatInr } from "@/helpers/currency";
@@ -10,7 +9,7 @@ import { LedgerlineFadeContent } from "@/components/animations/LedgerlineFadeCon
 import { Panel, PanelHead } from "@/components/ui/Panel";
 
 export function HabitsPage() {
-  const { data, amountBand } = useDashboard();
+  const { data } = useDashboard();
   if (!data) return null;
 
   const weekend = weekendInsight(data.daily);
@@ -60,13 +59,6 @@ export function HabitsPage() {
         </LedgerlineFadeContent>
       ) : null}
 
-      <LedgerlineFadeContent delay={120}>
-        <AmountBandPanel
-          band={amountBand}
-          dateFrom={data.summary.dateFrom}
-          dateTo={data.summary.dateTo}
-        />
-      </LedgerlineFadeContent>
     </div>
   );
 }

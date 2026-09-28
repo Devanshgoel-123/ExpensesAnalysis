@@ -125,6 +125,36 @@ describe("buildAnalyticsFromRows spend", () => {
     }
   });
 
+  it("leaves a tracked friend out of merchant spend", () => {
+    const result = buildAnalyticsFromRows(
+      [
+        baseRow({
+          id: "friend",
+          amount: 2700,
+          merchant: "Aryan Gopa04",
+          payee: "Gopa",
+          categorySlug: null,
+          providerId: null,
+          classificationSource: "user_override",
+          fingerprint: "friend",
+        }),
+      ],
+      [],
+      ["Gopa"],
+      [],
+    );
+    assert.equal(
+      result.merchantSpend.find((row) => row.merchant.includes("Aryan")),
+      undefined,
+    );
+    assert.equal(
+      result.merchantSpend.find((row) => row.merchant === "Gopa")?.categorySlug,
+      "family",
+    );
+    assert.equal(result.transactions.find((row) => row.id === "friend")?.category, "family");
+    assert.equal(result.payeeSpend.find((row) => row.name === "Gopa")?.paid, 2700);
+  });
+
   it("counts only cigarettes-category debits in the smokes band", () => {
     const categories = [
       {

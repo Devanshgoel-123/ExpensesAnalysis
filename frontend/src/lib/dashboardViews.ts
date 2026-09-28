@@ -1,7 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
-  CreditCard,
   Flame,
   LayoutDashboard,
   LayoutGrid,
@@ -78,13 +77,6 @@ export const DASHBOARD_NAV: DashboardNavItem[] = [
     path: DASHBOARD_PATHS.people,
   },
   {
-    id: "upi",
-    label: "UPI Handles",
-    description: "Top transfer targets",
-    icon: CreditCard,
-    path: DASHBOARD_PATHS.upi,
-  },
-  {
     id: "habits",
     label: "Habits",
     description: "Recurring small spends",
@@ -124,7 +116,7 @@ export const DASHBOARD_NAV: DashboardNavItem[] = [
 export const DASHBOARD_NAV_GROUPS: { label: string; ids: DashboardView[] }[] = [
   {
     label: "Insights",
-    ids: ["overview", "insights", "categories", "apps", "people", "upi", "habits"],
+    ids: ["overview", "insights", "categories", "apps", "people", "habits"],
   },
   { label: "Data", ids: ["transactions", "import", "statement-match"] },
   { label: "System", ids: ["settings"] },

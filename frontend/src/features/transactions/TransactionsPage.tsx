@@ -27,7 +27,11 @@ export function TransactionsPage() {
   const onAssign = useCallback(
     async (
       txn: Transaction,
-      patch: { categorySlug?: string | null; providerId?: string | null },
+      patch: {
+        categorySlug?: string | null;
+        providerId?: string | null;
+        payee?: string | null;
+      },
     ) => {
       if (!api || !txn.id) return;
       const clearing = patch.categorySlug === null;
@@ -50,6 +54,7 @@ export function TransactionsPage() {
           : patch.providerId !== undefined
             ? patch.providerId
             : txn.providerId,
+        payee: patch.payee !== undefined ? patch.payee : txn.payee,
         merchant:
           provider && provider.categorySlug !== "banks"
             ? provider.canonicalName

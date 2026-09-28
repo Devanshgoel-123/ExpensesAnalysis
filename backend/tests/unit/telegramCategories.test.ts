@@ -12,7 +12,7 @@ describe("parseCategoryReply", () => {
     assert.equal(parseCategoryReply("that's shopping"), "shopping");
     assert.equal(parseCategoryReply("cigs"), "cigarettes");
     assert.equal(parseCategoryReply("invest"), "investments");
-    assert.equal(parseCategoryReply("pharmacy"), "healthcare");
+    assert.equal(parseCategoryReply("pharmacy"), "pharmacy");
     assert.equal(parseCategoryReply("parents"), "family");
     assert.equal(parseCategoryReply("hdfc"), "banks");
     assert.equal(parseCategoryReply("maid"), "household");

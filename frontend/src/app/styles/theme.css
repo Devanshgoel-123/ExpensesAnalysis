@@ -1,4 +1,8 @@
 /* ── Dark theme token overrides ── */
+[data-theme="dark"] select {
+  color-scheme: dark;
+}
+
 [data-theme="dark"] {
   --bg: #0a0c0b;
   --bg-muted: #10130f;

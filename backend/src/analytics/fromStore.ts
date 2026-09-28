@@ -71,9 +71,11 @@ function resolveSpendIdentity(
           (detected.merchant ?? row.merchant ?? "").toLowerCase(),
     ) ??
     null;
-  const merchant = storedIsBank
-    ? (detected.merchant ?? party.name ?? "Other")
-    : (row.merchant ?? detected.merchant ?? party.name ?? "Other");
+  const merchant =
+    detected.merchant ??
+    (storedIsBank ? party.name : row.merchant) ??
+    party.name ??
+    "Other";
   if (isManualClassification(row.classificationSource)) {
     // The user's choice stands, including a cleared category; never re-detect over it.
     const chosen = row.providerId
@@ -83,21 +85,27 @@ function resolveSpendIdentity(
     return {
       merchant: keepStoredMerchant ? (row.merchant ?? merchant) : merchant,
       upiId: row.upiId ?? party.upiId,
-      categorySlug: row.categorySlug,
+      categorySlug: row.payee && (!row.categorySlug || row.categorySlug === "other")
+        ? "family"
+        : row.categorySlug,
       providerId: row.providerId,
       logoUrl: chosen?.logoUrl ?? null,
     };
   }
+  const storedCategory = row.categorySlug;
+  const genericCategory = !storedCategory || storedCategory === "other";
   const categorySlug = storedIsBank
-    ? (detected.categorySlug ?? "other")
-    : (row.categorySlug ?? detected.categorySlug ?? provider?.categorySlug ?? "other");
+    ? (detected.categorySlug ?? storedCategory ?? "other")
+    : genericCategory
+      ? (detected.categorySlug ?? provider?.categorySlug ?? storedCategory ?? "other")
+      : storedCategory;
+  const resolvedCategory =
+    row.payee && (!categorySlug || categorySlug === "other") ? "family" : categorySlug;
   return {
     merchant,
     upiId: row.upiId ?? party.upiId,
-    categorySlug,
-    providerId: storedIsBank
-      ? (detected.providerId ?? null)
-      : (row.providerId ?? detected.providerId ?? provider?.id ?? null),
+    categorySlug: resolvedCategory,
+    providerId: detected.providerId ?? (storedIsBank ? null : row.providerId) ?? provider?.id ?? null,
     logoUrl: provider?.logoUrl ?? null,
   };
 }
@@ -271,10 +279,23 @@ export function buildAnalyticsFromRows(
     string,
     MerchantSpend & { logoUrl: string | null; providerId: string | null }
   >();
+  const tracked = new Set(
+    trackedPayees.map((name) => name.trim().toLowerCase()).filter(Boolean),
+  );
   const refundIds = new Set(refunds.map((row) => row.id));
   for (const t of rows) {
     if (t.type !== "debit" && !refundIds.has(t.id)) continue;
-    const identity = identityOf(t);
+    const payee = t.payee?.trim().toLowerCase();
+    const identity =
+      payee && tracked.has(payee)
+        ? {
+            ...identityOf(t),
+            merchant: t.payee!.trim(),
+            categorySlug: "family",
+            providerId: null,
+            logoUrl: null,
+          }
+        : identityOf(t);
     if (isBankRailTransfer(t, providers, identity)) continue;
     const key = bucketKey(identity.merchant, identity.categorySlug);
     let bucket = merchantMap.get(key);

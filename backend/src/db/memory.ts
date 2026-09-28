@@ -261,6 +261,17 @@ export class MemoryStore implements Store {
     return row;
   }
 
+  async updateRuleMatchUpi(
+    userId: string,
+    ruleId: string,
+    matchUpiId: string,
+  ): Promise<UserRuleRow | null> {
+    const rule = this.rules.find((row) => row.userId === userId && row.id === ruleId);
+    if (!rule) return null;
+    rule.matchUpiId = matchUpiId;
+    return rule;
+  }
+
   async deleteRule(userId: string, ruleId: string): Promise<void> {
     this.rules = this.rules.filter(
       (r) => !(r.userId === userId && r.id === ruleId),

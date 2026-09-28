@@ -4,6 +4,7 @@ import {
   groupAppsByCategory,
   logoForAppName,
   logoForCategory,
+  spendByCategorySlug,
 } from "@/helpers/apps";
 import type { Provider } from "@/lib/api/types";
 import type { CategorySummary, Transaction } from "@/types";
@@ -152,6 +153,66 @@ describe("groupAppsByCategory", () => {
     expect(groups.find((g) => g.slug === "healthcare")?.apps).toEqual([]);
     expect(groups.find((g) => g.slug === "family")).toBeUndefined();
     expect(groups.find((g) => g.slug === "pets")?.apps).toEqual([]);
+  });
+
+  it("keeps a parent that only has subcategories", () => {
+    const catalog: CategorySummary[] = [
+      ...categories,
+      {
+        id: "6",
+        slug: "personal",
+        label: "Personal",
+        blurb: "",
+        accent: "#a89478",
+        sortOrder: 14,
+        meta: {},
+      },
+      {
+        id: "7",
+        slug: "random-expense",
+        label: "Random expense",
+        blurb: "Personal · unplanned spend",
+        accent: "#a89478",
+        sortOrder: 15,
+        meta: { parent: "personal" },
+      },
+    ];
+    const groups = groupAppsByCategory([], [], catalog);
+    expect(groups.find((group) => group.slug === "personal")?.apps).toEqual([]);
+  });
+});
+
+describe("spendByCategorySlug", () => {
+  it("sums debits on a subcategory and subtracts credits", () => {
+    const spend = spendByCategorySlug([
+      ...txns,
+      {
+        id: "t3",
+        date: "2026-09-02",
+        time: null,
+        description: "Dinner",
+        amount: 800,
+        type: "debit",
+        upiId: null,
+        merchant: null,
+        payee: null,
+        category: "dinner",
+      },
+      {
+        id: "t4",
+        date: "2026-09-03",
+        time: null,
+        description: "Dinner refund",
+        amount: 100,
+        type: "credit",
+        upiId: null,
+        merchant: null,
+        payee: null,
+        category: "dinner",
+      },
+    ]);
+    expect(spend.get("dinner")).toEqual({ total: 700, count: 1 });
+    expect(spend.get("sports")).toBeUndefined();
   });
 });
 

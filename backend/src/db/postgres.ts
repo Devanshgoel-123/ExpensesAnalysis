@@ -411,6 +411,14 @@ export class PostgresStore implements Store {
       .returning();
     return mapRule(r);
   }
+  async updateRuleMatchUpi(userId: string, ruleId: string, matchUpiId: string) {
+    const [r] = await this.db
+      .update(s.userRules)
+      .set({ matchUpiId })
+      .where(and(eq(s.userRules.id, ruleId), eq(s.userRules.userId, userId)))
+      .returning();
+    return r ? mapRule(r) : null;
+  }
   async deleteRule(userId: string, ruleId: string) {
     await this.db
       .delete(s.userRules)

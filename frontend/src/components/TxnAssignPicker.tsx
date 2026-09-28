@@ -6,6 +6,7 @@ import type { CategorySummary, Transaction } from "@/types";
 import type { Provider } from "@/lib/api/types";
 import { BrandMark } from "@/components/BrandMark";
 import { logoForCategory } from "@/helpers/apps";
+import { useApi } from "@/lib/useApi";
 
 interface TxnAssignPickerProps {
   txn: Transaction;
@@ -14,8 +15,18 @@ interface TxnAssignPickerProps {
   disabled?: boolean;
   onAssign?: (
     txn: Transaction,
-    patch: { categorySlug?: string | null; providerId?: string | null },
+    patch: {
+      categorySlug?: string | null;
+      providerId?: string | null;
+      payee?: string | null;
+    },
   ) => void;
+}
+
+interface TrackedPerson {
+  name: string;
+  group: "friend" | "family";
+  upiIds: string[];
 }
 
 function isBank(provider: Provider | undefined): boolean {
@@ -38,12 +49,18 @@ export function TxnAssignPicker({
   const popRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const ignoreAppClick = useRef(false);
+  const api = useApi();
+  const [people, setPeople] = useState<TrackedPerson[]>([]);
 
-  const spendCategories = useMemo(
-    () => categories.filter((category) => category.slug !== "banks" && !category.meta?.parent),
-    [categories],
-  );
+  const spendCategories = useMemo(() => {
+    const parents = categories.filter(
+      (category) => category.slug !== "banks" && !category.meta?.parent,
+    );
+    const banks = categories.find((category) => category.slug === "banks");
+    return banks ? [...parents, banks] : parents;
+  }, [categories]);
   const current = providers.find((provider) => provider.id === txn.providerId);
+  const bankChoice = current && isBank(current) && txn.category === "banks" ? current : null;
   const labeled = current && !isBank(current) ? current : null;
   const category = categories.find((item) => item.slug === txn.category);
   const categoryLabel =
@@ -70,6 +87,19 @@ export function TxnAssignPicker({
       })
       .sort((a, b) => a.canonicalName.localeCompare(b.canonicalName));
   }, [providers, query, browse]);
+
+  const banks = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return providers
+      .filter((provider) => provider.categorySlug === "banks")
+      .filter((provider) => !q || provider.canonicalName.toLowerCase().includes(q))
+      .sort((a, b) => a.canonicalName.localeCompare(b.canonicalName));
+  }, [providers, query]);
+
+  const shownPeople = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return people.filter((person) => !q || person.name.toLowerCase().includes(q));
+  }, [people, query]);
 
   function place() {
     const el = anchorRef.current;
@@ -102,6 +132,31 @@ export function TxnAssignPicker({
         : null);
     setBrowse(initial);
     setQuery("");
+    if (api) {
+      void api.listRules().then((res) => {
+        const next: TrackedPerson[] = [];
+        for (const rule of res.rules) {
+          const name = typeof rule.setPayeeName === "string" ? rule.setPayeeName : "";
+          if (!name) continue;
+          const tags = Array.isArray(rule.setTags) ? rule.setTags : [];
+          const group = tags.includes("family")
+            ? "family"
+            : tags.includes("friend")
+              ? "friend"
+              : null;
+          if (!group) continue;
+          const upi = typeof rule.matchUpiId === "string" ? rule.matchUpiId : "";
+          const existing = next.find((person) => person.name.toLowerCase() === name.toLowerCase());
+          if (existing) {
+            if (upi && !existing.upiIds.includes(upi)) existing.upiIds.push(upi);
+            continue;
+          }
+          next.push({ name, group, upiIds: upi ? [upi] : [] });
+        }
+        next.sort((a, b) => a.name.localeCompare(b.name));
+        setPeople(next);
+      });
+    }
     place();
     searchRef.current?.focus({ preventScroll: true });
 
@@ -147,6 +202,24 @@ export function TxnAssignPicker({
     setOpen(false);
   }
 
+  async function choosePerson(person: TrackedPerson) {
+    if (!txn.id) return;
+    const upi = txn.upiId?.trim().toLowerCase();
+    if (api && upi?.includes("@") && !person.upiIds.some((id) => id.toLowerCase() === upi)) {
+      try {
+        await api.attachPersonUpi({ name: person.name, upiId: upi });
+      } catch {
+        // The payment is still labeled with this person if the UPI save fails.
+      }
+    }
+    onAssign?.(txn, {
+      payee: person.name,
+      providerId: null,
+      categorySlug: "family",
+    });
+    setOpen(false);
+  }
+
   function chooseApp(provider: Provider) {
     if (!txn.id || ignoreAppClick.current) return;
     onAssign?.(txn, {
@@ -160,21 +233,31 @@ export function TxnAssignPicker({
     <div className="txn-assign" ref={anchorRef}>
       <button
         type="button"
-        className={`txn-assign-trigger ${open ? "open" : ""} ${labeled || categoryMark ? "" : "empty"}`}
+        className={`txn-assign-trigger ${open ? "open" : ""} ${labeled || bankChoice || txn.payee || (txn.category && txn.category !== "other") ? "" : "empty"}`}
         aria-haspopup="dialog"
         aria-expanded={open}
         disabled={disabled}
         onClick={() => setOpen((value) => !value)}
       >
         <BrandMark
-          name={labeled?.canonicalName ?? categoryLabel ?? "?"}
-          logoUrl={labeled?.logoUrl ?? categoryMark}
+          name={labeled?.canonicalName ?? bankChoice?.canonicalName ?? txn.payee ?? categoryLabel ?? "?"}
+          logoUrl={labeled?.logoUrl ?? bankChoice?.logoUrl ?? categoryMark}
         />
         <span className="txn-assign-copy">
           <strong>
-            {labeled?.canonicalName ?? (categoryMark ? categoryLabel : "Choose app")}
+            {labeled?.canonicalName ??
+              bankChoice?.canonicalName ??
+              txn.payee ??
+              categoryLabel ??
+              "Choose app"}
           </strong>
-          <em>{(labeled ? categoryLabel : parentLabel) ?? categoryLabel ?? "Unlabeled"}</em>
+          <em>
+            {labeled || bankChoice
+              ? categoryLabel
+              : txn.payee
+                ? "Family"
+                : (parentLabel ?? categoryLabel ?? "Unlabeled")}
+          </em>
         </span>
         <i className="txn-assign-caret" aria-hidden />
       </button>
@@ -218,41 +301,100 @@ export function TxnAssignPicker({
                 ) : null}
               </div>
               <div className="txn-picker-col">
-                <p className="txn-picker-label">App</p>
+                <p className="txn-picker-label">
+                  {browse === "family" ? "People" : browse === "banks" ? "Bank" : "App"}
+                </p>
                 <input
                   ref={searchRef}
                   className="txn-picker-search"
                   type="search"
                   value={query}
-                  placeholder="Search apps"
+                  placeholder={
+                    browse === "family"
+                      ? "Search friends and family"
+                      : browse === "banks"
+                        ? "Search banks"
+                        : "Search apps"
+                  }
                   onChange={(event) => setQuery(event.target.value)}
                 />
                 <ul className="txn-picker-list">
-                  {subcategories
-                    .filter((category) => {
-                      const q = query.trim().toLowerCase();
-                      return !q || category.label.toLowerCase().includes(q);
-                    })
-                    .map((category) => (
-                    <li key={category.slug}>
-                      <button
-                        type="button"
-                        className={`txn-picker-item ${txn.category === category.slug ? "active" : ""}`}
-                        onClick={() => chooseSubcategory(category.slug)}
-                      >
-                        <BrandMark
-                          name={category.label}
-                          logoUrl={logoForCategory(category.slug)}
-                        />
-                        <span>{category.label}</span>
-                      </button>
-                    </li>
-                  ))}
-                  {apps.length === 0 && subcategories.length === 0 ? (
+                  {browse === "family" ? (
+                    shownPeople.length === 0 ? (
+                      <li className="txn-picker-empty">Add friends and family on People first</li>
+                    ) : (
+                      (["family", "friend"] as const).map((group) => {
+                        const list = shownPeople.filter((person) => person.group === group);
+                        if (list.length === 0) return null;
+                        return (
+                          <li key={group}>
+                            <p className="txn-picker-split">{group === "family" ? "Family" : "Friends"}</p>
+                            <ul className="txn-picker-list">
+                              {list.map((person) => (
+                                <li key={person.name}>
+                                  <button
+                                    type="button"
+                                    className={`txn-picker-item ${txn.payee?.toLowerCase() === person.name.toLowerCase() ? "active" : ""}`}
+                                    onClick={() => void choosePerson(person)}
+                                  >
+                                    <BrandMark name={person.name} />
+                                    <span>{person.name}</span>
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          </li>
+                        );
+                      })
+                    )
+                  ) : null}
+                  {browse === "banks" && banks.length === 0 ? (
+                    <li className="txn-picker-empty">No banks in the catalog</li>
+                  ) : null}
+                  {browse === "banks"
+                    ? banks.map((provider) => (
+                        <li key={provider.id}>
+                          <button
+                            type="button"
+                            className={`txn-picker-item ${bankChoice?.id === provider.id ? "active" : ""}`}
+                            onClick={() => chooseApp(provider)}
+                          >
+                            <BrandMark name={provider.canonicalName} logoUrl={provider.logoUrl} />
+                            <span>{provider.canonicalName}</span>
+                          </button>
+                        </li>
+                      ))
+                    : null}
+                  {browse !== "family" && browse !== "banks"
+                    ? subcategories
+                        .filter((category) => {
+                          const q = query.trim().toLowerCase();
+                          return !q || category.label.toLowerCase().includes(q);
+                        })
+                        .map((category) => (
+                          <li key={category.slug}>
+                            <button
+                              type="button"
+                              className={`txn-picker-item ${txn.category === category.slug ? "active" : ""}`}
+                              onClick={() => chooseSubcategory(category.slug)}
+                            >
+                              <BrandMark
+                                name={category.label}
+                                logoUrl={logoForCategory(category.slug)}
+                              />
+                              <span>{category.label}</span>
+                            </button>
+                          </li>
+                        ))
+                    : null}
+                  {browse !== "family" &&
+                  browse !== "banks" &&
+                  apps.length === 0 &&
+                  subcategories.length === 0 ? (
                     <li className="txn-picker-empty">
                       {browse ? "No apps in this category" : "Pick a category, or search"}
                     </li>
-                  ) : (
+                  ) : browse !== "family" && browse !== "banks" ? (
                     apps.map((provider) => (
                       <li key={provider.id}>
                         <button
@@ -268,7 +410,7 @@ export function TxnAssignPicker({
                         </button>
                       </li>
                     ))
-                  )}
+                  ) : null}
                 </ul>
               </div>
             </div>,

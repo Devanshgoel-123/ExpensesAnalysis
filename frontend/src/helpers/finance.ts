@@ -8,6 +8,7 @@ import {
   parseLedgerDate,
   toIsoDate,
 } from "@/helpers/dates";
+import { logoForAppName, logoForCategory } from "@/helpers/apps";
 import type {
   AmountBand,
   CategorySummary,
@@ -17,12 +18,21 @@ import type {
   Transaction,
 } from "@/types";
 
+export interface CategorySpendChild {
+  id: string;
+  label: string;
+  total: number;
+  count: number;
+  logoUrl: string | null;
+}
+
 export interface CategorySpendRow {
   id: string;
   label: string;
   total: number;
   count: number;
   accent: string;
+  children: CategorySpendChild[];
 }
 
 export interface MonthlySpendRow {
@@ -56,54 +66,72 @@ export function formatMonthTitle(month: string): string {
   return formatMonthLabel(month);
 }
 
+function roundMoney(amount: number): number {
+  return Math.round(amount * 100) / 100;
+}
+
+function spendOf(rows: MerchantSpend[]): { total: number; count: number } {
+  return {
+    total: roundMoney(rows.reduce((sum, row) => sum + row.total, 0)),
+    count: rows.reduce((sum, row) => sum + row.count, 0),
+  };
+}
+
 export function buildCategorySpendRows(
   merchants: MerchantSpend[],
-  cigaretteBand: AmountBand,
+  _cigaretteBand: AmountBand,
   categories: CategorySummary[],
 ): CategorySpendRow[] {
-  const parentOf = new Map(
-    categories
-      .filter((category) => category.meta?.parent)
-      .map((category) => [category.slug, category.meta.parent as string]),
-  );
-  const byCategory = new Map<string, MerchantSpend[]>();
-  const cigaretteParent = categories.find(
-    (category) => category.slug === CategorySlug.Cigarettes,
-  )?.meta?.parent;
+  const bySlug = new Map<string, MerchantSpend[]>();
   for (const row of merchants) {
     const slug = row.categorySlug ?? CategorySlug.Other;
-    if (slug === CategorySlug.Cigarettes) continue;
-    const cat = parentOf.get(slug) ?? slug;
-    const list = byCategory.get(cat) ?? [];
+    const list = bySlug.get(slug) ?? [];
     list.push(row);
-    byCategory.set(cat, list);
+    bySlug.set(slug, list);
   }
 
   return [...categories]
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .filter((category) => category.slug !== CategorySlug.Banks && !category.meta?.parent)
     .map((category) => {
-      if (category.slug === CategorySlug.Cigarettes) {
-        return {
-          id: category.slug,
-          label: category.label,
-          total: cigaretteBand.total,
-          count: cigaretteBand.count,
-          accent: category.accent,
-        };
+      const childCategories = categories
+        .filter((child) => child.meta?.parent === category.slug)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+      const children: CategorySpendChild[] = [];
+      for (const child of childCategories) {
+        const spent = spendOf(bySlug.get(child.slug) ?? []);
+        if (spent.total <= 0 && spent.count === 0) continue;
+        children.push({
+          id: child.slug,
+          label: child.label,
+          total: spent.total,
+          count: spent.count,
+          logoUrl: logoForCategory(child.slug),
+        });
       }
-      const rows = byCategory.get(category.slug) ?? [];
-      const band =
-        category.slug === cigaretteParent
-          ? cigaretteBand
-          : { total: 0, count: 0 };
+      for (const merchant of bySlug.get(category.slug) ?? []) {
+        if (merchant.total <= 0 && merchant.count === 0) continue;
+        const label = merchant.merchant === "Other" ? "Unlabeled" : merchant.merchant;
+        children.push({
+          id: merchant.providerId ?? merchant.merchant,
+          label,
+          total: merchant.total,
+          count: merchant.count,
+          logoUrl: merchant.logoUrl ?? logoForAppName(merchant.merchant),
+        });
+      }
+      children.sort((a, b) => b.total - a.total || a.label.localeCompare(b.label));
+      const direct = spendOf(bySlug.get(category.slug) ?? []);
+      const childSpend = spendOf(
+        childCategories.flatMap((child) => bySlug.get(child.slug) ?? []),
+      );
       return {
         id: category.slug,
         label: category.label,
-        total:
-          Math.round((rows.reduce((s, m) => s + m.total, 0) + band.total) * 100) / 100,
-        count: rows.reduce((s, m) => s + m.count, 0) + band.count,
+        total: roundMoney(direct.total + childSpend.total),
+        count: direct.count + childSpend.count,
         accent: category.accent,
+        children,
       };
     })
     .filter((row) => row.total > 0 || row.count > 0)
@@ -119,48 +147,67 @@ function isAccountBankName(name: string): boolean {
   return /\b(hdfc|icici|axis|sbi|state bank)\b/i.test(name);
 }
 
-/** Family payments belong with people, including ones stored only as a merchant. */
-export function mergeFamilyPeople(
-  payees: PayeeSpend[],
+export interface PersonPayment {
+  id: string;
+  date: string;
+  amount: number;
+  direction: "paid" | "received";
+  upiId: string | null;
+}
+
+/**
+ * Totals and the payment list come from the same rows, so a card can never
+ * show a total its own list does not add up to. A row belongs to its payee,
+ * or for unlabelled family rows, to its merchant.
+ */
+export function peopleFromTransactions(
+  names: string[],
   transactions: Transaction[],
-): PayeeSpend[] {
+): { people: PayeeSpend[]; paymentsByName: Record<string, PersonPayment[]> } {
   const map = new Map<string, PayeeSpend>();
-  for (const person of payees) {
-    map.set(person.name.toLowerCase(), { ...person, days: [...person.days] });
-  }
-  for (const txn of transactions) {
-    if (txn.category !== CategorySlug.Family) continue;
-    if (txn.type !== TxType.Debit && txn.type !== TxType.Credit) continue;
-    if (txn.payee) continue;
-    const name = txn.merchant?.trim() ?? "";
-    if (!name || name === "Other" || isAccountBankName(name)) continue;
+  const paymentsByName: Record<string, PersonPayment[]> = {};
+  const ensure = (name: string) => {
     const key = name.toLowerCase();
-    const signed = txn.type === TxType.Credit ? -txn.amount : txn.amount;
-    const existing = map.get(key);
-    if (!existing) {
-      map.set(key, {
-        name,
-        total: signed,
-        paid: txn.type === TxType.Debit ? txn.amount : 0,
-        received: txn.type === TxType.Credit ? txn.amount : 0,
-        count: 1,
-        lastDate: txn.date,
-        days: [txn.date],
-      });
-      continue;
+    let person = map.get(key);
+    if (!person) {
+      person = { name, total: 0, paid: 0, received: 0, count: 0, lastDate: "", days: [] };
+      map.set(key, person);
+      paymentsByName[key] = [];
     }
-    existing.total = Math.round((existing.total + signed) * 100) / 100;
-    existing.count += 1;
-    if (txn.type === TxType.Debit) {
-      existing.paid = Math.round((existing.paid + txn.amount) * 100) / 100;
-    } else {
-      existing.received = Math.round((existing.received + txn.amount) * 100) / 100;
+    return person;
+  };
+  for (const name of names) ensure(name);
+
+  for (const txn of transactions) {
+    if (txn.type !== TxType.Debit && txn.type !== TxType.Credit) continue;
+    let name = txn.payee?.trim() ?? "";
+    if (!name && txn.category === CategorySlug.Family) {
+      const merchant = txn.merchant?.trim() ?? "";
+      if (merchant && merchant !== "Other" && !isAccountBankName(merchant)) name = merchant;
     }
-    if (!existing.days.includes(txn.date)) existing.days.push(txn.date);
-    if (!existing.lastDate || txn.date > existing.lastDate) existing.lastDate = txn.date;
+    if (!name) continue;
+    const person = ensure(name);
+    const paid = txn.type === TxType.Debit;
+    person.count += 1;
+    if (paid) person.paid = Math.round((person.paid + txn.amount) * 100) / 100;
+    else person.received = Math.round((person.received + txn.amount) * 100) / 100;
+    person.total = Math.round((person.paid - person.received) * 100) / 100;
+    if (!person.days.includes(txn.date)) person.days.push(txn.date);
+    if (txn.date > person.lastDate) person.lastDate = txn.date;
+    paymentsByName[name.toLowerCase()].push({
+      id: txn.id ?? `${txn.date}-${person.count}`,
+      date: txn.date,
+      amount: txn.amount,
+      direction: paid ? "paid" : "received",
+      upiId: txn.upiId ?? null,
+    });
   }
-  for (const person of map.values()) person.days.sort();
-  return [...map.values()].sort((a, b) => b.total - a.total);
+
+  for (const [key, person] of map) {
+    person.days.sort();
+    paymentsByName[key].sort((a, b) => b.date.localeCompare(a.date));
+  }
+  return { people: [...map.values()], paymentsByName };
 }
 
 /** Spend is money out minus refunds. Salary and other credits stay on Received. */
@@ -188,10 +235,6 @@ export function aggregateMonthlySpend(
       label: formatMonthLabel(month),
       total: Math.round(total * 100) / 100,
     }));
-}
-
-function roundMoney(amount: number): number {
-  return Math.round(amount * 100) / 100;
 }
 
 /** Each day is the money that left the account, less refunds. Other credits stay on Received. */

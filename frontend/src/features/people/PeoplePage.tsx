@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { useDashboard } from "@/lib/dashboard-context";
 import { useApi } from "@/lib/useApi";
-import { mergeFamilyPeople } from "@/helpers/finance";
+import { peopleFromTransactions } from "@/helpers/finance";
 import { PayeeSpendPanel } from "@/components/PayeeSpendPanel";
 import { LedgerlineFadeContent } from "@/components/animations/LedgerlineFadeContent";
 import { Panel, PanelHead } from "@/components/ui/Panel";
-import type { ParseResult, PayeeSpend } from "@/types";
+import type { PayeeSpend } from "@/types";
 
 const PERSON_GROUPS = [
   { id: "friend", label: "Friends", blurb: "People you pay outside home and work" },
@@ -43,9 +43,8 @@ function personGroup(tags: unknown): PersonGroup | null {
 }
 
 export function PeoplePage() {
-  const { refresh } = useDashboard();
+  const { refresh, data: ledger, periodLabel } = useDashboard();
   const api = useApi();
-  const [ledger, setLedger] = useState<ParseResult | null>(null);
   const [rules, setRules] = useState<Array<Record<string, unknown>>>([]);
   const [name, setName] = useState("");
   const [matchText, setMatchText] = useState("");
@@ -57,68 +56,44 @@ export function PeoplePage() {
 
   const loadPeople = useCallback(async () => {
     if (!api) return;
-    const [res, allMonths] = await Promise.all([
-      api.listRules(),
-      api.fetchDashboard(),
-    ]);
+    const res = await api.listRules();
     setRules(res.rules);
-    setLedger(allMonths);
   }, [api]);
 
   useEffect(() => {
-    void loadPeople().catch(() => {
+    void Promise.resolve().then(loadPeople).catch(() => {
       setError("Could not load people");
     });
   }, [loadPeople]);
 
   if (!ledger) return null;
 
-  const people = mergeFamilyPeople(ledger.payeeSpend ?? [], ledger.transactions ?? []);
   const groupByName = new Map<string, PersonGroup>();
+  const ruleNames: string[] = [];
   for (const rule of rules) {
     const payee = typeof rule.setPayeeName === "string" ? rule.setPayeeName : "";
     if (!payee) continue;
+    ruleNames.push(payee);
     groupByName.set(payee.toLowerCase(), personGroup(rule.setTags) ?? "family");
   }
 
+  const { people, paymentsByName } = peopleFromTransactions(
+    [...ruleNames, ...(ledger.payeeSpend ?? []).map((item) => item.name)],
+    ledger.transactions ?? [],
+  );
   const grouped = new Map<PersonGroup, PayeeSpend[]>(
     PERSON_GROUPS.map((item) => [item.id, []]),
   );
-  const paymentsByName: Record<string, { date: string; amount: number; direction: "paid" | "received" }[]> = {};
-  const detailByName: Record<string, string> = {};
-  const txns = ledger.transactions ?? [];
+  const detailByName: Record<string, string[]> = {};
   for (const person of people) {
-    const assigned = groupByName.get(person.name.toLowerCase()) ?? "family";
-    grouped.get(assigned)?.push(person);
-    const rule = rules.find(
-      (item) =>
-        typeof item.setPayeeName === "string" &&
-        item.setPayeeName.toLowerCase() === person.name.toLowerCase(),
-    );
-    const needle =
-      (typeof rule?.matchUpiId === "string" && rule.matchUpiId) ||
-      (typeof rule?.matchNarrationRe === "string" && rule.matchNarrationRe) ||
-      "";
-    const matched = txns.filter((txn) => {
-      if (txn.type !== "debit" && txn.type !== "credit") return false;
-      if (txn.payee?.toLowerCase() === person.name.toLowerCase()) return true;
-      if (!needle) return false;
-      const hay = `${txn.description} ${txn.upiId ?? ""} ${txn.merchant ?? ""}`;
-      try {
-        return new RegExp(needle, "i").test(hay);
-      } catch {
-        return hay.toLowerCase().includes(needle.toLowerCase());
-      }
-    });
-    paymentsByName[person.name.toLowerCase()] = matched
-      .map((txn) => ({
-        date: txn.date,
-        amount: txn.amount,
-        direction: txn.type === "credit" ? ("received" as const) : ("paid" as const),
-      }))
-      .sort((a, b) => b.date.localeCompare(a.date));
-    const upi = matched.find((txn) => txn.upiId)?.upiId;
-    if (upi) detailByName[person.name.toLowerCase()] = upi;
+    const key = person.name.toLowerCase();
+    grouped.get(groupByName.get(key) ?? "family")?.push(person);
+    const upiIds = [
+      ...new Set(
+        (paymentsByName[key] ?? []).flatMap((payment) => (payment.upiId ? [payment.upiId] : [])),
+      ),
+    ];
+    if (upiIds.length > 0) detailByName[key] = upiIds;
   }
 
   return (
@@ -155,7 +130,7 @@ export function PeoplePage() {
                   ...buildRuleMatchFields(person, match),
                   setPayeeName: person,
                   setTags: [group],
-                  ...(group === "family" ? { setCategorySlug: "family" } : {}),
+                  setCategorySlug: "family",
                 });
                 setName("");
                 setMatchText("");
@@ -218,7 +193,7 @@ export function PeoplePage() {
             subtitle={
               (grouped.get(item.id)?.length ?? 0) === 0
                 ? item.blurb
-                : `${grouped.get(item.id)?.length} ${item.label.toLowerCase()}`
+                : `${grouped.get(item.id)?.length} ${item.label.toLowerCase()} · ${periodLabel}`
             }
             items={grouped.get(item.id) ?? []}
             paymentsByName={paymentsByName}

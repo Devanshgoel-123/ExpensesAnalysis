@@ -6,7 +6,12 @@ import { useDashboard } from "@/lib/dashboard-context";
 import { useApi } from "@/lib/useApi";
 import { pathForView } from "@/lib/dashboardViews";
 import type { Provider } from "@/lib/api/types";
-import { groupAppsByCategory, logoForAppName, logoForCategory } from "@/helpers/apps";
+import {
+  groupAppsByCategory,
+  logoForAppName,
+  logoForCategory,
+  spendByCategorySlug,
+} from "@/helpers/apps";
 import { formatInr } from "@/helpers/currency";
 import { formatMonthTitle } from "@/helpers/finance";
 import { BrandMark } from "@/components/BrandMark";
@@ -45,6 +50,10 @@ export function AppsPage() {
       ),
     [providers, data],
   );
+  const categorySpend = useMemo(
+    () => spendByCategorySlug(data?.transactions ?? []),
+    [data],
+  );
 
   if (fetching && !data) {
     return <LoadingState text="Loading apps" variant="skeleton" />;
@@ -82,13 +91,19 @@ export function AppsPage() {
             !(data.categories ?? []).some((category) => category.meta?.parent === group.slug) ? (
               <p className="meta">No apps in this category yet</p>
             ) : (
-              <div className="apps-sections">
-                {(data.categories ?? []).some((category) => category.meta?.parent === group.slug) ? (
-                <div className="apps-subgrid">
+              <div className="apps-grid">
                 {(data.categories ?? [])
                   .filter((category) => category.meta?.parent === group.slug)
-                  .map((category) => (
-                    <article key={category.slug} className="app-card app-card-sub">
+                  .sort((a, b) => {
+                    const left = categorySpend.get(a.slug)?.total ?? 0;
+                    const right = categorySpend.get(b.slug)?.total ?? 0;
+                    if (right !== left) return right - left;
+                    return a.sortOrder - b.sortOrder;
+                  })
+                  .map((category) => {
+                    const spent = categorySpend.get(category.slug) ?? { total: 0, count: 0 };
+                    return (
+                    <article key={category.slug} className="app-card">
                       <header className="app-card-head">
                         <BrandMark
                           name={category.label}
@@ -97,15 +112,20 @@ export function AppsPage() {
                         />
                         <div className="app-card-id">
                           <strong>{category.label}</strong>
-                          <p className="meta">{category.blurb || group.label}</p>
+                          <p className="meta">
+                            {spent.count > 0
+                              ? `${formatInr(spent.total)} · ${spent.count} txn${spent.count === 1 ? "" : "s"}`
+                              : "No tagged spend yet"}
+                          </p>
                         </div>
                       </header>
+                      <div className="field field-compact">
+                        <span>Category</span>
+                        <p className="app-card-value">{group.label}</p>
+                      </div>
                     </article>
-                  ))}
-                </div>
-                ) : null}
-                {group.apps.length > 0 ? (
-                <div className="apps-grid">
+                    );
+                  })}
                 {group.apps.map(({ provider, total, count }) => (
                   <article key={provider.id} className="app-card">
                     <header className="app-card-head">
@@ -202,8 +222,6 @@ export function AppsPage() {
                     </form>
                   </article>
                 ))}
-                </div>
-                ) : null}
               </div>
             )}
           </Panel>
