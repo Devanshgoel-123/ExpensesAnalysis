@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { CategorySummary } from "@/types";
 import { logoForCategory } from "@/helpers/apps";
 import { BrandMark } from "@/components/BrandMark";
@@ -13,7 +14,10 @@ interface CategoryMenuProps {
 
 export function CategoryMenu({ categories, value, onChange }: CategoryMenuProps) {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [box, setBox] = useState({ top: 0, left: 0, width: 280 });
   const rootRef = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
   const parents = categories
     .filter((category) => !category.meta?.parent)
     .sort((a, b) => a.label.localeCompare(b.label));
@@ -21,18 +25,39 @@ export function CategoryMenu({ categories, value, onChange }: CategoryMenuProps)
     value === "all" ? "All categories" : (categories.find((category) => category.slug === value)?.label ?? "Category");
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  function place() {
+    const el = rootRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const width = Math.max(rect.width, 280);
+    let left = rect.left;
+    if (left + width > window.innerWidth - 12) {
+      left = Math.max(12, window.innerWidth - width - 12);
+    }
+    setBox({ top: rect.bottom + 8, left, width });
+  }
+
+  useEffect(() => {
     if (!open) return;
+    place();
     function onPointer(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target) || popRef.current?.contains(target)) return;
+      setOpen(false);
     }
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") setOpen(false);
     }
     document.addEventListener("mousedown", onPointer);
     document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", place);
     return () => {
       document.removeEventListener("mousedown", onPointer);
       document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", place);
     };
   }, [open]);
 
@@ -53,8 +78,15 @@ export function CategoryMenu({ categories, value, onChange }: CategoryMenuProps)
         <span>{current}</span>
         <i aria-hidden />
       </button>
-      {open ? (
-        <div className="menu-select-pop" role="listbox" aria-label="Filter by category">
+      {open && mounted
+        ? createPortal(
+        <div
+          ref={popRef}
+          className="menu-select-pop"
+          role="listbox"
+          aria-label="Filter by category"
+          style={{ top: box.top, left: box.left, width: box.width }}
+        >
           <button
             type="button"
             className={`menu-select-item${value === "all" ? " active" : ""}`}
@@ -90,8 +122,10 @@ export function CategoryMenu({ categories, value, onChange }: CategoryMenuProps)
               </div>
             );
           })}
-        </div>
-      ) : null}
+        </div>,
+        document.body,
+      )
+        : null}
     </div>
   );
 }

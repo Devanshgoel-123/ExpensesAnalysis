@@ -91,15 +91,67 @@ export function AppsPage() {
             !(data.categories ?? []).some((category) => category.meta?.parent === group.slug) ? (
               <p className="meta">No apps in this category yet</p>
             ) : (
-              <div className="apps-grid">
+              <div className="apps-sections">
                 {(data.categories ?? [])
                   .filter((category) => category.meta?.parent === group.slug)
-                  .sort((a, b) => {
-                    const left = categorySpend.get(a.slug)?.total ?? 0;
-                    const right = categorySpend.get(b.slug)?.total ?? 0;
-                    if (right !== left) return right - left;
-                    return a.sortOrder - b.sortOrder;
-                  })
+                  .sort((a, b) => a.sortOrder - b.sortOrder)
+                  .map((category) => {
+                    const nested = group.apps.filter(
+                      (app) => app.provider.categorySlug === category.slug,
+                    );
+                    if (nested.length === 0) return null;
+                    const spent = categorySpend.get(category.slug) ?? { total: 0, count: 0 };
+                    return (
+                    <section key={category.slug} className="apps-subblock">
+                    <article className="app-card">
+                      <header className="app-card-head">
+                        <BrandMark
+                          name={category.label}
+                          logoUrl={logoForCategory(category.slug)}
+                          size={40}
+                        />
+                        <div className="app-card-id">
+                          <strong>{category.label}</strong>
+                          <p className="meta">
+                            {spent.count > 0
+                              ? `${formatInr(spent.total)} · ${spent.count} txn${spent.count === 1 ? "" : "s"}`
+                              : "No tagged spend yet"}
+                          </p>
+                        </div>
+                      </header>
+                      <div className="field field-compact">
+                        <span>Category</span>
+                        <p className="app-card-value">{group.label}</p>
+                      </div>
+                    </article>
+                    <div className="apps-grid">
+                      {nested.map(({ provider, total, count }) => (
+                        <article key={provider.id} className="app-card">
+                          <header className="app-card-head">
+                            <BrandMark name={provider.canonicalName} logoUrl={provider.logoUrl} size={40} />
+                            <div className="app-card-id">
+                              <strong>{provider.canonicalName}</strong>
+                              <p className="meta">
+                                {count > 0
+                                  ? `${formatInr(total)} · ${count} txn${count === 1 ? "" : "s"}`
+                                  : "No tagged spend yet"}
+                              </p>
+                            </div>
+                          </header>
+                        </article>
+                      ))}
+                    </div>
+                    </section>
+                    );
+                  })}
+                <div className="apps-grid">
+                {(data.categories ?? [])
+                  .filter((category) => category.meta?.parent === group.slug)
+                  .filter(
+                    (category) =>
+                      !group.apps.some((app) => app.provider.categorySlug === category.slug),
+                  )
+                  .sort((a, b) => a.sortOrder - b.sortOrder)
                   .map((category) => {
                     const spent = categorySpend.get(category.slug) ?? { total: 0, count: 0 };
                     return (
@@ -126,7 +178,14 @@ export function AppsPage() {
                     </article>
                     );
                   })}
-                {group.apps.map(({ provider, total, count }) => (
+                {group.apps
+                  .filter((app) => {
+                    const parent = (data.categories ?? []).find(
+                      (category) => category.slug === app.provider.categorySlug,
+                    )?.meta?.parent;
+                    return parent !== group.slug;
+                  })
+                  .map(({ provider, total, count }) => (
                   <article key={provider.id} className="app-card">
                     <header className="app-card-head">
                       <BrandMark
@@ -222,6 +281,7 @@ export function AppsPage() {
                     </form>
                   </article>
                 ))}
+                </div>
               </div>
             )}
           </Panel>

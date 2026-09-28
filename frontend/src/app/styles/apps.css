@@ -3,6 +3,15 @@
   gap: 0.85rem;
 }
 
+.apps-subblock {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.apps-subblock > .app-card {
+  max-width: 18.5rem;
+}
+
 .apps-subgrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 15.5rem), 1fr));

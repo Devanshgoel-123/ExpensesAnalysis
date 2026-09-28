@@ -81,12 +81,23 @@ export function TxnAssignPicker({
       .filter((provider) => {
         if (!provider.categorySlug || provider.categorySlug === "banks") return false;
         if (provider.canonicalName.toLowerCase() === "ayodhya") return false;
-        if (browse && provider.categorySlug !== browse) return false;
+        const childSlugs = new Set(
+          categories
+            .filter((category) => category.meta?.parent === browse)
+            .map((category) => category.slug),
+        );
+        if (
+          browse &&
+          provider.categorySlug !== browse &&
+          !childSlugs.has(provider.categorySlug)
+        ) {
+          return false;
+        }
         if (!q) return true;
         return provider.canonicalName.toLowerCase().includes(q);
       })
       .sort((a, b) => a.canonicalName.localeCompare(b.canonicalName));
-  }, [providers, query, browse]);
+  }, [providers, categories, query, browse]);
 
   const banks = useMemo(() => {
     const q = query.trim().toLowerCase();

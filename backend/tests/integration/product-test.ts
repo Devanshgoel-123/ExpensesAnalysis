@@ -76,8 +76,8 @@ async function main() {
     throw new Error("Zomato app catalog missing");
   }
   const namma = providers.find((p) => p.canonicalName === "Namma Yatri");
-  if (!namma || namma.categorySlug !== "travel") {
-    throw new Error("Namma Yatri should be travel");
+  if (!namma || namma.categorySlug !== "rides") {
+    throw new Error("Namma Yatri should be rides");
   }
   if (providers.some((p) => p.canonicalName.toLowerCase() === "ayodhya")) {
     throw new Error("Ayodhya should not be in the catalog");

@@ -78,6 +78,33 @@ describe("buildAnalyticsFromRows spend", () => {
     assert.equal(result.summary.totalSpent, 5000);
   });
 
+  it("does not let an income-tax refund wipe the day's spend", () => {
+    const result = buildAnalyticsFromRows(
+      [
+        baseRow({ id: "1", date: "2026-09-12", amount: 3787.53, fingerprint: "a" }),
+        baseRow({
+          id: "2",
+          date: "2026-09-12",
+          amount: 11340,
+          type: "credit",
+          merchant: null,
+          categorySlug: null,
+          upiId: null,
+          description:
+            "NEFT CR-SBIN0004266-ITDTAX REFUND 2026 2 SBIN126255867272",
+          fingerprint: "b",
+        }),
+      ],
+      [],
+      [],
+      [],
+    );
+    assert.equal(result.summary.totalSpent, 3787.53);
+    assert.equal(result.summary.totalReceived, 11340);
+    assert.deepEqual(result.daily, [{ date: "2026-09-12", amount: 3787.53 }]);
+    assert.equal(result.transactions.find((t) => t.id === "2")?.isRefund, false);
+  });
+
   it("nets only refunds out of merchant buckets", () => {
     const result = buildAnalyticsFromRows(
       [

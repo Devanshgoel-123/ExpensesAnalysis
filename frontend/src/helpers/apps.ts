@@ -30,10 +30,13 @@ const HIDDEN_APP_SLUGS = new Set<string>([
   CategorySlug.Petrol,
   CategorySlug.Salon,
   CategorySlug.Pharmacy,
+  CategorySlug.Salary,
   CategorySlug.Banks,
   CategorySlug.Booze,
   CategorySlug.Cigarettes,
   CategorySlug.ScootyRental,
+  CategorySlug.Rides,
+  CategorySlug.Stays,
   CategorySlug.Dinner,
   CategorySlug.Sports,
   CategorySlug.FunActivity,
@@ -125,11 +128,19 @@ export function groupAppsByCategory(
     spend.set(key, current);
   }
 
+  const parentBySlug = new Map(
+    categories
+      .filter((category) => category.meta?.parent)
+      .map((category) => [category.slug, category.meta.parent as string]),
+  );
   const groups = new Map<string, AppSpend[]>();
   for (const provider of providers) {
-    if (!provider.categorySlug || HIDDEN_APP_SLUGS.has(provider.categorySlug)) continue;
-    if (isHiddenApp(provider.canonicalName)) continue;
-    const slug = provider.categorySlug;
+    if (!provider.categorySlug || isHiddenApp(provider.canonicalName)) continue;
+    const parent = parentBySlug.get(provider.categorySlug);
+    const slug = HIDDEN_APP_SLUGS.has(provider.categorySlug)
+      ? parent
+      : provider.categorySlug;
+    if (!slug || HIDDEN_APP_SLUGS.has(slug)) continue;
     const byId = provider.id ? spend.get(provider.id) : undefined;
     const byName = spend.get(provider.canonicalName.toLowerCase());
     const stats = byId ?? byName ?? { total: 0, count: 0 };
@@ -228,6 +239,8 @@ const CATEGORY_MARKS: Record<string, string> = {
   "from-home": "/providers/from-home.svg",
   grocery: "/providers/grocery.svg",
   petrol: "/providers/petrol.svg",
+  rides: "/providers/rides.svg",
+  stays: "/providers/stays.svg",
   salon: "/providers/salon.svg",
   pharmacy: "/providers/pharmacy.svg",
 };

@@ -140,13 +140,16 @@ function isBankRailTransfer(
 
 const REFUND_RE = /\b(refund|reversal|reversed|cashback|chargeback)\b/i;
 
-/** Money back from a purchase: refund wording, or a credit from a merchant app. Salary and transfers are not refunds. */
+const BANK_RAIL_RE = /\b(neft|imps|rtgs|payroll|salary)\b/i;
+
+/** Money back from a purchase: refund wording, or a credit from a merchant app. Salary, tax refunds, and other bank credits are not refunds. */
 export function isRefund(
   row: Pick<TransactionRow, "type" | "description">,
   identity: Pick<SpendIdentity, "providerId">,
   providers: ProviderRow[],
 ): boolean {
   if (row.type !== "credit") return false;
+  if (BANK_RAIL_RE.test(row.description)) return false;
   if (REFUND_RE.test(row.description)) return true;
   const provider = identity.providerId
     ? providers.find((item) => item.id === identity.providerId) ?? null

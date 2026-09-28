@@ -191,6 +191,7 @@ describe("detectFromProviders", () => {
     provider("hdfc", "HDFC Bank", ["HDFC"], [], "banks"),
     provider("swiggy", "Swiggy", ["SWIGGY"], ["swiggy"], "food"),
     provider("instamart", "Instamart", [], ["swiggyinstamart@icici"], "groceries"),
+    provider("ownly", "Ownly", ["CTRLX", "CTRLX Technologies"], ["ownly", "ctrlx"], "food"),
   ];
 
   for (const upiId of ["swiggy@okaxis", "swiggy@ybl", "swiggy@okhdfcbank"]) {
@@ -214,6 +215,20 @@ describe("detectFromProviders", () => {
       providers,
     );
     assert.equal(hit.merchant, "Instamart");
+  });
+
+  it("maps a CTRLX cashfree handle to Ownly", () => {
+    const hit = detectFromProviders(
+      {
+        description: "Paid to VPA cf.ctrlxtechnologiesp1@cashfreensdlpb (CTRLX TECHNOLOGIES PRIVATE LIMITED)",
+        upiId: "cf.ctrlxtechnologiesp1@cashfreensdlpb",
+        merchant: null,
+        payee: null,
+      },
+      providers,
+    );
+    assert.equal(hit.merchant, "Ownly");
+    assert.equal(hit.categorySlug, "food");
   });
 
   it("does not label a PSP handle as the bank", () => {
