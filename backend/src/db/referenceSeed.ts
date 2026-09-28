@@ -87,6 +87,48 @@ export async function seedMemoryReferenceData(store: MemoryStore): Promise<void>
     });
   }
 
+  // Later catalog migrations are not in 003. Tests and the picker expect them.
+  await store.upsertCategory({
+    userId: null,
+    slug: "rides",
+    label: "Rides",
+    blurb: "Cabs · autos · bikes",
+    accent: "#0284c7",
+    isGlobal: true,
+    sortOrder: 26,
+    meta: { parent: "travel" },
+  });
+  await store.upsertCategory({
+    userId: null,
+    slug: "stays",
+    label: "Stays",
+    blurb: "Hotels · stays",
+    accent: "#7c3aed",
+    isGlobal: true,
+    sortOrder: 27,
+    meta: { parent: "travel" },
+  });
+  await store.upsertCategory({
+    userId: null,
+    slug: "passed-on",
+    label: "Passed on",
+    blurb: "Someone else's money that you passed on",
+    accent: "#64748b",
+    isGlobal: true,
+    sortOrder: 28,
+    meta: { parent: "household" },
+  });
+  const travel = store.categories.find((category) => category.slug === "travel" && category.isGlobal);
+  if (travel) travel.blurb = "Rides · stays · fuel";
+  for (const provider of store.providers) {
+    if (
+      provider.isGlobal &&
+      ["uber", "rapido", "namma yatri", "makemytrip"].includes(provider.canonicalName.toLowerCase())
+    ) {
+      provider.categorySlug = "rides";
+    }
+  }
+
   for (const match of sql.matchAll(
     /INSERT INTO invites \(code, max_uses\)\s*VALUES\s*\(([^)]+)\)/g,
   )) {
