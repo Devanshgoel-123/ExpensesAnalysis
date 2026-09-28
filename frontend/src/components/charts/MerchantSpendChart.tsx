@@ -54,7 +54,7 @@ export function MerchantSpendChart({
       <div onMouseLeave={hide}>
         <LedgerlineAnimatedList
           items={ranked}
-          keyExtractor={(item) => item.merchant}
+          keyExtractor={(item) => `${item.merchant}|${item.categorySlug ?? ""}`}
           className="merchant-row-list"
           renderItem={(item, index) => {
             const categoryLabel =

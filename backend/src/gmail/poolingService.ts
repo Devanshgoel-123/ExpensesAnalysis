@@ -1,4 +1,4 @@
-import { sha256Hex, transactionFingerprint } from "../crypto/secrets.js";
+import { sha256Hex } from "../crypto/secrets.js";
 import { getStore } from "../db/index.js";
 import { logger } from "../logger/index.js";
 import { notifyMailDebits } from "../telegram/service.js";
@@ -9,7 +9,7 @@ import type {
 } from "../db/types.js";
 import { classifyTransaction } from "../imports/classification.js";
 import { loadClassificationContext } from "../imports/context.js";
-import { processPdfImport } from "../imports/service.js";
+import { ingestStatementPdf } from "../statementMatch/reconcile.js";
 import {
   ClassificationSource,
   TxType,
@@ -44,7 +44,7 @@ import {
 import { gmailLog } from "../logger/gmail.js";
 import { parseBankAlertEmail } from "./alertParser.js";
 import { counterpartyFromNarration, merchantIsAccountBank } from "../narration/party.js";
-import { isBankInflowNarration } from "../statementMatch/match.js";
+import { isBankInflowNarration, shiftIsoDate } from "../statementMatch/match.js";
 import {
   buildAlertQuery,
   buildStatementQuery,
@@ -108,6 +108,11 @@ function runLastActivityMs(run: PoolingRunRow): number {
   return Number.isFinite(parsed) ? parsed : Date.parse(run.startedAt);
 }
 
+/** Ledger row fingerprint for an alert. One Gmail message is one payment. */
+export function alertFingerprint(messageId: string): string {
+  return sha256Hex(`mail-tx:${messageId}`);
+}
+
 async function processAlertMessage(input: {
   userId: string;
   accountId: string;
@@ -116,70 +121,40 @@ async function processAlertMessage(input: {
   senders: string[];
 }): Promise<MailProcessResult> {
   const store = await getStore();
-  const existingMail = await store.findMailMessageByGmailId(
-    input.userId,
-    input.messageId,
-  );
-  const retryAsCredit =
-    existingMail?.txType === "debit" &&
-    /\b(credited|credit|received|imps|neft|deposit)\b/i.test(existingMail.subject);
-  if (
-    !retryAsCredit &&
-    existingMail?.amount != null &&
-    existingMail.txType &&
-    existingMail.receivedAt
-  ) {
-    const txDate = toIstCalendarDate(existingMail.receivedAt);
-    if (!txDate) return "skipped";
-    const txFingerprint = transactionFingerprint({
-      date: txDate,
-      amount: existingMail.amount,
-      type: existingMail.txType,
-      description: existingMail.subject.trim(),
-      upiId: null,
-    });
-    const existingTx = await store.findTransactionByFingerprint(
-      input.userId,
-      txFingerprint,
-    );
+  const existingMail = await store.findMailMessageByGmailId(input.userId, input.messageId);
+  const existingTx = await store.findTransactionByMailMessageId(input.userId, input.messageId);
+  if (existingMail?.amount != null && existingMail.txType) {
+    // Parsed before with no ledger row: it was a mirror of a debit, or removed on purpose.
+    if (!existingTx) return MailProcessResult.Skipped;
     const context = await loadClassificationContext(input.userId);
-    if (
-      !existingTx ||
-      !merchantIsAccountBank(existingTx.merchant, context.providers)
-    ) {
-      return "skipped";
-    }
-  } else if (
-    !retryAsCredit &&
-    existingMail?.amount != null &&
-    existingMail.txType
-  ) {
-    return "skipped";
+    const typeSettled = existingTx.verifiedAt != null || existingTx.type === existingMail.txType;
+    const labelSettled =
+      existingTx.classificationSource === ClassificationSource.UserOverride ||
+      !merchantIsAccountBank(existingTx.merchant, context.providers);
+    // Older rows kept only the subject; re-read those once to fill the VPA.
+    const detailSettled = !/upi\s*txn/i.test(existingTx.description);
+    if (typeSettled && labelSettled && detailSettled) return MailProcessResult.Skipped;
   }
 
   const details = await fetchMessageDetails(input.connection, input.messageId);
   if (!isWithinPoolingWindow(details.receivedAt)) {
-    return "skipped";
+    return MailProcessResult.Skipped;
   }
   if (isStatementLikeEmail(details.subject, details.snippet)) {
-    return "not_alert";
+    return MailProcessResult.NotAlert;
   }
   if (!fromAddressMatchesSenders(details.fromAddress, input.senders)) {
-    return "skipped";
+    return MailProcessResult.Skipped;
   }
 
   // Parse in-memory only — never persist body/snippet. Snippet covers HTML-only mail.
-  const parsed = parseBankAlertEmail(
-    details.subject,
-    [details.bodyText, details.snippet].filter(Boolean).join("\n"),
-  );
-  const fingerprint = sha256Hex(`mail:${input.messageId}`);
+  const body = [details.bodyText, details.snippet].filter(Boolean).join("\n");
+  const parsed = parseBankAlertEmail(details.subject, body);
   // Gmail received time in IST is the source of truth. Body dates like
   // "on 30-09-25" are often footers and would drop a real September mail.
   const txDate = toIstCalendarDate(details.receivedAt);
-
   if (!txDate || !isWithinPoolingWindow(txDate)) {
-    return "skipped";
+    return MailProcessResult.Skipped;
   }
 
   await store.upsertMailMessage({
@@ -192,114 +167,97 @@ async function processAlertMessage(input: {
     amount: parsed.amount,
     txType: parsed.type,
     currency: parsed.currency,
-    fingerprint,
+    fingerprint: sha256Hex(`mail:${input.messageId}`),
   });
 
   if (!parsed.amount || !parsed.type) {
-    return "stored";
+    return MailProcessResult.Stored;
   }
 
-  const sameDay = await store.listTransactions(input.userId, {
-    from: txDate,
-    to: txDate,
-  });
-  const mirrorsDebit =
-    parsed.type === TxType.Credit &&
-    !isBankInflowNarration(parsed.description) &&
-    !isBankInflowNarration(`${details.subject}\n${details.bodyText}`) &&
-    sameDay.some(
-      (tx) =>
-        tx.type === TxType.Debit &&
-        Math.abs(tx.amount - parsed.amount!) < 0.009 &&
-        tx.description !== parsed.description,
-    );
-  if (mirrorsDebit) return "skipped";
-
-  if (parsed.type === TxType.Debit) {
-    const mirrors = sameDay.filter(
-      (tx) =>
-        tx.type === TxType.Credit &&
-        Math.abs(tx.amount - parsed.amount!) < 0.009 &&
-        tx.description !== parsed.description &&
-        !isBankInflowNarration(tx.description),
-    );
-    for (const tx of mirrors) {
-      await store.deleteTransaction(input.userId, tx.id);
-    }
-  }
-
-  const account = await store.getOrCreateAccount(input.userId);
-  const party = counterpartyFromNarration(
-    `${details.subject}\n${details.bodyText}`,
-  );
-  const classificationInput = {
-    description: `${details.subject} ${details.bodyText}`.trim(),
-    upiId: party.upiId,
-    merchant: party.name,
-    amount: parsed.amount,
-    type: parsed.type,
-    payee: null,
-  } as const;
+  const context = await loadClassificationContext(input.userId);
+  const narrated = counterpartyFromNarration(`${details.subject}\n${body}`);
+  const party = {
+    upiId: parsed.upiId ?? narrated.upiId,
+    name: narrated.name,
+  };
   const classification = classifyTransaction(
-    classificationInput,
-    await loadClassificationContext(input.userId),
     {
-      confidence: 0.85,
-      classificationSource: ClassificationSource.EmailAlert,
+      description: parsed.description,
+      upiId: party.upiId,
+      merchant: party.name,
+      amount: parsed.amount,
+      type: parsed.type,
+      payee: null,
     },
+    context,
+    { classificationSource: ClassificationSource.EmailAlert },
   );
-  const txFingerprint = transactionFingerprint({
-    date: txDate,
-    amount: parsed.amount,
-    type: parsed.type,
-    description: parsed.description,
-    upiId: null,
-  });
+
+  if (existingTx) {
+    const fixType = !existingTx.verifiedAt && existingTx.type !== parsed.type;
+    const relabel =
+      existingTx.classificationSource !== ClassificationSource.UserOverride &&
+      (!existingTx.merchant || merchantIsAccountBank(existingTx.merchant, context.providers));
+    const fillDetail =
+      parsed.upiId != null &&
+      (existingTx.upiId == null || existingTx.description !== parsed.description);
+    if (!fixType && !relabel && !fillDetail) return MailProcessResult.Skipped;
+    await store.updateTransaction(input.userId, existingTx.id, {
+      ...(fixType ? { type: parsed.type } : {}),
+      ...(fillDetail
+        ? { description: parsed.description, upiId: existingTx.upiId ?? parsed.upiId }
+        : {}),
+      ...(relabel
+        ? {
+            merchant: classification.merchant,
+            payee: classification.payee,
+            providerId: classification.providerId,
+            categorySlug: classification.categorySlug,
+            classificationSource: classification.classificationSource,
+            upiId: existingTx.upiId ?? party.upiId,
+          }
+        : {}),
+    });
+    return MailProcessResult.Imported;
+  }
 
   if (parsed.type === TxType.Credit) {
-    const debitTwin = await store.findTransactionByFingerprint(
-      input.userId,
-      transactionFingerprint({
-        date: txDate,
-        amount: parsed.amount,
-        type: TxType.Debit,
-        description: parsed.description,
-        upiId: null,
-      }),
-    );
-    if (debitTwin) {
-      await store.updateTransaction(input.userId, debitTwin.id, {
-        type: TxType.Credit,
-        fingerprint: txFingerprint,
-        merchant: classification.merchant,
-        payee: classification.payee,
-        providerId: classification.providerId,
-        categorySlug: classification.categorySlug,
-        counterparty: classification.counterparty,
-        upiId: party.upiId,
-        confidence: classification.confidence,
-        classificationSource: classification.classificationSource,
-      });
-      return "imported";
-    }
+    const sameDay = await store.listTransactions(input.userId, { from: txDate, to: txDate });
+    const mirrorsDebit =
+      !isBankInflowNarration(`${details.subject}\n${body}`) &&
+      sameDay.some(
+        (tx) =>
+          tx.type === TxType.Debit &&
+          Math.abs(tx.amount - parsed.amount!) < 0.009 &&
+          tx.mailMessageId !== input.messageId,
+      );
+    // HDFC "Account update" mail repeats a debit with credit wording. The statement check adds a real refund back.
+    if (mirrorsDebit) return MailProcessResult.Skipped;
   }
 
-  const imp = await store.createImport({
-    userId: input.userId,
-    accountId: account.id,
-    source: ImportSource.Gmail,
-    status: ImportStatus.Completed,
-    filename: null,
-    gmailMessageId: input.messageId,
-    attachmentHash: fingerprint,
-    bankAdapter: null,
-    errorMessage: null,
-    passwordEncrypted: null,
+  // A statement already filled this gap while the mail was unread: that row is this payment.
+  const nearby = await store.listTransactions(input.userId, {
+    from: shiftIsoDate(txDate, -1),
+    to: shiftIsoDate(txDate, 1),
   });
+  const statementRow = nearby.find(
+    (tx) =>
+      tx.origin === "statement" &&
+      !tx.mailMessageId &&
+      tx.type === parsed.type &&
+      Math.abs(tx.amount - parsed.amount!) < 0.009,
+  );
+  if (statementRow) {
+    await store.updateTransaction(input.userId, statementRow.id, {
+      mailMessageId: input.messageId,
+      upiId: statementRow.upiId ?? party.upiId,
+    });
+    return MailProcessResult.Imported;
+  }
 
   const result = await store.insertTransactions(input.userId, [
     {
-      importId: imp.id,
+      importId: null,
       accountId: input.accountId,
       date: txDate,
       time: null,
@@ -311,32 +269,13 @@ async function processAlertMessage(input: {
       payee: classification.payee,
       providerId: classification.providerId,
       categorySlug: classification.categorySlug,
-      counterparty: classification.counterparty,
-      confidence: classification.confidence,
       classificationSource: classification.classificationSource,
-      fingerprint: txFingerprint,
+      fingerprint: alertFingerprint(input.messageId),
+      mailMessageId: input.messageId,
+      origin: "mail",
+      verifiedAt: null,
     },
   ]);
-
-  if (result.inserted === 0) {
-    const existing = await store.findTransactionByFingerprint(
-      input.userId,
-      txFingerprint,
-    );
-    const context = await loadClassificationContext(input.userId);
-    if (existing && merchantIsAccountBank(existing.merchant, context.providers)) {
-      await store.updateTransaction(input.userId, existing.id, {
-        merchant: classification.merchant,
-        payee: classification.payee,
-        providerId: classification.providerId,
-        categorySlug: classification.categorySlug,
-        counterparty: classification.counterparty,
-        upiId: party.upiId,
-        confidence: classification.confidence,
-        classificationSource: classification.classificationSource,
-      });
-    }
-  }
 
   if (parsed.type === TxType.Debit && result.ids.length > 0) {
     void notifyMailDebits(input.userId, result.ids).catch((error) => {
@@ -344,44 +283,82 @@ async function processAlertMessage(input: {
     });
   }
 
-  return result.inserted > 0 ? "imported" : "skipped";
+  return result.inserted > 0 ? MailProcessResult.Imported : MailProcessResult.Skipped;
+}
+
+/** Re-read alert mail for a date range; used before a statement line becomes a new row. */
+async function rescanAlertWindow(input: {
+  userId: string;
+  accountId: string;
+  connection: GmailConnectionRow;
+  senders: string[];
+  from: string;
+  to: string;
+}): Promise<void> {
+  const query = buildAlertQuery(input.senders, {
+    after: input.from,
+    before: addIsoDays(input.to, 1),
+  });
+  let pageToken: string | undefined;
+  do {
+    const page = await listStatementMessageIds(input.connection, pageToken, query);
+    for (const messageId of page.ids) {
+      await processAlertMessage({
+        userId: input.userId,
+        accountId: input.accountId,
+        connection: input.connection,
+        messageId,
+        senders: input.senders,
+      }).catch((error) => {
+        logger.warn({ error, userId: input.userId, messageId }, "alert rescan failed");
+      });
+    }
+    pageToken = page.nextPageToken ?? undefined;
+  } while (pageToken);
 }
 
 async function processStatementMessage(input: {
   userId: string;
+  accountId: string;
   connection: GmailConnectionRow;
   messageId: string;
   password: string;
+  senders: string[];
 }): Promise<MailProcessResult> {
   const store = await getStore();
-  const existing = await store.findImportByGmailMessage(
-    input.userId,
-    input.messageId,
-  );
+  const existing = await store.findImportByGmailMessage(input.userId, input.messageId);
   if (existing?.status === ImportStatus.Completed) return MailProcessResult.Skipped;
 
   const details = await fetchMessageDetails(input.connection, input.messageId);
   if (!isWithinPoolingWindow(details.receivedAt)) {
-    return "skipped";
+    return MailProcessResult.Skipped;
   }
 
   const pdfs = await fetchPdfAttachments(input.connection, input.messageId);
-  if (pdfs.length === 0) return "skipped";
+  if (pdfs.length === 0) return MailProcessResult.Skipped;
 
   let imported = 0;
   for (const pdf of pdfs) {
-    const result = await processPdfImport({
+    const result = await ingestStatementPdf({
       userId: input.userId,
       buffer: pdf.buffer,
       filename: pdf.filename,
       password: input.password,
       source: ImportSource.Gmail,
       gmailMessageId: input.messageId,
-      earliestDate: poolingScanWindow().from,
+      rescan: (window) =>
+        rescanAlertWindow({
+          userId: input.userId,
+          accountId: input.accountId,
+          connection: input.connection,
+          senders: input.senders,
+          from: window.from,
+          to: window.to,
+        }),
     });
-    if (result.inserted > 0) imported += 1;
+    if (result.summary) imported += 1;
   }
-  return imported > 0 ? "imported" : "skipped";
+  return imported > 0 ? MailProcessResult.Imported : MailProcessResult.Skipped;
 }
 
 async function scanQuery(input: {
@@ -429,9 +406,11 @@ async function scanQuery(input: {
         if (input.mode === PoolingScanMode.Statement) {
           const result = await processStatementMessage({
             userId: input.userId,
+            accountId: input.accountId,
             connection: input.connection,
             messageId,
             password: input.password,
+            senders: input.senders,
           });
           if (result === "imported") imported += 1;
           else skipped += 1;
@@ -931,9 +910,11 @@ export async function runPoolingPoll(
 
       const statementResult = await processStatementMessage({
         userId: account.userId,
+        accountId: account.id,
         connection: ready,
         messageId,
         password: "",
+        senders,
       }).catch(() => "skipped" as const);
 
       if (statementResult === "imported") imported += 1;

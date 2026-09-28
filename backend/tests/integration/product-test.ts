@@ -160,7 +160,6 @@ async function main() {
     attachmentHash: "hash1",
     bankAdapter: "hdfc",
     errorMessage: null,
-    passwordEncrypted: null,
   });
   const row = {
     importId: imp.id,
@@ -175,10 +174,11 @@ async function main() {
     payee: null,
     providerId: null,
     categorySlug: "cigarettes",
-    counterparty: null,
-    confidence: 0.6,
     classificationSource: "amount_band",
     fingerprint: fp,
+    mailMessageId: null,
+    origin: "mail" as const,
+    verifiedAt: null,
   };
   const first = await store.insertTransactions(registered.user.id, [row]);
   const second = await store.insertTransactions(registered.user.id, [row]);
@@ -260,10 +260,11 @@ async function main() {
       payee: null,
       providerId: null,
       categorySlug: "other",
-      counterparty: null,
-      confidence: 1,
       classificationSource: "parser",
       fingerprint: "fp-big",
+      mailMessageId: null,
+      origin: "mail" as const,
+      verifiedAt: null,
     },
   ];
   await store.insertTransactions(registered.user.id, dashboardRows);
@@ -317,10 +318,11 @@ async function main() {
       payee: null,
       providerId: null,
       categorySlug: null,
-      counterparty: null,
-      confidence: 0.5,
       classificationSource: "email_alert",
       fingerprint: "fp-tg-tea",
+      mailMessageId: null,
+      origin: "mail" as const,
+      verifiedAt: null,
     },
   ]);
   await notifyMailDebits(registered.user.id, tgInsert.ids, tgSend);

@@ -3,5 +3,5 @@ import type { BankAdapter } from "./types.js";
 
 export const bankAdapters: BankAdapter[] = [hdfcAdapter];
 
-export { runAdapters } from "./types.js";
+export { detectAdapter, runAdapters } from "./types.js";
 export type { BankAdapter, AdapterMatch } from "./types.js";

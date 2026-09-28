@@ -24,7 +24,7 @@ import type {
   ClearedUserRecords,
   TelegramPromptRow,
   TelegramPromptStatus,
-  TransactionOverrideRow,
+  NewStatementLineInput,
   TransactionRow,
   UserRow,
   UserRuleRow,
@@ -508,6 +508,9 @@ export class PostgresStore implements Store {
   findTransactionByFingerprint(u: string, fingerprint: string) {
     return this.imports.findTransactionByFingerprint(u, fingerprint);
   }
+  findTransactionByMailMessageId(u: string, mailMessageId: string) {
+    return this.imports.findTransactionByMailMessageId(u, mailMessageId);
+  }
   listTransactions(u: string, o?: ListTransactionsOptions) {
     return this.imports.listTransactions(u, o);
   }
@@ -530,8 +533,17 @@ export class PostgresStore implements Store {
   ) {
     return this.imports.reclassifyByRule(u, m, p);
   }
-  upsertOverride(i: Omit<TransactionOverrideRow, "id"> & { id?: string }) {
-    return this.imports.upsertOverride(i);
+  saveStatementLines(u: string, r: NewStatementLineInput[]) {
+    return this.imports.saveStatementLines(u, r);
+  }
+  listStatementLines(u: string, o?: { from?: string; to?: string }) {
+    return this.imports.listStatementLines(u, o);
+  }
+  setStatementLineMatches(
+    u: string,
+    m: Array<{ lineId: string; transactionId: string | null }>,
+  ) {
+    return this.imports.setStatementLineMatches(u, m);
   }
   upsertGmailConnection(i: Omit<GmailConnectionRow, "id"> & { id?: string }) {
     return this.gmail.upsertGmailConnection(i);
@@ -694,17 +706,17 @@ export class PostgresStore implements Store {
     action: string,
     meta: Record<string, unknown> = {},
   ) {
-    await this.db.insert(s.auditLogs).values({ userId, action, meta });
+    logger.info({ userId, action, ...meta }, "audit");
   }
   async clearUserRecords(userId: string): Promise<ClearedUserRecords> {
     return this.db.transaction(async (tx) => {
       await tx
         .delete(s.telegramPrompts)
         .where(eq(s.telegramPrompts.userId, userId));
-      const overrides = await tx
-        .delete(s.transactionOverrides)
-        .where(eq(s.transactionOverrides.userId, userId))
-        .returning({ id: s.transactionOverrides.id });
+      const statementLines = await tx
+        .delete(s.statementLines)
+        .where(eq(s.statementLines.userId, userId))
+        .returning({ id: s.statementLines.id });
       const transactions = await tx
         .delete(s.transactions)
         .where(eq(s.transactions.userId, userId))
@@ -734,7 +746,7 @@ export class PostgresStore implements Store {
         imports: imports.length,
         mailMessages: mailMessages.length,
         poolingRuns: poolingRuns.length,
-        overrides: overrides.length,
+        statementLines: statementLines.length,
       };
     });
   }
@@ -743,9 +755,7 @@ export class PostgresStore implements Store {
       await tx
         .delete(s.telegramPrompts)
         .where(eq(s.telegramPrompts.userId, userId));
-      await tx
-        .delete(s.transactionOverrides)
-        .where(eq(s.transactionOverrides.userId, userId));
+      await tx.delete(s.statementLines).where(eq(s.statementLines.userId, userId));
       await tx.delete(s.transactions).where(eq(s.transactions.userId, userId));
       await tx.delete(s.imports).where(eq(s.imports.userId, userId));
       await tx.delete(s.userRules).where(eq(s.userRules.userId, userId));

@@ -29,20 +29,11 @@ export function classifyTransaction(
 ): ClassifiedFields {
   const providerMatch = detectFromProviders(tx, context.providers);
   if (providerMatch.providerId || providerMatch.merchant) {
-    const counterparty =
-      defaults.counterparty ??
-      defaults.payee ??
-      tx.payee ??
-      providerMatch.merchant ??
-      tx.upiId ??
-      null;
     return {
       merchant: providerMatch.merchant ?? defaults.merchant ?? tx.merchant ?? null,
       payee: defaults.payee ?? tx.payee ?? null,
       providerId: providerMatch.providerId ?? defaults.providerId ?? null,
       categorySlug: providerMatch.categorySlug ?? defaults.categorySlug ?? CategorySlug.Other,
-      counterparty,
-      confidence: defaults.confidence ?? 0.8,
       classificationSource: ClassificationSource.ProviderRegistry,
     };
   }
@@ -56,8 +47,6 @@ export function classifyTransaction(
       payee: defaults.payee ?? tx.payee ?? null,
       providerId: defaults.providerId ?? null,
       categorySlug: defaults.categorySlug ?? null,
-      counterparty: defaults.counterparty ?? null,
-      confidence: defaults.confidence ?? 0.5,
       classificationSource: defaults.classificationSource ?? ClassificationSource.Parser,
     },
     context.categories,

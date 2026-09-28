@@ -7,14 +7,15 @@ import type {
   ImportRow,
   ListTransactionsOptions,
   MailMessageRow,
+  NewStatementLineInput,
   NewTransactionInput,
   PoolingRunRow,
   PoolingRunStatus,
   ProviderRow,
+  StatementLineRow,
   Store,
   ClearedUserRecords,
   TelegramPromptRow,
-  TransactionOverrideRow,
   TransactionRow,
   UserRow,
   UserRuleRow,
@@ -22,6 +23,12 @@ import type {
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function definedOnly<T extends object>(patch: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(patch).filter(([, value]) => value !== undefined),
+  ) as Partial<T>;
 }
 
 export class MemoryStore implements Store {
@@ -34,7 +41,7 @@ export class MemoryStore implements Store {
   accounts: AccountRow[] = [];
   imports: ImportRow[] = [];
   transactions: TransactionRow[] = [];
-  overrides: TransactionOverrideRow[] = [];
+  statementLines: StatementLineRow[] = [];
   gmail: GmailConnectionRow[] = [];
   mailMessages: MailMessageRow[] = [];
   poolingRuns: PoolingRunRow[] = [];
@@ -390,7 +397,13 @@ export class MemoryStore implements Store {
     let skipped = 0;
     const ids: string[] = [];
     for (const row of rows) {
-      if (this.transactions.some((t) => t.userId === userId && t.fingerprint === row.fingerprint)) {
+      const duplicate = this.transactions.some(
+        (t) =>
+          t.userId === userId &&
+          (t.fingerprint === row.fingerprint ||
+            (row.mailMessageId != null && t.mailMessageId === row.mailMessageId)),
+      );
+      if (duplicate) {
         skipped += 1;
         continue;
       }
@@ -413,6 +426,17 @@ export class MemoryStore implements Store {
     return (
       this.transactions.find(
         (tx) => tx.userId === userId && tx.fingerprint === fingerprint,
+      ) ?? null
+    );
+  }
+
+  async findTransactionByMailMessageId(
+    userId: string,
+    mailMessageId: string,
+  ): Promise<TransactionRow | null> {
+    return (
+      this.transactions.find(
+        (tx) => tx.userId === userId && tx.mailMessageId === mailMessageId,
       ) ?? null
     );
   }
@@ -450,7 +474,7 @@ export class MemoryStore implements Store {
   ): Promise<TransactionRow | null> {
     const row = await this.getTransaction(userId, id);
     if (!row) return null;
-    Object.assign(row, patch);
+    Object.assign(row, definedOnly(patch));
     return row;
   }
 
@@ -464,7 +488,7 @@ export class MemoryStore implements Store {
     let updated = 0;
     for (const row of this.transactions) {
       if (row.userId !== userId || !wanted.has(row.id)) continue;
-      Object.assign(row, patch);
+      Object.assign(row, definedOnly(patch));
       updated += 1;
     }
     return updated;
@@ -476,7 +500,9 @@ export class MemoryStore implements Store {
     );
     if (index < 0) return false;
     this.transactions.splice(index, 1);
-    this.overrides = this.overrides.filter((row) => row.transactionId !== id);
+    for (const line of this.statementLines) {
+      if (line.matchedTransactionId === id) line.matchedTransactionId = null;
+    }
     this.telegramPrompts = this.telegramPrompts.filter(
       (row) => row.transactionId !== id,
     );
@@ -492,28 +518,52 @@ export class MemoryStore implements Store {
     for (const tx of this.transactions) {
       if (tx.userId !== userId) continue;
       if (!matcher(tx)) continue;
-      Object.assign(tx, patch);
+      Object.assign(tx, definedOnly(patch));
       count += 1;
     }
     return count;
   }
 
-  async upsertOverride(
-    input: Omit<TransactionOverrideRow, "id"> & { id?: string },
-  ): Promise<TransactionOverrideRow> {
-    const existing = this.overrides.find(
-      (o) => o.transactionId === input.transactionId,
-    );
-    if (existing) {
-      Object.assign(existing, input, { id: existing.id });
-      return existing;
+  async saveStatementLines(
+    userId: string,
+    rows: NewStatementLineInput[],
+  ): Promise<StatementLineRow[]> {
+    const stored: StatementLineRow[] = [];
+    for (const row of rows) {
+      let line = this.statementLines.find(
+        (l) => l.userId === userId && l.fingerprint === row.fingerprint,
+      );
+      if (!line) {
+        line = { ...row, id: randomUUID(), userId, matchedTransactionId: null };
+        this.statementLines.push(line);
+      }
+      if (!stored.includes(line)) stored.push(line);
     }
-    const row: TransactionOverrideRow = {
-      ...input,
-      id: input.id ?? randomUUID(),
-    };
-    this.overrides.push(row);
-    return row;
+    return stored.sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  async listStatementLines(
+    userId: string,
+    options?: { from?: string; to?: string },
+  ): Promise<StatementLineRow[]> {
+    return this.statementLines
+      .filter((l) => {
+        if (l.userId !== userId) return false;
+        if (options?.from && l.date < options.from) return false;
+        if (options?.to && l.date > options.to) return false;
+        return true;
+      })
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  async setStatementLineMatches(
+    userId: string,
+    matches: Array<{ lineId: string; transactionId: string | null }>,
+  ): Promise<void> {
+    for (const match of matches) {
+      const line = this.statementLines.find((l) => l.id === match.lineId && l.userId === userId);
+      if (line) line.matchedTransactionId = match.transactionId;
+    }
   }
 
   async upsertGmailConnection(
@@ -786,11 +836,11 @@ export class MemoryStore implements Store {
       imports: this.imports.length,
       mailMessages: this.mailMessages.length,
       poolingRuns: this.poolingRuns.length,
-      overrides: this.overrides.length,
+      statementLines: this.statementLines.length,
     };
     this.transactions = this.transactions.filter((t) => t.userId !== userId);
     this.imports = this.imports.filter((i) => i.userId !== userId);
-    this.overrides = this.overrides.filter((o) => o.userId !== userId);
+    this.statementLines = this.statementLines.filter((l) => l.userId !== userId);
     this.mailMessages = this.mailMessages.filter((m) => m.userId !== userId);
     this.poolingRuns = this.poolingRuns.filter((r) => r.userId !== userId);
     this.telegramPrompts = this.telegramPrompts.filter((p) => p.userId !== userId);
@@ -808,7 +858,7 @@ export class MemoryStore implements Store {
       imports: before.imports - this.imports.length,
       mailMessages: before.mailMessages - this.mailMessages.length,
       poolingRuns: before.poolingRuns - this.poolingRuns.length,
-      overrides: before.overrides - this.overrides.length,
+      statementLines: before.statementLines - this.statementLines.length,
     };
   }
 
@@ -816,7 +866,7 @@ export class MemoryStore implements Store {
     this.transactions = this.transactions.filter((t) => t.userId !== userId);
     this.imports = this.imports.filter((i) => i.userId !== userId);
     this.rules = this.rules.filter((r) => r.userId !== userId);
-    this.overrides = this.overrides.filter((o) => o.userId !== userId);
+    this.statementLines = this.statementLines.filter((l) => l.userId !== userId);
     this.accounts = this.accounts.filter((a) => a.userId !== userId);
     this.providers = this.providers.filter((p) => p.userId !== userId);
     this.categories = this.categories.filter((c) => c.userId !== userId);

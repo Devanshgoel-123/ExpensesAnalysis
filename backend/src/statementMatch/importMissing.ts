@@ -18,6 +18,7 @@ export async function importMissingLines(
   const existing = await store.listTransactions(userId);
   const fresh = lines.filter((line) => !samePaymentRecorded(existing, line));
   const alreadyThere = lines.length - fresh.length;
+  const now = new Date().toISOString();
 
   const rows = fresh.map((line) => {
     const requested = line.categorySlug?.trim() || null;
@@ -36,8 +37,6 @@ export async function importMissingLines(
       payee: null,
       providerId: null,
       categorySlug,
-      counterparty: party.name,
-      confidence: categorySlug ? 1 : 0.4,
       classificationSource: categorySlug
         ? ClassificationSource.UserOverride
         : ClassificationSource.Parser,
@@ -48,6 +47,9 @@ export async function importMissingLines(
         description: line.description,
         upiId: line.upiId,
       }),
+      mailMessageId: null,
+      origin: "statement" as const,
+      verifiedAt: now,
     };
   });
 

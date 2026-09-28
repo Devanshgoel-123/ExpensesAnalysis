@@ -200,15 +200,13 @@ export async function enablePoolingForUser(
       "Connect Gmail first so pooling can read bank statement emails.",
     );
   }
-  const month = body.month;
   const account = await resolveAccountForPooling(userId, body.accountId);
   const updated = await store.setPoolingEnabled(userId, account.id, true);
   const ready = await ensureHistoryId(connection);
-  if (!month && nextScanWindow(ready.lastScannedOn).covered) {
-    throw AppError.badRequest(
-      `Already scanned through ${ready.lastScannedOn}. Clear imported data to scan that range again.`,
-    );
-  }
+  // The window is already covered: re-check this month. Mail ingest is idempotent.
+  const month =
+    body.month ??
+    (nextScanWindow(ready.lastScannedOn).covered ? poolingScanWindow().to.slice(0, 7) : undefined);
   gmailLog.enabled(userId, month ?? "from-cutoff");
   const runId = await beginPoolingSync(
     {

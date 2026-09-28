@@ -7,7 +7,41 @@ export type AlertParseResult = {
   description: string;
   /** YYYY-MM-DD when parsed from the alert body; null if not found. */
   date: string | null;
+  /** The id right after "VPA", e.g. `9528826270-2@ibl`. */
+  upiId: string | null;
+  /** The name HDFC prints after the VPA, e.g. `(Mohit Meena)`. */
+  partyName: string | null;
 };
+
+const VPA_RE =
+  /\bVPA:?\s+([A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z][A-Za-z0-9.]*[A-Za-z0-9])(?:\s*\(([^)]{1,80})\)|\s+([A-Za-z][A-Za-z .&'-]{1,60}?)(?=\s+on\s+\d))?/i;
+const SENDER_RE = /\bSender:\s*([A-Za-z][A-Za-z .&'-]{1,60}?)\s*\(\s*VPA/i;
+
+/**
+ * Debit: `VPA 9528826270-2@ibl (Mohit Meena)`. Credit: `Sender: ARYAN (VPA: aryan@okicici)`.
+ * Returns the id and name exactly as printed.
+ */
+export function parseAlertVpa(text: string): { upiId: string | null; partyName: string | null } {
+  const match = text.match(VPA_RE);
+  if (!match) return { upiId: null, partyName: null };
+  const name = (match[2] ?? match[3] ?? text.match(SENDER_RE)?.[1] ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return { upiId: match[1]!.toLowerCase(), partyName: name || null };
+}
+
+function alertDescription(
+  subject: string,
+  text: string,
+  type: TxType | null,
+  vpa: { upiId: string | null; partyName: string | null },
+): string {
+  if (vpa.upiId) {
+    const verb = type === TxType.Credit ? "Received from" : "Paid to";
+    return `${verb} VPA ${vpa.upiId}${vpa.partyName ? ` (${vpa.partyName})` : ""}`;
+  }
+  return subject.trim() || text.slice(0, 120);
+}
 
 function parseInrAmount(raw: string): number | null {
   const cleaned = raw.replace(/,/g, "").trim();
@@ -145,8 +179,17 @@ export function parseBankAlertEmail(
   body: string,
 ): AlertParseResult {
   const text = `${subject}\n${body}`.replace(/\s+/g, " ").trim();
-  const description = subject.trim() || text.slice(0, 120);
   const date = parseAlertTransactionDate(text);
+  const vpa = parseAlertVpa(text);
+  const result = (amount: number | null, type: TxType | null): AlertParseResult => ({
+    amount,
+    type,
+    currency: DEFAULT_CURRENCY,
+    description: alertDescription(subject, text, type, vpa),
+    date,
+    upiId: vpa.upiId,
+    partyName: vpa.partyName,
+  });
   const creditish = textLooksLikeCredit(text) && !textLooksLikeDebit(text);
 
   if (creditish) {
@@ -154,35 +197,23 @@ export function parseBankAlertEmail(
     const amount =
       firstAmountBeside(text, CREDIT_WORDS) ??
       (rupee?.[1] ? parseInrAmount(rupee[1]) : null);
-    if (amount != null && amount > 0) {
-      return { amount, type: TxType.Credit, currency: DEFAULT_CURRENCY, description, date };
-    }
+    if (amount != null && amount > 0) return result(amount, TxType.Credit);
   }
 
   const debitAmount = firstAmountBeside(text, DEBIT_WORDS);
-  if (debitAmount != null) {
-    return { amount: debitAmount, type: TxType.Debit, currency: DEFAULT_CURRENCY, description, date };
-  }
+  if (debitAmount != null) return result(debitAmount, TxType.Debit);
 
   const creditAmount = firstAmountBeside(text, CREDIT_WORDS);
-  if (creditAmount != null) {
-    return { amount: creditAmount, type: TxType.Credit, currency: DEFAULT_CURRENCY, description, date };
-  }
+  if (creditAmount != null) return result(creditAmount, TxType.Credit);
 
   // HDFC UPI subjects rarely include the amount; body/snippet often only has ₹184.
   if (/upi\s*txn/i.test(text)) {
     const rupee = text.match(RUPEE_AMOUNT);
     const amount = rupee?.[1] ? parseInrAmount(rupee[1]) : null;
     if (amount != null && amount > 0) {
-      return {
-        amount,
-        type: creditish ? TxType.Credit : TxType.Debit,
-        currency: DEFAULT_CURRENCY,
-        description,
-        date,
-      };
+      return result(amount, creditish ? TxType.Credit : TxType.Debit);
     }
   }
 
-  return { amount: null, type: null, currency: DEFAULT_CURRENCY, description, date };
+  return result(null, null);
 }

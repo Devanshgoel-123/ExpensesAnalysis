@@ -74,12 +74,14 @@ function resolveSpendIdentity(
   const merchant = storedIsBank
     ? (detected.merchant ?? party.name ?? "Other")
     : (row.merchant ?? detected.merchant ?? party.name ?? "Other");
-  if (isManualClassification(row.classificationSource) && row.categorySlug) {
+  if (isManualClassification(row.classificationSource)) {
+    // The user's choice stands, including a cleared category; never re-detect over it.
     const chosen = row.providerId
       ? providers.find((item) => item.id === row.providerId) ?? null
       : null;
+    const keepStoredMerchant = !storedIsBank || row.categorySlug === "banks";
     return {
-      merchant,
+      merchant: keepStoredMerchant ? (row.merchant ?? merchant) : merchant,
       upiId: row.upiId ?? party.upiId,
       categorySlug: row.categorySlug,
       providerId: row.providerId,
@@ -128,6 +130,22 @@ function isBankRailTransfer(
   );
 }
 
+const REFUND_RE = /\b(refund|reversal|reversed|cashback|chargeback)\b/i;
+
+/** Money back from a purchase: refund wording, or a credit from a merchant app. Salary and transfers are not refunds. */
+export function isRefund(
+  row: Pick<TransactionRow, "type" | "description">,
+  identity: Pick<SpendIdentity, "providerId">,
+  providers: ProviderRow[],
+): boolean {
+  if (row.type !== "credit") return false;
+  if (REFUND_RE.test(row.description)) return true;
+  const provider = identity.providerId
+    ? providers.find((item) => item.id === identity.providerId) ?? null
+    : null;
+  return Boolean(provider && provider.categorySlug && !isAccountBank(provider));
+}
+
 function rowToApiTransaction(
   row: TransactionRow,
   providers: ProviderRow[],
@@ -144,6 +162,9 @@ function rowToApiTransaction(
   const category =
     categories.find((c) => c.slug === identity.categorySlug) ?? null;
   return {
+    isRefund: isRefund(row, identity, providers),
+    origin: row.origin,
+    verified: row.verifiedAt != null,
     id: row.id,
     date: row.date,
     time: row.time,
@@ -173,13 +194,7 @@ function buildAmountBand(
   let bandTotal = 0;
 
   for (const t of debits) {
-    const inBand =
-      t.categorySlug === config.slug ||
-      (t.amount >= config.min &&
-        t.amount <= config.max &&
-        !t.merchant &&
-        !t.payee);
-    if (!inBand) continue;
+    if (t.categorySlug !== config.slug) continue;
     bandCount += 1;
     bandTotal += t.amount;
     bandDayCounts[t.date] = (bandDayCounts[t.date] ?? 0) + 1;
@@ -205,13 +220,18 @@ export function buildAnalyticsFromRows(
 ): ParseResult {
   const debits = rows.filter((t) => t.type === "debit");
   const credits = rows.filter((t) => t.type === "credit");
+  const identities = new Map(rows.map((row) => [row.id, resolveSpendIdentity(row, providers)]));
+  const identityOf = (row: TransactionRow) => identities.get(row.id)!;
+  const refunds = credits.filter((row) => isRefund(row, identityOf(row), providers));
 
-  const debitByDay = new Map<string, number>();
-  for (const t of rows) {
-    if (t.type !== "debit") continue;
-    debitByDay.set(t.date, (debitByDay.get(t.date) ?? 0) + Math.abs(t.amount));
+  const spendByDay = new Map<string, number>();
+  for (const t of debits) {
+    spendByDay.set(t.date, (spendByDay.get(t.date) ?? 0) + Math.abs(t.amount));
   }
-  const daily: DailySpend[] = [...debitByDay.entries()]
+  for (const t of refunds) {
+    spendByDay.set(t.date, (spendByDay.get(t.date) ?? 0) - Math.abs(t.amount));
+  }
+  const daily: DailySpend[] = [...spendByDay.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, amount]) => ({ date, amount: round2(amount) }))
     .filter((day) => day.amount > 0);
@@ -219,7 +239,7 @@ export function buildAnalyticsFromRows(
   const upiMap = new Map<string, UpiRanking>();
   for (const t of rows) {
     if (t.type !== "debit" && t.type !== "credit") continue;
-    const identity = resolveSpendIdentity(t, providers);
+    const identity = identityOf(t);
     if (!identity.upiId) continue;
     const existing = upiMap.get(identity.upiId);
     if (!existing) {
@@ -239,45 +259,40 @@ export function buildAnalyticsFromRows(
     .filter((row) => row.total > 0)
     .sort((a, b) => b.total - a.total);
 
+  // One bucket per merchant and category: a Swiggy payment moved to Outing counts under Outing, not Food.
+  const bucketKey = (merchant: string, categorySlug: string | null) =>
+    `${merchant}\u0000${categorySlug ?? ""}`;
+  const logoByMerchant = new Map(
+    providers
+      .filter((p) => p.logoUrl)
+      .map((p) => [p.canonicalName, { logoUrl: p.logoUrl, providerId: p.id }]),
+  );
   const merchantMap = new Map<
     string,
     MerchantSpend & { logoUrl: string | null; providerId: string | null }
   >();
-  for (const provider of providers.filter(
-    (p) => p.categorySlug && p.categorySlug !== "cigarettes",
-  )) {
-    merchantMap.set(provider.canonicalName, {
-      merchant: provider.canonicalName,
-      total: 0,
-      count: 0,
-      lastDate: "",
-      categorySlug: provider.categorySlug,
-      logoUrl: provider.logoUrl,
-      providerId: provider.id,
-    });
-  }
+  const refundIds = new Set(refunds.map((row) => row.id));
   for (const t of rows) {
-    if (t.type !== "debit" && t.type !== "credit") continue;
-    const identity = resolveSpendIdentity(t, providers);
+    if (t.type !== "debit" && !refundIds.has(t.id)) continue;
+    const identity = identityOf(t);
     if (isBankRailTransfer(t, providers, identity)) continue;
-    let bucket = merchantMap.get(identity.merchant);
+    const key = bucketKey(identity.merchant, identity.categorySlug);
+    let bucket = merchantMap.get(key);
     if (!bucket) {
+      const known = logoByMerchant.get(identity.merchant);
       bucket = {
         merchant: identity.merchant,
         total: 0,
         count: 0,
         lastDate: "",
         categorySlug: identity.categorySlug,
-        logoUrl: identity.logoUrl,
-        providerId: identity.providerId,
+        logoUrl: identity.logoUrl ?? known?.logoUrl ?? null,
+        providerId: identity.providerId ?? known?.providerId ?? null,
       };
-      merchantMap.set(identity.merchant, bucket);
+      merchantMap.set(key, bucket);
     }
     bucket.total = round2(bucket.total + signedAmount(t));
     if (t.type === "debit") bucket.count += 1;
-    if (!bucket.categorySlug && identity.categorySlug) {
-      bucket.categorySlug = identity.categorySlug;
-    }
     if (!bucket.logoUrl && identity.logoUrl) bucket.logoUrl = identity.logoUrl;
     if (!bucket.lastDate || t.date > bucket.lastDate) bucket.lastDate = t.date;
   }
@@ -330,7 +345,8 @@ export function buildAnalyticsFromRows(
 
   const grossSpent = round2(debits.reduce((sum, t) => sum + t.amount, 0));
   const totalReceived = round2(credits.reduce((sum, t) => sum + t.amount, 0));
-  const totalSpent = grossSpent;
+  const totalRefunded = round2(refunds.reduce((sum, t) => sum + t.amount, 0));
+  const totalSpent = round2(grossSpent - totalRefunded);
   const days = daily.length || 1;
 
   const summary: Summary = {

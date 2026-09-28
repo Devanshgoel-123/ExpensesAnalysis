@@ -15,6 +15,12 @@ export interface Transaction {
   providerId?: string | null;
   category?: string | null;
   logoUrl?: string | null;
+  /** Credit that gives back money spent (refund, reversal, merchant credit). */
+  isRefund?: boolean;
+  /** `mail` alert row, or `statement` gap filled from a balance-checked line. */
+  origin?: "mail" | "statement";
+  /** A statement line confirmed amount and direction. */
+  verified?: boolean;
 }
 
 export interface MerchantSpend {

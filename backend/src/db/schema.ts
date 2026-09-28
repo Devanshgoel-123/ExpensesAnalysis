@@ -5,7 +5,6 @@ import {
   jsonb,
   numeric,
   pgTable,
-  real,
   text,
   timestamp,
   unique,
@@ -154,7 +153,6 @@ export const imports = pgTable(
     attachmentHash: text("attachment_hash"),
     bankAdapter: text("bank_adapter"),
     errorMessage: text("error_message"),
-    passwordEncrypted: text("password_encrypted"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -188,15 +186,21 @@ export const transactions = pgTable(
       onDelete: "set null",
     }),
     categorySlug: text("category_slug"),
-    counterparty: text("counterparty"),
-    confidence: real("confidence").notNull().default(1),
     classificationSource: text("classification_source").notNull().default("parser"),
     fingerprint: text("fingerprint").notNull(),
+    /** Gmail id of the alert that created the row; one row per alert. */
+    mailMessageId: text("mail_message_id"),
+    /** `mail` (alert) or `statement` (gap filled from a balance-checked statement line). */
+    origin: text("origin").notNull().default("mail"),
+    /** Set when a statement line confirmed amount and direction. */
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     unique("transactions_user_fingerprint").on(t.userId, t.fingerprint),
+    uniqueIndex("transactions_user_mail_idx").on(t.userId, t.mailMessageId),
     index("transactions_user_date_idx").on(t.userId, t.date),
+    index("transactions_user_match_idx").on(t.userId, t.date, t.amount, t.type),
     index("transactions_user_category_idx").on(t.userId, t.categorySlug),
     index("transactions_user_upi_idx").on(t.userId, t.upiId),
     index("transactions_user_provider_idx").on(t.userId, t.providerId),
@@ -204,28 +208,32 @@ export const transactions = pgTable(
   ],
 );
 
-export const transactionOverrides = pgTable(
-  "transaction_overrides",
+/** Parsed statement rows — evidence only; the ledger stays in `transactions`. */
+export const statementLines = pgTable(
+  "statement_lines",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    transactionId: uuid("transaction_id")
-      .notNull()
-      .references(() => transactions.id, { onDelete: "cascade" }),
-    payee: text("payee"),
-    merchant: text("merchant"),
-    categorySlug: text("category_slug"),
-    providerId: uuid("provider_id").references(() => providers.id, {
+    importId: uuid("import_id").references(() => imports.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    amount: numeric("amount").notNull(),
+    type: text("type").notNull(),
+    narration: text("narration").notNull(),
+    upiId: text("upi_id"),
+    closingBalance: numeric("closing_balance"),
+    balanceOk: boolean("balance_ok").notNull().default(false),
+    fingerprint: text("fingerprint").notNull(),
+    matchedTransactionId: uuid("matched_transaction_id").references(() => transactions.id, {
       onDelete: "set null",
     }),
-    applyFuture: boolean("apply_future").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    unique("transaction_overrides_tx").on(t.transactionId),
-    index("transaction_overrides_user_idx").on(t.userId),
+    unique("statement_lines_user_fp").on(t.userId, t.fingerprint),
+    index("statement_lines_user_date_idx").on(t.userId, t.date),
+    index("statement_lines_import_idx").on(t.importId),
   ],
 );
 
@@ -322,21 +330,6 @@ export const telegramPrompts = pgTable(
   (t) => [
     unique("telegram_prompts_txn_uidx").on(t.transactionId),
     index("telegram_prompts_chat_pending_idx").on(t.chatId, t.status, t.createdAt),
-  ],
-);
-
-export const auditLogs = pgTable(
-  "audit_logs",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
-    action: text("action").notNull(),
-    meta: jsonb("meta").$type<Record<string, unknown>>().notNull().default({}),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    index("audit_logs_user_created_idx").on(t.userId, t.createdAt),
-    index("audit_logs_action_idx").on(t.action),
   ],
 );
 

@@ -90,10 +90,11 @@ describe("telegram category flow", () => {
         payee: null,
         providerId: null,
         categorySlug: null,
-        counterparty: null,
-        confidence: 0.4,
         classificationSource: "email_alert",
         fingerprint: "fp-tg-184",
+        mailMessageId: null,
+        origin: "mail" as const,
+        verifiedAt: null,
       },
     ]);
     assert.equal(inserted.ids.length, 1);

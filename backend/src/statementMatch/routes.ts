@@ -11,6 +11,8 @@ import { parsePasswordBodySchema } from "../validators/imports.js";
 import { z } from "zod";
 import { poolingScanWindow, toIstCalendarDate } from "../helpers/index.js";
 import { applyUpiBatch, getMatchJob, startMatchJob } from "./applyBatch.js";
+import { importMissingLines } from "./importMissing.js";
+import { statementMonthChecks } from "./reconcile.js";
 import { linkStatementParties } from "./linkStatementParties.js";
 import {
   findStatementGaps,
@@ -142,6 +144,13 @@ statementMatchRouter.post(
     });
   },
 );
+
+statementMatchRouter.get("/status", async (req, res) => {
+  res.json({
+    window: poolingScanWindow(),
+    months: await statementMonthChecks(req.user!.id),
+  });
+});
 
 statementMatchRouter.post(
   "/import-missing",

@@ -163,17 +163,23 @@ export function mergeFamilyPeople(
   return [...map.values()].sort((a, b) => b.total - a.total);
 }
 
+/** Spend is money out minus refunds. Salary and other credits stay on Received. */
+export function spendAmount(txn: Pick<Transaction, "type" | "amount" | "isRefund">): number {
+  if (txn.type === TxType.Debit) return Math.abs(txn.amount);
+  if (txn.type === TxType.Credit && txn.isRefund) return -Math.abs(txn.amount);
+  return 0;
+}
+
 export function aggregateMonthlySpend(
   transactions: Transaction[],
 ): MonthlySpendRow[] {
   const totals = new Map<string, number>();
   for (const txn of transactions) {
-    if (txn.type !== TxType.Debit && txn.type !== TxType.Credit) continue;
+    const signed = spendAmount(txn);
+    if (signed === 0) continue;
     const key = monthKey(txn.date);
     if (!ISO_MONTH_RE.test(key)) continue;
-    if (txn.type !== TxType.Debit) continue;
-    const amount = Math.abs(txn.amount);
-    totals.set(key, (totals.get(key) ?? 0) + amount);
+    totals.set(key, (totals.get(key) ?? 0) + signed);
   }
   return [...totals.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
@@ -188,13 +194,13 @@ function roundMoney(amount: number): number {
   return Math.round(amount * 100) / 100;
 }
 
-/** Each day is the money that left the account. Credits stay on Received. */
+/** Each day is the money that left the account, less refunds. Other credits stay on Received. */
 export function debitDailySpend(transactions: Transaction[]): DailySpend[] {
   const debits = new Map<string, number>();
   for (const txn of transactions) {
-    if (txn.type !== TxType.Debit) continue;
-    const amount = Math.abs(txn.amount);
-    debits.set(txn.date, (debits.get(txn.date) ?? 0) + amount);
+    const signed = spendAmount(txn);
+    if (signed === 0) continue;
+    debits.set(txn.date, (debits.get(txn.date) ?? 0) + signed);
   }
   return [...debits.entries()]
     .filter(([date]) => toIsoDate(date) != null)

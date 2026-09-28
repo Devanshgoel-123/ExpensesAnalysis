@@ -7,6 +7,9 @@ export const IST_TIME_ZONE = "Asia/Kolkata";
  */
 export const POOLING_LOOKBACK_MONTHS = 6;
 
+/** Nothing before this date is scanned, matched, or kept. */
+export const POOLING_EARLIEST_DATE = "2026-07-01";
+
 /** Log progress every N messages scanned. */
 export const POOLING_PROGRESS_EVERY = 50;
 

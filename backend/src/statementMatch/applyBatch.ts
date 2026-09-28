@@ -159,7 +159,6 @@ export async function applyUpiBatch(
         ...(provider.categorySlug ? { categorySlug: provider.categorySlug } : {}),
         upiId: trimmed,
         classificationSource: ClassificationSource.UserOverride,
-        confidence: 1,
       });
       for (const row of ledger) {
         if (!ids.includes(row.id)) continue;

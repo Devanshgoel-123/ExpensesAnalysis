@@ -16,6 +16,10 @@ export interface Transaction {
   category?: string | null;
   categoryLabel?: string | null;
   logoUrl?: string | null;
+  /** Credit that gives back money spent (refund, reversal, merchant credit). */
+  isRefund?: boolean;
+  origin?: "mail" | "statement";
+  verified?: boolean;
 }
 
 export interface CategorySummary {

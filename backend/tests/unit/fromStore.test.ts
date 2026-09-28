@@ -18,15 +18,16 @@ const baseRow = (patch: Partial<TransactionRow>): TransactionRow => ({
   payee: null,
   providerId: null,
   categorySlug: "food",
-  counterparty: null,
-  confidence: 1,
   classificationSource: "parser",
   fingerprint: "fp-1",
+  mailMessageId: null,
+  origin: "mail",
+  verifiedAt: null,
   ...patch,
 });
 
 describe("buildAnalyticsFromRows spend", () => {
-  it("counts spend as money out and keeps credits on received", () => {
+  it("counts spend as money out less refunds and keeps other credits on received", () => {
     const rows = [
       baseRow({ id: "1", date: "2026-09-01", amount: 1000, fingerprint: "a" }),
       baseRow({
@@ -47,11 +48,143 @@ describe("buildAnalyticsFromRows spend", () => {
       }),
     ];
     const result = buildAnalyticsFromRows(rows, [], [], []);
-    assert.equal(result.summary.totalSpent, 1000);
+    assert.equal(result.summary.totalSpent, 600);
     assert.equal(result.summary.totalReceived, 650);
     assert.equal(result.summary.net, -350);
-    assert.equal(result.summary.avgDailySpend, 1000);
     assert.deepEqual(result.daily, [{ date: "2026-09-01", amount: 1000 }]);
+    assert.equal(result.transactions.find((t) => t.id === "3")?.isRefund, true);
+    assert.equal(result.transactions.find((t) => t.id === "2")?.isRefund, false);
+  });
+
+  it("does not subtract salary from spend", () => {
+    const result = buildAnalyticsFromRows(
+      [
+        baseRow({ id: "1", amount: 5000, fingerprint: "a" }),
+        baseRow({
+          id: "2",
+          amount: 80000,
+          type: "credit",
+          merchant: null,
+          categorySlug: null,
+          upiId: null,
+          description: "NEFT CR-ACME PAYROLL SEP",
+          fingerprint: "b",
+        }),
+      ],
+      [],
+      [],
+      [],
+    );
+    assert.equal(result.summary.totalSpent, 5000);
+  });
+
+  it("nets only refunds out of merchant buckets", () => {
+    const result = buildAnalyticsFromRows(
+      [
+        baseRow({ id: "1", amount: 1000, fingerprint: "a" }),
+        baseRow({ id: "2", amount: 300, type: "credit", description: "UPI-CR", fingerprint: "b" }),
+        baseRow({ id: "3", amount: 100, type: "credit", description: "refund", fingerprint: "c" }),
+      ],
+      [],
+      [],
+      [],
+    );
+    const swiggy = result.merchantSpend.find((m) => m.merchant === "Swiggy");
+    assert.equal(swiggy?.total, 900);
+    assert.equal(result.summary.totalSpent, 900);
+  });
+
+  it("keeps a user override category, even when cleared, across rebuilds", () => {
+    const swiggy = {
+      id: "swiggy",
+      userId: null,
+      canonicalName: "Swiggy",
+      aliases: ["SWIGGY"],
+      upiHandles: ["swiggy"],
+      senderDomains: [],
+      websiteDomain: null,
+      logoUrl: null,
+      categorySlug: "food",
+      isGlobal: true,
+    };
+    const rows = [
+      baseRow({ id: "moved", amount: 700, categorySlug: "outing", providerId: "swiggy", classificationSource: "user_override", fingerprint: "a" }),
+      baseRow({ id: "cleared", amount: 300, categorySlug: null, providerId: null, classificationSource: "user_override", fingerprint: "b" }),
+      baseRow({ id: "auto", amount: 200, providerId: "swiggy", fingerprint: "c" }),
+    ];
+    for (let pass = 0; pass < 2; pass++) {
+      const result = buildAnalyticsFromRows(rows, [swiggy], [], []);
+      const byId = new Map(result.transactions.map((t) => [t.id, t]));
+      assert.equal(byId.get("moved")?.category, "outing");
+      assert.equal(byId.get("cleared")?.category, null);
+      assert.equal(byId.get("auto")?.category, "food");
+      const food = result.merchantSpend.find((m) => m.merchant === "Swiggy" && m.categorySlug === "food");
+      const outing = result.merchantSpend.find((m) => m.merchant === "Swiggy" && m.categorySlug === "outing");
+      assert.equal(food?.total, 200);
+      assert.equal(outing?.total, 700);
+    }
+  });
+
+  it("counts only cigarettes-category debits in the smokes band", () => {
+    const categories = [
+      {
+        id: "c",
+        userId: null,
+        slug: "cigarettes",
+        label: "Cigarettes",
+        blurb: "",
+        accent: "#000",
+        sortOrder: 1,
+        meta: { amountBandMin: 25, amountBandMax: 60, amountBandLabel: "Smokes" },
+        isGlobal: true,
+      },
+    ];
+    const result = buildAnalyticsFromRows(
+      [
+        baseRow({ id: "1", amount: 40, categorySlug: "cigarettes", merchant: null, upiId: null, fingerprint: "a" }),
+        baseRow({ id: "2", amount: 45, categorySlug: "food", merchant: null, upiId: null, fingerprint: "b" }),
+        baseRow({ id: "3", amount: 50, categorySlug: null, merchant: null, payee: null, upiId: null, fingerprint: "c" }),
+      ],
+      [],
+      [],
+      categories,
+    );
+    assert.equal(result.amountBand25to60.count, 1);
+    assert.equal(result.amountBand25to60.total, 40);
+  });
+
+  it("keeps a user-chosen category but hides a stale bank merchant", () => {
+    const hdfc = {
+      id: "bank",
+      userId: null,
+      canonicalName: "HDFC Bank",
+      aliases: ["HDFC"],
+      upiHandles: [],
+      senderDomains: [],
+      websiteDomain: null,
+      logoUrl: null,
+      categorySlug: null,
+      isGlobal: true,
+    };
+    const result = buildAnalyticsFromRows(
+      [
+        baseRow({
+          id: "rent",
+          amount: 55000,
+          merchant: "HDFC Bank",
+          categorySlug: "rent",
+          upiId: null,
+          classificationSource: "user_override",
+          description: "You have done a UPI txn. Check details!",
+        }),
+      ],
+      [hdfc],
+      [],
+      [],
+    );
+    const txn = result.transactions[0];
+    assert.equal(txn.category, "rent");
+    assert.notEqual(txn.merchant, "HDFC Bank");
   });
 
   it("does not treat the account bank as the merchant", () => {

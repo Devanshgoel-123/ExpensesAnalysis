@@ -19,8 +19,9 @@ import type {
 const HEADER_RE =
   /^(date|narration|chq\.?\/?ref\.?|value\s*dt|withdrawal|deposit|closing\s*balance)/i;
 
+/** Page chrome. Bank and branch names count only at the start of a line, never inside a narration. */
 const NOISE_RE =
-  /(statement of account|opening balance|page\s+\d|generated on|customer id|account number|ifsc|branch|total debits?|total credits?|this is a computer|confidential|disclaimer|hdfc bank)/i;
+  /(statement of account|opening balance|page\s+\d|generated on|customer id|account number|ifsc|total debits?|total credits?|this is a computer|confidential|disclaimer)|^(?:hdfc bank|branch)\b/i;
 
 const AMOUNT_RE = /([\d,]+\.\d{2})/g;
 
@@ -347,19 +348,53 @@ export async function extractTextFromPdf(
   }
 }
 
-export function parseTransactions(text: string): Transaction[] {
-  type Internal = Transaction & { closingBalance: number; order: number };
-  const internals: Internal[] = [];
+export interface StatementLine extends Transaction {
+  closingBalance: number;
+  /** Previous closing balance ± amount equals this closing balance to the paisa. */
+  balanceOk: boolean;
+}
+
+/** First amount on the "Opening Balance" line or the two lines below it (HDFC summary block). */
+export function findOpeningBalance(text: string): number | null {
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    if (!/opening\s*balance/i.test(lines[i]!)) continue;
+    for (const candidate of [lines[i]!, lines[i + 1] ?? "", lines[i + 2] ?? ""]) {
+      const amounts = extractAmounts(candidate);
+      if (amounts.length) return amounts[0]!;
+    }
+  }
+  return null;
+}
+
+function balanceMatches(
+  amount: number,
+  type: TransactionType,
+  closing: number,
+  prev: number | null,
+): boolean {
+  if (prev === null) return false;
+  const expected = type === "credit" ? prev + amount : prev - amount;
+  return Math.abs(Math.round((expected - closing) * 100)) <= 1;
+}
+
+/**
+ * Statement rows in statement order. Type comes from the closing-balance
+ * chain, starting from the opening balance, so the first row is typed too.
+ */
+export function parseStatementLines(text: string): StatementLine[] {
+  const rows: StatementLine[] = [];
   const seen = new Set<string>();
-  let prevBalance: number | null = null;
+  const opening = findOpeningBalance(text);
 
-  const lines = stitchStatementLines(text.split("\n"));
-
-  for (const rawLine of lines) {
+  for (const rawLine of stitchStatementLines(text.split("\n"))) {
     const line = rawLine.trim();
     if (line.length < 10) continue;
-    if (HEADER_RE.test(line) || NOISE_RE.test(line)) continue;
+    const startsWithDate = /^\d{1,2}\/\d{1,2}\/\d{2,4}\b/.test(line);
+    if (!startsWithDate) continue;
+    if (HEADER_RE.test(line)) continue;
 
+    const prevBalance = rows.length ? rows[rows.length - 1]!.closingBalance : opening;
     const parsed: ParsedRow | null =
       parseHdfcRow(line, prevBalance) ?? parseLooseRow(line, prevBalance);
     if (!parsed) continue;
@@ -368,9 +403,7 @@ export function parseTransactions(text: string): Transaction[] {
     if (seen.has(key)) continue;
     seen.add(key);
 
-    prevBalance = parsed.closingBalance;
-
-    internals.push({
+    rows.push({
       date: parsed.date,
       time: parsed.time,
       description: parsed.narration,
@@ -380,20 +413,24 @@ export function parseTransactions(text: string): Transaction[] {
       merchant: null,
       payee: null,
       closingBalance: parsed.closingBalance,
-      order: internals.length,
+      balanceOk: false,
     });
   }
 
-  // Second pass: reclassify using consecutive closing balances (statement order)
-  for (let i = 1; i < internals.length; i++) {
-    const prev = internals[i - 1].closingBalance;
-    const cur = internals[i];
+  for (let i = 0; i < rows.length; i++) {
+    const prev = i === 0 ? opening : rows[i - 1]!.closingBalance;
+    const cur = rows[i]!;
     const fromBalance = classifyByBalance(cur.amount, cur.closingBalance, prev);
     if (fromBalance) cur.type = fromBalance;
+    cur.balanceOk = balanceMatches(cur.amount, cur.type, cur.closingBalance, prev);
   }
 
-  return internals
-    .map(({ closingBalance: _c, order: _o, ...txn }) => txn)
+  return rows;
+}
+
+export function parseTransactions(text: string): Transaction[] {
+  return parseStatementLines(text)
+    .map(({ closingBalance: _c, balanceOk: _b, ...txn }) => txn)
     .sort((a, b) =>
       a.date === b.date
         ? (b.time ?? "").localeCompare(a.time ?? "") ||

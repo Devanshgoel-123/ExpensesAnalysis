@@ -128,10 +128,12 @@ export interface ImportRow {
   attachmentHash: string | null;
   bankAdapter: string | null;
   errorMessage: string | null;
-  passwordEncrypted: string | null;
   createdAt: string;
   updatedAt: string;
 }
+
+/** `mail` rows come from a debit/credit alert; `statement` rows fill a gap the alerts missed. */
+export type TxOrigin = "mail" | "statement";
 
 export interface TransactionRow {
   id: string;
@@ -148,22 +150,30 @@ export interface TransactionRow {
   payee: string | null;
   providerId: string | null;
   categorySlug: string | null;
-  counterparty: string | null;
-  confidence: number;
   classificationSource: string;
   fingerprint: string;
+  mailMessageId: string | null;
+  origin: TxOrigin;
+  verifiedAt: string | null;
 }
 
-export interface TransactionOverrideRow {
+export interface StatementLineRow {
   id: string;
   userId: string;
-  transactionId: string;
-  payee: string | null;
-  merchant: string | null;
-  categorySlug: string | null;
-  providerId: string | null;
-  applyFuture: boolean;
+  importId: string | null;
+  date: string;
+  amount: number;
+  type: TxType;
+  narration: string;
+  upiId: string | null;
+  closingBalance: number | null;
+  /** True when opening + credit − debit equals this line's closing balance. */
+  balanceOk: boolean;
+  fingerprint: string;
+  matchedTransactionId: string | null;
 }
+
+export type NewStatementLineInput = Omit<StatementLineRow, "id" | "userId" | "matchedTransactionId">;
 
 export interface GmailConnectionRow {
   id: string;
@@ -225,10 +235,11 @@ export interface NewTransactionInput {
   payee: string | null;
   providerId: string | null;
   categorySlug: string | null;
-  counterparty: string | null;
-  confidence: number;
   classificationSource: string;
   fingerprint: string;
+  mailMessageId: string | null;
+  origin: TxOrigin;
+  verifiedAt: string | null;
 }
 
 export interface ListTransactionsOptions {
@@ -320,7 +331,6 @@ export interface Store {
         | "status"
         | "errorMessage"
         | "bankAdapter"
-        | "passwordEncrypted"
         | "attachmentHash"
         | "gmailMessageId"
         | "filename"
@@ -347,6 +357,10 @@ export interface Store {
     userId: string,
     fingerprint: string,
   ): Promise<TransactionRow | null>;
+  findTransactionByMailMessageId(
+    userId: string,
+    mailMessageId: string,
+  ): Promise<TransactionRow | null>;
   listTransactions(
     userId: string,
     options?: ListTransactionsOptions,
@@ -365,12 +379,13 @@ export interface Store {
         | "merchant"
         | "categorySlug"
         | "providerId"
-        | "counterparty"
-        | "confidence"
         | "classificationSource"
         | "upiId"
         | "type"
         | "fingerprint"
+        | "verifiedAt"
+        | "description"
+        | "mailMessageId"
       >
     >,
   ): Promise<TransactionRow | null>;
@@ -380,12 +395,13 @@ export interface Store {
     patch: Partial<
       Pick<
         TransactionRow,
+        | "payee"
         | "merchant"
         | "categorySlug"
         | "providerId"
-        | "confidence"
         | "classificationSource"
         | "upiId"
+        | "verifiedAt"
       >
     >,
   ): Promise<number>;
@@ -405,9 +421,19 @@ export interface Store {
     >,
   ): Promise<number>;
 
-  upsertOverride(
-    input: Omit<TransactionOverrideRow, "id"> & { id?: string },
-  ): Promise<TransactionOverrideRow>;
+  /** Insert new lines (dedup on fingerprint) and return every stored line for those fingerprints. */
+  saveStatementLines(
+    userId: string,
+    rows: NewStatementLineInput[],
+  ): Promise<StatementLineRow[]>;
+  listStatementLines(
+    userId: string,
+    options?: { from?: string; to?: string },
+  ): Promise<StatementLineRow[]>;
+  setStatementLineMatches(
+    userId: string,
+    matches: Array<{ lineId: string; transactionId: string | null }>,
+  ): Promise<void>;
 
   upsertGmailConnection(
     input: Omit<GmailConnectionRow, "id"> & { id?: string },
@@ -484,5 +510,5 @@ export type ClearedUserRecords = {
   imports: number;
   mailMessages: number;
   poolingRuns: number;
-  overrides: number;
+  statementLines: number;
 };

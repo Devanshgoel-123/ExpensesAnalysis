@@ -8,7 +8,7 @@ import {
   formatChartDay,
   formatChartWeekday,
 } from "@/helpers/dates";
-import { debitDailySpend, normalizeDailySpend } from "@/helpers/finance";
+import { debitDailySpend, normalizeDailySpend, spendAmount } from "@/helpers/finance";
 import { Panel, PanelHead } from "@/components/ui/Panel";
 import { DetailBarChart, type ChartGuide, type DetailBarPoint } from "@/components/charts/DetailBarChart";
 import {
@@ -20,7 +20,7 @@ import {
 
 export interface DailySpendChartProps {
   data?: DailySpend[];
-  /** When set, each bar is that day's debits. */
+  /** When set, each bar is that day's debits less refunds. */
   transactions?: Transaction[];
   dailyLimit?: number | null;
   insights?: DailyInsights;
@@ -44,15 +44,14 @@ export function DailySpendChart({
   const rows = debitDays ?? normalizeDailySpend(data);
   const period = useMemo(() => {
     if (!transactions) return null;
-    let debit = 0;
+    let spent = 0;
     let credit = 0;
     for (const txn of transactions) {
-      const amount = Math.abs(txn.amount);
-      if (txn.type === "debit") debit += amount;
-      else if (txn.type === "credit") credit += amount;
+      spent += spendAmount(txn);
+      if (txn.type === "credit") credit += Math.abs(txn.amount);
     }
     return {
-      debit: Math.round(debit * 100) / 100,
+      spent: Math.round(spent * 100) / 100,
       credit: Math.round(credit * 100) / 100,
     };
   }, [transactions]);
@@ -117,7 +116,7 @@ export function DailySpendChart({
         title="Daily spend"
         subtitle={
           period
-            ? `${formatInr(period.debit)} spent${
+            ? `${formatInr(period.spent)} spent${
                 period.credit > 0 ? ` · ${formatInr(period.credit)} received` : ""
               }${limit != null ? ` · limit ${formatInr(limit)}` : ""}`
             : limit != null

@@ -1,6 +1,7 @@
 import {
   ISO_DATE_RE,
   IST_TIME_ZONE,
+  POOLING_EARLIEST_DATE,
   POOLING_LOOKBACK_MONTHS,
   STATEMENT_SCAN_MAX,
   STATEMENT_SCAN_MIN,
@@ -77,7 +78,8 @@ export function poolingScanWindow(now: Date = new Date()): PoolingScanWindow {
     now.toLocaleDateString("en-CA", { timeZone: IST_TIME_ZONE });
   const [year, month] = to.split("-").map(Number);
   const start = new Date(Date.UTC(year, month - 1 - POOLING_LOOKBACK_MONTHS, 1));
-  const from = `${start.getUTCFullYear()}-${pad2(start.getUTCMonth() + 1)}-01`;
+  const rolling = `${start.getUTCFullYear()}-${pad2(start.getUTCMonth() + 1)}-01`;
+  const from = rolling < POOLING_EARLIEST_DATE ? POOLING_EARLIEST_DATE : rolling;
   return { from, to };
 }
 

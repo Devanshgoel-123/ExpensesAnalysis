@@ -7,7 +7,7 @@ import type {
   PoolingRunRow,
   PoolingRunStatus,
   PoolingRunTrigger,
-  TransactionOverrideRow,
+  StatementLineRow,
   TransactionRow,
 } from "../types.js";
 import { ClassificationSource } from "../../enums/index.js";
@@ -38,7 +38,6 @@ export function mapImport(row: Record<string, unknown>): ImportRow {
     attachmentHash: (row.attachmentHash as string | null) ?? null,
     bankAdapter: (row.bankAdapter as string | null) ?? null,
     errorMessage: (row.errorMessage as string | null) ?? null,
-    passwordEncrypted: (row.passwordEncrypted as string | null) ?? null,
     createdAt: new Date(row.createdAt as Date | string).toISOString(),
     updatedAt: new Date(row.updatedAt as Date | string).toISOString(),
   };
@@ -60,25 +59,36 @@ export function mapTransaction(row: Record<string, unknown>): TransactionRow {
     payee: (row.payee as string | null) ?? null,
     providerId: (row.providerId as string | null) ?? null,
     categorySlug: (row.categorySlug as string | null) ?? null,
-    counterparty: (row.counterparty as string | null) ?? null,
-    confidence: Number(row.confidence ?? 1),
     classificationSource: String(
       row.classificationSource ?? ClassificationSource.Parser,
     ),
     fingerprint: String(row.fingerprint),
+    mailMessageId: (row.mailMessageId as string | null) ?? null,
+    origin: row.origin === "statement" ? "statement" : "mail",
+    verifiedAt: row.verifiedAt
+      ? new Date(row.verifiedAt as Date | string).toISOString()
+      : null,
   };
 }
 
-export function mapOverride(row: Record<string, unknown>): TransactionOverrideRow {
+function dateOnly(value: unknown): string {
+  return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
+}
+
+export function mapStatementLine(row: Record<string, unknown>): StatementLineRow {
   return {
     id: String(row.id),
     userId: String(row.userId),
-    transactionId: String(row.transactionId),
-    payee: (row.payee as string | null) ?? null,
-    merchant: (row.merchant as string | null) ?? null,
-    categorySlug: (row.categorySlug as string | null) ?? null,
-    providerId: (row.providerId as string | null) ?? null,
-    applyFuture: Boolean(row.applyFuture),
+    importId: (row.importId as string | null) ?? null,
+    date: dateOnly(row.date),
+    amount: Number(row.amount),
+    type: row.type as StatementLineRow["type"],
+    narration: String(row.narration),
+    upiId: (row.upiId as string | null) ?? null,
+    closingBalance: row.closingBalance == null ? null : Number(row.closingBalance),
+    balanceOk: Boolean(row.balanceOk),
+    fingerprint: String(row.fingerprint),
+    matchedTransactionId: (row.matchedTransactionId as string | null) ?? null,
   };
 }
 

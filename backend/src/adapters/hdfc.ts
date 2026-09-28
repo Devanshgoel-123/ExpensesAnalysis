@@ -1,4 +1,5 @@
 import {
+  parseStatementLines,
   parseTransactions,
 } from "../parser.js";
 import type { BankAdapter } from "./types.js";
@@ -17,5 +18,8 @@ export const hdfcAdapter: BankAdapter = {
   },
   extract(text: string) {
     return parseTransactions(text);
+  },
+  extractLines(text: string) {
+    return parseStatementLines(text);
   },
 };
