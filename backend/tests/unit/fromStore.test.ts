@@ -105,6 +105,58 @@ describe("buildAnalyticsFromRows spend", () => {
     assert.equal(result.transactions.find((t) => t.id === "2")?.isRefund, false);
   });
 
+  it("leaves money that was only passed on out of spend and received", () => {
+    const result = buildAnalyticsFromRows(
+      [
+        baseRow({
+          id: "own",
+          amount: 55000,
+          categorySlug: "rent",
+          merchant: "Rathna",
+          fingerprint: "a",
+        }),
+        baseRow({
+          id: "in",
+          amount: 55000,
+          type: "credit",
+          categorySlug: "passed-on",
+          description: "UPI-ARYAN",
+          merchant: "Aryan",
+          fingerprint: "b",
+        }),
+        baseRow({
+          id: "out1",
+          amount: 40000,
+          categorySlug: "passed-on",
+          merchant: "Rathna",
+          fingerprint: "c",
+        }),
+        baseRow({
+          id: "out2",
+          amount: 3000,
+          categorySlug: "passed-on",
+          merchant: "Rathna",
+          fingerprint: "d",
+        }),
+        baseRow({
+          id: "out3",
+          amount: 12000,
+          categorySlug: "passed-on",
+          payee: "Mehak",
+          fingerprint: "e",
+        }),
+      ],
+      [],
+      [],
+      [],
+    );
+    assert.equal(result.summary.totalSpent, 55000);
+    assert.equal(result.summary.totalReceived, 0);
+    assert.equal(result.summary.transactionCount, 4);
+    assert.equal(result.merchantSpend.find((row) => row.categorySlug === "rent")?.total, 55000);
+    assert.equal(result.merchantSpend.some((row) => row.categorySlug === "passed-on"), false);
+  });
+
   it("nets only refunds out of merchant buckets", () => {
     const result = buildAnalyticsFromRows(
       [

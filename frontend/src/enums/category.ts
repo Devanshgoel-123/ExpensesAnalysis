@@ -15,6 +15,7 @@ export const CategorySlug = {
   Household: "household",
   Grocery: "grocery",
   Rent: "rent",
+  PassedOn: "passed-on",
   Brokerage: "brokerage",
   Outing: "outing",
   Dinner: "dinner",

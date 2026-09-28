@@ -149,6 +149,7 @@ export function AppsPage() {
                   .filter((category) => category.meta?.parent === group.slug)
                   .filter(
                     (category) =>
+                      category.slug !== "passed-on" &&
                       !group.apps.some((app) => app.provider.categorySlug === category.slug),
                   )
                   .sort((a, b) => a.sortOrder - b.sortOrder)

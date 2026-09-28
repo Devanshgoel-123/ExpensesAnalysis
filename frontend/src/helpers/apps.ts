@@ -26,6 +26,7 @@ const HIDDEN_APP_SLUGS = new Set<string>([
   CategorySlug.Furniture,
   CategorySlug.CookMaid,
   CategorySlug.Rent,
+  CategorySlug.PassedOn,
   CategorySlug.Grocery,
   CategorySlug.Petrol,
   CategorySlug.Salon,
@@ -88,7 +89,7 @@ export function spendByCategorySlug(
   const spend = new Map<string, CategorySpend>();
   for (const txn of transactions) {
     const slug = txn.category;
-    if (!slug) continue;
+    if (!slug || slug === CategorySlug.PassedOn) continue;
     if (txn.type !== "debit" && txn.type !== "credit") continue;
     const current = spend.get(slug) ?? { total: 0, count: 0 };
     current.total += txn.type === "credit" ? -txn.amount : txn.amount;
@@ -185,7 +186,9 @@ export function dayCategoryMix(
 ): DayCategoryMix {
   const dayRows = transactions.filter(
     (txn) =>
-      txn.date === date && (txn.type === "debit" || txn.type === "credit"),
+      txn.date === date &&
+      txn.category !== CategorySlug.PassedOn &&
+      (txn.type === "debit" || txn.type === "credit"),
   );
   const totals = new Map<string, number>();
   for (const txn of dayRows) {
@@ -228,6 +231,7 @@ export function groupTransactionsByDay(
 
 const CATEGORY_MARKS: Record<string, string> = {
   rent: "/providers/rent.svg",
+  "passed-on": "/providers/rent.svg",
   brokerage: "/providers/brokerage.svg",
   booze: "/providers/booze.svg",
   cigarettes: "/providers/cigarettes.svg",

@@ -138,6 +138,16 @@ function isBankRailTransfer(
   );
 }
 
+const PASSED_ON = "passed-on";
+
+/** Someone else's money that arrived and left again. It is not spend and not income. */
+function isPassedOn(
+  row: Pick<TransactionRow, "categorySlug">,
+  identity: Pick<SpendIdentity, "categorySlug">,
+): boolean {
+  return row.categorySlug === PASSED_ON || identity.categorySlug === PASSED_ON;
+}
+
 const REFUND_RE = /\b(refund|reversal|reversed|cashback|chargeback)\b/i;
 
 const BANK_RAIL_RE = /\b(neft|imps|rtgs|payroll|salary)\b/i;
@@ -229,10 +239,11 @@ export function buildAnalyticsFromRows(
   categories: CategoryRow[] = [],
   options?: { dailySpendLimit?: number | null },
 ): ParseResult {
-  const debits = rows.filter((t) => t.type === "debit");
-  const credits = rows.filter((t) => t.type === "credit");
   const identities = new Map(rows.map((row) => [row.id, resolveSpendIdentity(row, providers)]));
   const identityOf = (row: TransactionRow) => identities.get(row.id)!;
+  const mine = (row: TransactionRow) => !isPassedOn(row, identityOf(row));
+  const debits = rows.filter((t) => t.type === "debit" && mine(t));
+  const credits = rows.filter((t) => t.type === "credit" && mine(t));
   const refunds = credits.filter((row) => isRefund(row, identityOf(row), providers));
 
   const spendByDay = new Map<string, number>();
@@ -250,6 +261,7 @@ export function buildAnalyticsFromRows(
   const upiMap = new Map<string, UpiRanking>();
   for (const t of rows) {
     if (t.type !== "debit" && t.type !== "credit") continue;
+    if (!mine(t)) continue;
     const identity = identityOf(t);
     if (!identity.upiId) continue;
     const existing = upiMap.get(identity.upiId);
@@ -287,6 +299,7 @@ export function buildAnalyticsFromRows(
   );
   const refundIds = new Set(refunds.map((row) => row.id));
   for (const t of rows) {
+    if (!mine(t)) continue;
     if (t.type !== "debit" && !refundIds.has(t.id)) continue;
     const payee = t.payee?.trim().toLowerCase();
     const identity =
@@ -342,6 +355,7 @@ export function buildAnalyticsFromRows(
   }
   for (const t of rows) {
     if (!t.payee) continue;
+    if (!mine(t)) continue;
     if (t.type !== "debit" && t.type !== "credit") continue;
     const bucket = payeeMap.get(t.payee);
     if (!bucket) continue;
@@ -377,7 +391,7 @@ export function buildAnalyticsFromRows(
     totalSpent,
     totalReceived,
     net: round2(totalReceived - grossSpent),
-    transactionCount: debits.length,
+    transactionCount: rows.filter((t) => t.type === "debit").length,
     upiPayees: upiRanking.length,
     avgDailySpend: round2(totalSpent / days),
     dateFrom: daily[0]?.date ?? null,

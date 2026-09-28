@@ -61,7 +61,7 @@ export function DailySpendChart({
     let credit = 0;
     for (const txn of transactions) {
       spent += spendAmount(txn);
-      if (txn.type === "credit") credit += Math.abs(txn.amount);
+      if (txn.type === "credit" && txn.category !== "passed-on") credit += Math.abs(txn.amount);
     }
     return {
       spent: Math.round(spent * 100) / 100,

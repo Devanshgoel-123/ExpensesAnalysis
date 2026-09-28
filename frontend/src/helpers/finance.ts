@@ -179,6 +179,7 @@ export function peopleFromTransactions(
   for (const name of names) ensure(name);
 
   for (const txn of transactions) {
+    if (txn.category === CategorySlug.PassedOn) continue;
     if (txn.type !== TxType.Debit && txn.type !== TxType.Credit) continue;
     let name = txn.payee?.trim() ?? "";
     if (!name && txn.category === CategorySlug.Family) {
@@ -210,8 +211,11 @@ export function peopleFromTransactions(
   return { people: [...map.values()], paymentsByName };
 }
 
-/** Spend is money out minus refunds. Salary and other credits stay on Received. */
-export function spendAmount(txn: Pick<Transaction, "type" | "amount" | "isRefund">): number {
+/** Spend is money out minus refunds. Salary and other credits stay on Received. Money you only passed on is neither. */
+export function spendAmount(
+  txn: Pick<Transaction, "type" | "amount" | "isRefund" | "category">,
+): number {
+  if (txn.category === CategorySlug.PassedOn) return 0;
   if (txn.type === TxType.Debit) return Math.abs(txn.amount);
   if (txn.type === TxType.Credit && txn.isRefund) return -Math.abs(txn.amount);
   return 0;
