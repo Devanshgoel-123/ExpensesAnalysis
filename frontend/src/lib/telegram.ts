@@ -11,7 +11,7 @@ export function telegramConnectHint(status: TelegramStatus): string {
     return "Telegram is not enabled on this server yet.";
   }
   if (status.linked) {
-    return "Linked. New mail spends will ask for a category in Telegram.";
+    return "Linked. This chat is your account. Use Scan mail, /gmail, or send a statement PDF.";
   }
   return "Create a link, then open Telegram and tap Start.";
 }

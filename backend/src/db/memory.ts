@@ -80,6 +80,10 @@ export class MemoryStore implements Store {
       dailySpendLimit: null,
       telegramChatId: null,
       telegramLinkToken: null,
+      telegramRemindMinute: null,
+      telegramRemindedOn: null,
+      telegramPendingFileId: null,
+      telegramPendingFileName: null,
       createdAt: nowIso(),
       deletedAt: null,
     };
@@ -770,6 +774,34 @@ export class MemoryStore implements Store {
     user.telegramChatId = chatId;
     user.telegramLinkToken = null;
     return user;
+  }
+
+  async setTelegramReminder(userId: string, minute: number | null): Promise<UserRow | null> {
+    const user = await this.findUserById(userId);
+    if (!user) return null;
+    user.telegramRemindMinute = minute;
+    return user;
+  }
+
+  async setTelegramPendingFile(
+    userId: string,
+    file: { fileId: string; fileName: string } | null,
+  ): Promise<void> {
+    const user = await this.findUserById(userId);
+    if (!user) return;
+    user.telegramPendingFileId = file?.fileId ?? null;
+    user.telegramPendingFileName = file?.fileName ?? null;
+  }
+
+  async markTelegramReminded(userId: string, date: string): Promise<void> {
+    const user = await this.findUserById(userId);
+    if (user) user.telegramRemindedOn = date;
+  }
+
+  async listTelegramReminderUsers(): Promise<UserRow[]> {
+    return [...this.users.values()].filter(
+      (user) => !user.deletedAt && user.telegramChatId && user.telegramRemindMinute != null,
+    );
   }
 
   async unlinkTelegram(userId: string): Promise<void> {

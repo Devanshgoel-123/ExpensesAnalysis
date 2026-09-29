@@ -25,6 +25,10 @@ export interface UserRow {
   dailySpendLimit: number | null;
   telegramChatId: string | null;
   telegramLinkToken: string | null;
+  telegramRemindMinute: number | null;
+  telegramRemindedOn: string | null;
+  telegramPendingFileId: string | null;
+  telegramPendingFileName: string | null;
   createdAt: string;
   deletedAt: string | null;
 }
@@ -492,6 +496,13 @@ export interface Store {
   setTelegramLinkToken(userId: string, token: string | null): Promise<UserRow | null>;
   linkTelegramChat(userId: string, chatId: string): Promise<UserRow | null>;
   unlinkTelegram(userId: string): Promise<void>;
+  setTelegramReminder(userId: string, minute: number | null): Promise<UserRow | null>;
+  setTelegramPendingFile(
+    userId: string,
+    file: { fileId: string; fileName: string } | null,
+  ): Promise<void>;
+  markTelegramReminded(userId: string, date: string): Promise<void>;
+  listTelegramReminderUsers(): Promise<UserRow[]>;
   createTelegramPrompt(input: {
     userId: string;
     transactionId: string;

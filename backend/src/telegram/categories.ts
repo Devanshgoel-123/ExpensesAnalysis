@@ -140,11 +140,15 @@ export function formatSpendPrompt(input: {
   amount: number;
   date: string;
   description?: string | null;
+  note?: string | null;
 }): string {
   const desc = input.description?.trim();
   const what = desc ? ` (${desc.slice(0, 80)})` : "";
   return [
     `₹${input.amount} on ${input.date}${what}.`,
-    `Which category? Reply with one of: ${CATEGORY_PROMPT_LIST}.`,
-  ].join(" ");
+    input.note?.trim() || null,
+    "Tap a category.",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }

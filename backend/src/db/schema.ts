@@ -26,6 +26,12 @@ export const users = pgTable(
     dailySpendLimit: numeric("daily_spend_limit"),
     telegramChatId: text("telegram_chat_id"),
     telegramLinkToken: text("telegram_link_token"),
+    /** Minutes after midnight IST. Null means no daily reminder. */
+    telegramRemindMinute: integer("telegram_remind_minute"),
+    telegramRemindedOn: date("telegram_reminded_on"),
+    /** PDF waiting for a password reply in this chat. */
+    telegramPendingFileId: text("telegram_pending_file_id"),
+    telegramPendingFileName: text("telegram_pending_file_name"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },

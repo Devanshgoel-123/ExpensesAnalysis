@@ -3,6 +3,7 @@ import { config } from "./config.js";
 import { closeStore, getStore } from "./db/index.js";
 import { startGmailJobs } from "./gmail/jobs.js";
 import { logger } from "./logger/index.js";
+import { startTelegramPolling } from "./telegram/poll.js";
 
 const app = createApp();
 
@@ -28,6 +29,7 @@ async function boot() {
   } else {
     startGmailJobs();
   }
+  startTelegramPolling();
 
   const server = app.listen(config.port, "0.0.0.0", () => {
     logger.info(

@@ -36,6 +36,10 @@ const mapUser = (r: typeof s.users.$inferSelect): UserRow => ({
   dailySpendLimit: r.dailySpendLimit == null ? null : Number(r.dailySpendLimit),
   telegramChatId: r.telegramChatId ?? null,
   telegramLinkToken: r.telegramLinkToken ?? null,
+  telegramRemindMinute: r.telegramRemindMinute ?? null,
+  telegramRemindedOn: r.telegramRemindedOn ? String(r.telegramRemindedOn).slice(0, 10) : null,
+  telegramPendingFileId: r.telegramPendingFileId ?? null,
+  telegramPendingFileName: r.telegramPendingFileName ?? null,
   createdAt: iso(r.createdAt),
   deletedAt: r.deletedAt ? iso(r.deletedAt) : null,
 });
@@ -637,6 +641,45 @@ export class PostgresStore implements Store {
       .where(and(eq(s.users.id, userId), isNull(s.users.deletedAt)))
       .returning();
     return r ? mapUser(r) : null;
+  }
+  async setTelegramReminder(userId: string, minute: number | null) {
+    const [r] = await this.db
+      .update(s.users)
+      .set({ telegramRemindMinute: minute })
+      .where(and(eq(s.users.id, userId), isNull(s.users.deletedAt)))
+      .returning();
+    return r ? mapUser(r) : null;
+  }
+  async setTelegramPendingFile(
+    userId: string,
+    file: { fileId: string; fileName: string } | null,
+  ) {
+    await this.db
+      .update(s.users)
+      .set({
+        telegramPendingFileId: file?.fileId ?? null,
+        telegramPendingFileName: file?.fileName ?? null,
+      })
+      .where(eq(s.users.id, userId));
+  }
+  async markTelegramReminded(userId: string, date: string) {
+    await this.db
+      .update(s.users)
+      .set({ telegramRemindedOn: date })
+      .where(eq(s.users.id, userId));
+  }
+  async listTelegramReminderUsers() {
+    const rows = await this.db
+      .select()
+      .from(s.users)
+      .where(
+        and(
+          isNull(s.users.deletedAt),
+          sql`${s.users.telegramChatId} is not null`,
+          sql`${s.users.telegramRemindMinute} is not null`,
+        ),
+      );
+    return rows.map(mapUser);
   }
   async unlinkTelegram(userId: string) {
     await this.db

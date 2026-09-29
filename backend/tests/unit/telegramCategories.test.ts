@@ -45,6 +45,6 @@ describe("formatSpendPrompt", () => {
     });
     assert.match(text, /₹184/);
     assert.match(text, /2026-09-26/);
-    assert.match(text, /food, shopping/);
+    assert.match(text, /Tap a category/);
   });
 });
