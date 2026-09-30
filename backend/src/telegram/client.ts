@@ -66,6 +66,19 @@ export async function answerTelegramCallback(callbackId: string): Promise<void> 
   }).catch(() => undefined);
 }
 
+export async function clearTelegramReplyKeyboard(chatId: string): Promise<void> {
+  if (!config.telegram.enabled) return;
+  await fetch(`${TELEGRAM_API_BASE}/bot${config.telegram.botToken}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: "Buttons now sit under each message.",
+      reply_markup: { remove_keyboard: true },
+    }),
+  }).catch(() => undefined);
+}
+
 export async function sendTelegramMessage(
   chatId: string,
   text: string,

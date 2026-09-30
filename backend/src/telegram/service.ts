@@ -20,6 +20,7 @@ import {
 } from "./briefing.js";
 import {
   answerTelegramCallback,
+  clearTelegramReplyKeyboard,
   downloadTelegramFile,
   sendTelegramMessage,
   type TelegramCallbackQuery,
@@ -155,6 +156,7 @@ async function handleStart(
   token: string | null,
   send: TelegramSender,
 ): Promise<void> {
+  if (send === sendTelegramMessage) await clearTelegramReplyKeyboard(chatId);
   if (!token) {
     await send(
       chatId,
@@ -379,6 +381,14 @@ export async function handleTelegramUpdate(
   if (!message.text) return;
   const text = message.text.trim();
   const button = text.toLowerCase();
+  const fromOldKeypad =
+    button === "scan mail" ||
+    button === "status" ||
+    button === "connect email" ||
+    button === "today";
+  if (fromOldKeypad && send === sendTelegramMessage) {
+    await clearTelegramReplyKeyboard(chatId);
+  }
   const asCommand =
     button === "scan mail"
       ? "/scan"
@@ -439,7 +449,7 @@ async function handleStatementDocument(
       fileId: document.file_id,
       fileName: document.file_name?.trim() || "statement.pdf",
     });
-    await send(chatId, "Got the PDF. Reply with the statement password.");
+    await send(chatId, "Got the PDF. Reply with the statement password.", { keyboard: homeKeyboard() });
     return;
   }
   await importStatementFile(
@@ -494,10 +504,11 @@ async function importStatementFile(
     await send(
       chatId,
       `Imported ${result.inserted} new row${result.inserted === 1 ? "" : "s"} from ${fileName}. ${Math.round(result.result.summary.totalSpent).toLocaleString("en-IN")} spent in that statement.`,
+      { keyboard: homeKeyboard() },
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not import that statement.";
-    await send(chatId, message.slice(0, 300));
+    await send(chatId, message.slice(0, 300), { keyboard: homeKeyboard() });
   }
 }
 
@@ -668,7 +679,7 @@ export async function sendDueTelegramReminders(
     if (clock.minutes < user.telegramRemindMinute) continue;
     if (user.telegramRemindedOn === clock.date) continue;
     const snapshot = await loadSpendSnapshot(user.id, now);
-    await send(user.telegramChatId, formatStatus(snapshot));
+    await send(user.telegramChatId, formatStatus(snapshot), { keyboard: homeKeyboard() });
     await store.markTelegramReminded(user.id, clock.date);
     sent += 1;
   }
