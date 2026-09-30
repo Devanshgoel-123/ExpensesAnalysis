@@ -75,7 +75,7 @@ export function StatsRow({ summary, dailyInsights, onSaveLimit }: StatsRowProps)
           {limit == null ? (
             <DailyLimitForm limit={null} compact onSave={onSaveLimit} />
           ) : (
-            <Link href={pathForView("insights")} className="limit-edit">
+            <Link href={pathForView("settings")} className="limit-edit">
               Edit
             </Link>
           )}

@@ -3,11 +3,18 @@
 import Link from "next/link";
 import { useDashboard } from "@/lib/dashboard-context";
 import { useSaveDailyLimit } from "@/components/DailyLimitForm";
-import { formatMonthTitle, aggregateMonthlySpend, buildCategorySpendRows, positiveTotal } from "@/helpers/finance";
+import {
+  formatMonthTitle,
+  aggregateMonthlySpend,
+  buildCategorySpendRows,
+  positiveTotal,
+  weekendInsight,
+} from "@/helpers/finance";
 import { pathForView } from "@/lib/dashboardViews";
 import { formatInr } from "@/helpers/currency";
 
 import { StatsRow } from "@/components/StatsRow";
+import { SpendingHeatmap } from "@/components/charts/SpendingHeatmap";
 import { DailySpendChart } from "@/components/charts/DailySpendChart";
 import { CategorySpendChart } from "@/components/charts/CategorySpendChart";
 import { SpendingTrendChart } from "@/components/charts/SpendingTrendChart";
@@ -34,6 +41,9 @@ export function OverviewPage() {
   const categorySpend = positiveTotal(allCategoryRows.map((row) => row.total));
   const merchantSpend = positiveTotal((data.merchantSpend ?? []).map((row) => row.total));
   const spentHint = `${formatInr(data.summary.totalSpent)} spent · ${formatInr(data.summary.totalReceived)} received`;
+  const weekend = weekendInsight(data.daily);
+  const limit = dailyInsights.enabled ? dailyInsights.limit : null;
+  const overDays = dailyInsights.daysOverLimit.length;
 
   return (
     <div className="view-stack relative">
@@ -47,13 +57,7 @@ export function OverviewPage() {
             <p className="stat-kicker mb-2">Overview</p>
             <h2 className="month-label">{formatMonthTitle(month)}</h2>
             <p className="meta mt-1.5 max-w-xl">
-              {spentHint} · {data.summary.transactionCount} transactions ·{" "}
-              <Link
-                href={pathForView("insights")}
-                className="text-[var(--primary)] underline-offset-2 hover:underline"
-              >
-                Daily limit health
-              </Link>
+              {spentHint} · {data.summary.transactionCount} transactions
             </p>
           </div>
         </header>
@@ -73,6 +77,37 @@ export function OverviewPage() {
           categories={data.categories ?? []}
           insights={dailyInsights}
         />
+      </LedgerlineFadeContent>
+
+      <LedgerlineFadeContent delay={120}>
+        <section id="rhythm" className="grid gap-4">
+          <header>
+            <h2 className="ui-header">Rhythm</h2>
+            <p className="meta mt-1">
+              {limit == null
+                ? "Set a daily limit in Settings to see which days ran past it."
+                : overDays > 0
+                  ? `${overDays} day${overDays === 1 ? "" : "s"} over ${formatInr(limit)}.`
+                  : `Every spending day stayed within ${formatInr(limit)}.`}
+              {weekend && weekend.percentHigher !== 0
+                ? ` Weekends run ${Math.abs(weekend.percentHigher)}% ${weekend.percentHigher > 0 ? "higher" : "lower"} than weekdays.`
+                : ""}
+              {weekend && weekend.topDays.length > 0
+                ? ` Busiest days: ${weekend.topDays.join(" and ")}.`
+                : ""}{" "}
+              <Link href={pathForView("settings")} className="text-[var(--primary)] underline-offset-2 hover:underline">
+                Change limit
+              </Link>
+            </p>
+          </header>
+          <SpendingHeatmap
+            daily={data.daily}
+            dateFrom={data.summary.dateFrom}
+            dateTo={data.summary.dateTo}
+            title="Daily spending"
+            subtitle="Darker days are heavier debit totals"
+          />
+        </section>
       </LedgerlineFadeContent>
 
       {categoryRows.length > 0 ? (

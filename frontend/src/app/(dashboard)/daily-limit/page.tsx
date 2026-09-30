@@ -1,7 +1,5 @@
-"use client";
-
-import { DailyLimitPage } from "@/features/dashboard/DailyLimitPage";
+import { redirect } from "next/navigation";
 
 export default function DailyLimitRoute() {
-  return <DailyLimitPage />;
+  redirect("/overview#rhythm");
 }

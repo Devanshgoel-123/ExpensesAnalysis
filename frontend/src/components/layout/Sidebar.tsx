@@ -65,9 +65,11 @@ export function Sidebar({
               src={avatarUrl}
               title={displayName ?? userEmail ?? undefined}
             />
-            <div>
+            <div className="sidebar-brand-copy">
               <p className="brand compact">Ledgerline</p>
-              <p className="meta sidebar-email">{userEmail ?? "Signed in"}</p>
+              <p className="meta sidebar-email" title={userEmail ?? undefined}>
+                {userEmail ?? "Signed in"}
+              </p>
             </div>
           </div>
           <button

@@ -1,7 +1,5 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  BarChart3,
-  Flame,
   LayoutDashboard,
   LayoutGrid,
   List,
@@ -44,16 +42,9 @@ export const DASHBOARD_NAV: DashboardNavItem[] = [
   {
     id: "overview",
     label: "Overview",
-    description: "Month at a glance",
+    description: "Month, limit, and habits",
     icon: LayoutDashboard,
     path: DASHBOARD_PATHS.overview,
-  },
-  {
-    id: "insights",
-    label: "Daily Limit",
-    description: "Budget health",
-    icon: BarChart3,
-    path: DASHBOARD_PATHS.insights,
   },
   {
     id: "categories",
@@ -75,13 +66,6 @@ export const DASHBOARD_NAV: DashboardNavItem[] = [
     description: "Tracked payees",
     icon: Users,
     path: DASHBOARD_PATHS.people,
-  },
-  {
-    id: "habits",
-    label: "Habits",
-    description: "Recurring small spends",
-    icon: Flame,
-    path: DASHBOARD_PATHS.habits,
   },
   {
     id: "transactions",
@@ -116,7 +100,7 @@ export const DASHBOARD_NAV: DashboardNavItem[] = [
 export const DASHBOARD_NAV_GROUPS: { label: string; ids: DashboardView[] }[] = [
   {
     label: "Insights",
-    ids: ["overview", "insights", "categories", "apps", "people", "habits"],
+    ids: ["overview", "categories", "apps", "people"],
   },
   { label: "Data", ids: ["transactions", "import", "statement-match"] },
   { label: "System", ids: ["settings"] },
@@ -125,7 +109,7 @@ export const DASHBOARD_NAV_GROUPS: { label: string; ids: DashboardView[] }[] = [
 /** Primary destinations shown in the mobile bottom bar (with data). */
 export const MOBILE_NAV_IDS: DashboardView[] = [
   "overview",
-  "insights",
+  "categories",
   "apps",
   "transactions",
   "import",
@@ -134,7 +118,6 @@ export const MOBILE_NAV_IDS: DashboardView[] = [
 /** Mobile bar while the account has no transactions yet. */
 export const MOBILE_NAV_SETUP_IDS: DashboardView[] = [
   "import",
-  "insights",
   "settings",
 ];
 
@@ -143,7 +126,6 @@ export const DATA_OPTIONAL_VIEWS: DashboardView[] = [
   "import",
   "statement-match",
   "settings",
-  "insights",
 ];
 
 const PATH_TO_VIEW = Object.fromEntries(

@@ -1,12 +1,5 @@
-"use client";
-
-import { HabitsPage } from "@/features/habits/HabitsPage";
-import { DashboardDataGate } from "@/features/dashboard/DashboardDataGate";
+import { redirect } from "next/navigation";
 
 export default function HabitsRoute() {
-  return (
-    <DashboardDataGate view="habits">
-      <HabitsPage />
-    </DashboardDataGate>
-  );
+  redirect("/overview#rhythm");
 }
