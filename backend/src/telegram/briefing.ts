@@ -4,6 +4,7 @@ import { toIstCalendarDate } from "../helpers/dates.js";
 import { IST_TIME_ZONE } from "../constants/index.js";
 import { buildTrackedPayees, loadClassificationContext } from "../imports/context.js";
 import { parseCategoryReply } from "./categories.js";
+import { categoryIcon, esc, spendBar } from "./ui.js";
 
 export function istClock(now: Date): { date: string; minutes: number } {
   const date = toIstCalendarDate(now.toISOString()) ?? now.toISOString().slice(0, 10);
@@ -53,7 +54,10 @@ export async function loadSpendSnapshot(userId: string, now = new Date()): Promi
   const todayLines = rows
     .filter((row) => row.type === "debit" && row.date === clock.date)
     .slice(0, 8)
-    .map((row) => `${rupee(row.amount)} ${row.merchant ?? row.description}`.slice(0, 80));
+    .map(
+      (row) =>
+        `${categoryIcon(row.categorySlug ?? "")} <b>${rupee(row.amount)}</b>  ${esc((row.merchant ?? row.description).slice(0, 60))}`,
+    );
   return {
     today: clock.date,
     todaySpent: todayRow?.amount ?? 0,
@@ -65,35 +69,47 @@ export async function loadSpendSnapshot(userId: string, now = new Date()): Promi
   };
 }
 
-export function formatStatus(snapshot: SpendSnapshot): string {
-  const limit =
-    snapshot.limit == null
-      ? "No daily limit set. /limit 800"
-      : `${rupee(snapshot.todaySpent)} of ${rupee(snapshot.limit)} today`;
-  const over =
-    snapshot.limit != null && snapshot.todaySpent > snapshot.limit
-      ? ` Over today's limit.`
-      : "";
+function todayBlock(snapshot: SpendSnapshot): string[] {
+  if (snapshot.limit == null) {
+    return [`☀️ Today  <b>${rupee(snapshot.todaySpent)}</b>`, "<i>No daily limit set. Tap 🎯 Daily limit.</i>"];
+  }
+  const over = snapshot.todaySpent > snapshot.limit;
   return [
-    limit + over,
-    `This month: ${rupee(snapshot.monthSpent)} out, ${rupee(snapshot.monthReceived)} in.`,
+    `☀️ Today  <b>${rupee(snapshot.todaySpent)}</b> of ${rupee(snapshot.limit)}`,
+    spendBar(snapshot.todaySpent, snapshot.limit),
+    ...(over ? ["🚨 <b>Over today's limit.</b>"] : []),
+  ];
+}
+
+function monthBlock(snapshot: SpendSnapshot): string[] {
+  return [
+    "🗓 <b>This month</b>",
+    `🔻 Out  <b>${rupee(snapshot.monthSpent)}</b>`,
+    `🔺 In  <b>${rupee(snapshot.monthReceived)}</b>`,
+  ];
+}
+
+export function formatStatus(snapshot: SpendSnapshot): string {
+  return [
+    "<b>📊 Your status</b>",
+    "",
+    ...todayBlock(snapshot),
+    "",
+    ...monthBlock(snapshot),
+    "",
     snapshot.daysOver > 0
-      ? `${snapshot.daysOver} day${snapshot.daysOver === 1 ? "" : "s"} over the limit.`
-      : "No days over the limit this month.",
+      ? `⚠️ ${snapshot.daysOver} day${snapshot.daysOver === 1 ? "" : "s"} over the limit.`
+      : "✅ No days over the limit this month.",
   ].join("\n");
 }
 
 export function formatToday(snapshot: SpendSnapshot): string {
-  const head =
-    snapshot.limit == null
-      ? `${rupee(snapshot.todaySpent)} today.`
-      : `${rupee(snapshot.todaySpent)} today. Limit ${rupee(snapshot.limit)}.`;
-  if (snapshot.todayLines.length === 0) return `${head}\nNothing recorded today.`;
-  return [head, ...snapshot.todayLines].join("\n");
+  const lines = snapshot.todayLines.length === 0 ? ["<i>Nothing recorded today.</i>"] : snapshot.todayLines;
+  return [...todayBlock(snapshot), "", ...lines].join("\n");
 }
 
 export function formatMonth(snapshot: SpendSnapshot): string {
-  return `This month: ${rupee(snapshot.monthSpent)} out, ${rupee(snapshot.monthReceived)} in.`;
+  return monthBlock(snapshot).join("\n");
 }
 
 export async function formatCategorySpend(
@@ -102,7 +118,7 @@ export async function formatCategorySpend(
   now = new Date(),
 ): Promise<string> {
   const slug = parseCategoryReply(rawCategory);
-  if (!slug) return "Name a category, for example /spent food.";
+  if (!slug) return "🏷 Name a category, for example /spent food.";
   const store = await getStore();
   const clock = istClock(now);
   const month = clock.date.slice(0, 7);
@@ -121,10 +137,10 @@ export async function formatCategorySpend(
     .filter((row) => row.categorySlug === slug)
     .reduce((sum, row) => sum + row.total, 0);
   const label = context.categories.find((category) => category.slug === slug)?.label ?? slug;
-  return `${label} this month: ${rupee(total)}.`;
+  return `${categoryIcon(slug)} ${esc(label)} this month: <b>${rupee(total)}</b>`;
 }
 
 export function limitCrossingLine(snapshot: SpendSnapshot): string | null {
   if (snapshot.limit == null || snapshot.todaySpent <= snapshot.limit) return null;
-  return `Today is ${rupee(snapshot.todaySpent)}, over your ${rupee(snapshot.limit)} limit.`;
+  return `🚨 Today is <b>${rupee(snapshot.todaySpent)}</b>, over your ${rupee(snapshot.limit)} limit.`;
 }

@@ -10,7 +10,7 @@ import {
   runAllPoolingBackfills,
 } from "../gmail/poolingService.js";
 import { childLogger } from "../logger/index.js";
-import { sendDueTelegramReminders } from "../telegram/service.js";
+import { sendDueCategoryPrompts, sendDueTelegramReminders } from "../telegram/service.js";
 
 const log = childLogger({ service: "ledgerline-pooling-worker", module: "worker" });
 
@@ -123,6 +123,9 @@ async function runTick(source: "boot" | "interval" | "manual"): Promise<{
 
   await sendDueTelegramReminders().catch((error: unknown) => {
     log.warn({ err: error }, "telegram reminders failed");
+  });
+  await sendDueCategoryPrompts().catch((error: unknown) => {
+    log.warn({ err: error }, "telegram category asks failed");
   });
 
   try {

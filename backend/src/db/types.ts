@@ -29,6 +29,7 @@ export interface UserRow {
   telegramRemindedOn: string | null;
   telegramPendingFileId: string | null;
   telegramPendingFileName: string | null;
+  telegramCategoryPingedAt: string | null;
   createdAt: string;
   deletedAt: string | null;
 }
@@ -503,6 +504,9 @@ export interface Store {
   ): Promise<void>;
   markTelegramReminded(userId: string, date: string): Promise<void>;
   listTelegramReminderUsers(): Promise<UserRow[]>;
+  listTelegramLinkedUsers(): Promise<UserRow[]>;
+  markTelegramCategoryPinged(userId: string, at: string): Promise<void>;
+  reopenTelegramPrompt(promptId: string): Promise<TelegramPromptRow | null>;
   createTelegramPrompt(input: {
     userId: string;
     transactionId: string;

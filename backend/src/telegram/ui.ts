@@ -1,6 +1,6 @@
 import { CATEGORY_SLUGS } from "../enums/category.js";
 
-export type InlineButton = { text: string; callback_data: string };
+export type InlineButton = { text: string; callback_data: string } | { text: string; url: string };
 export type InlineKeyboard = { inline_keyboard: InlineButton[][] };
 
 const LABEL: Record<string, string> = {
@@ -36,45 +36,123 @@ const LABEL: Record<string, string> = {
   other: "Other",
 };
 
+const ICON: Record<string, string> = {
+  food: "🍔",
+  shopping: "🛍",
+  travel: "✈️",
+  rides: "🚕",
+  stays: "🏨",
+  petrol: "⛽",
+  "scooty-rental": "🛵",
+  healthcare: "🩺",
+  pharmacy: "💊",
+  family: "👨‍👩‍👧",
+  household: "🏠",
+  grocery: "🥦",
+  rent: "🔑",
+  "passed-on": "🔁",
+  brokerage: "🤝",
+  outing: "🎡",
+  dinner: "🍽",
+  sports: "⚽",
+  "fun-activity": "🎉",
+  investments: "📈",
+  vices: "😈",
+  booze: "🍺",
+  cigarettes: "🚬",
+  banks: "🏦",
+  personal: "👤",
+  salon: "💇",
+  "random-expense": "🎲",
+  salary: "💼",
+  "from-home": "🏡",
+  other: "📦",
+};
+
+/** Messages go out with parse_mode HTML, so anything from a bank or a user must be escaped. */
+export function esc(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+export function categoryIcon(slug: string): string {
+  return ICON[slug] ?? "🏷";
+}
+
+/** Ten-cell bar for spend against a limit; cells past the limit show red. */
+export function spendBar(spent: number, limit: number): string {
+  const ratio = limit > 0 ? spent / limit : 0;
+  const filled = Math.min(10, Math.round(ratio * 10));
+  const cell = ratio > 1 ? "🟥" : ratio >= 0.8 ? "🟧" : "🟩";
+  return `${cell.repeat(filled)}${"⬜".repeat(10 - filled)} ${Math.round(ratio * 100)}%`;
+}
+
 function rows(buttons: InlineButton[], width = 2): InlineButton[][] {
   const out: InlineButton[][] = [];
   for (let i = 0; i < buttons.length; i += width) out.push(buttons.slice(i, i + width));
   return out;
 }
 
+const HOME_ROW: InlineButton[] = [{ text: "🏠 Home", callback_data: "m:home" }];
+
 export function homeKeyboard(): InlineKeyboard {
   return {
     inline_keyboard: [
       [
-        { text: "Status", callback_data: "m:status" },
-        { text: "Today", callback_data: "m:today" },
+        { text: "📊 Status", callback_data: "m:status" },
+        { text: "☀️ Today", callback_data: "m:today" },
       ],
       [
-        { text: "This month", callback_data: "m:month" },
-        { text: "A category", callback_data: "m:spent" },
+        { text: "🗓 This month", callback_data: "m:month" },
+        { text: "🏷 A category", callback_data: "m:spent" },
       ],
       [
-        { text: "Scan mail", callback_data: "m:scan" },
-        { text: "Connect email", callback_data: "m:gmail" },
+        { text: "🔄 Sync Gmail", callback_data: "m:sync" },
+        { text: "📧 Connect email", callback_data: "m:gmail" },
       ],
       [
-        { text: "Daily limit", callback_data: "m:limit" },
-        { text: "Reminder", callback_data: "m:remind" },
+        { text: "🎯 Daily limit", callback_data: "m:limit" },
+        { text: "⏰ Reminder", callback_data: "m:remind" },
       ],
       [
-        { text: "Send statement", callback_data: "m:stmt" },
-        { text: "Disconnect", callback_data: "m:unlink" },
+        { text: "📄 Send statement", callback_data: "m:stmt" },
+        { text: "🧹 Clear chat", callback_data: "m:clear" },
+      ],
+      [{ text: "🔌 Disconnect", callback_data: "m:unlink" }],
+    ],
+  };
+}
+
+export function linkKeyboard(text: string, url: string): InlineKeyboard {
+  return { inline_keyboard: [[{ text, url }], HOME_ROW] };
+}
+
+export function clearConfirmKeyboard(): InlineKeyboard {
+  return {
+    inline_keyboard: [
+      [
+        { text: "🧹 Yes, clear", callback_data: "x:clear" },
+        { text: "✖️ Cancel", callback_data: "m:home" },
       ],
     ],
   };
 }
 
+export function choiceKeyboard(
+  choices: Array<{ slug: string; label: string }>,
+): InlineKeyboard {
+  const buttons = choices.map((choice) => ({
+    text: `${categoryIcon(choice.slug)} ${choice.label}`,
+    callback_data: `c:${choice.slug}`,
+  }));
+  return { inline_keyboard: [...rows(buttons), HOME_ROW] };
+}
+
 export function categoryKeyboard(): InlineKeyboard {
   const buttons = CATEGORY_SLUGS.map((slug) => ({
-    text: LABEL[slug] ?? slug,
+    text: `${categoryIcon(slug)} ${LABEL[slug] ?? slug}`,
     callback_data: `c:${slug}`,
   }));
-  return { inline_keyboard: [...rows(buttons), [{ text: "Home", callback_data: "m:home" }]] };
+  return { inline_keyboard: [...rows(buttons, 3), HOME_ROW] };
 }
 
 export function limitKeyboard(): InlineKeyboard {
@@ -87,9 +165,9 @@ export function limitKeyboard(): InlineKeyboard {
       ],
       [
         { text: "₹3,000", callback_data: "l:3000" },
-        { text: "No limit", callback_data: "l:off" },
+        { text: "🚫 No limit", callback_data: "l:off" },
       ],
-      [{ text: "Home", callback_data: "m:home" }],
+      HOME_ROW,
     ],
   };
 }
@@ -98,11 +176,11 @@ export function remindKeyboard(): InlineKeyboard {
   return {
     inline_keyboard: [
       [
-        { text: "9:00", callback_data: "r:540" },
-        { text: "13:00", callback_data: "r:780" },
-        { text: "21:30", callback_data: "r:1290" },
+        { text: "🌅 9:00", callback_data: "r:540" },
+        { text: "🌤 13:00", callback_data: "r:780" },
+        { text: "🌙 21:30", callback_data: "r:1290" },
       ],
-      [{ text: "Turn off", callback_data: "r:off" }, { text: "Home", callback_data: "m:home" }],
+      [{ text: "🔕 Turn off", callback_data: "r:off" }, ...HOME_ROW],
     ],
   };
 }
@@ -114,16 +192,19 @@ export type TelegramAction =
   | { kind: "month" }
   | { kind: "spent-menu" }
   | { kind: "scan" }
+  | { kind: "sync" }
   | { kind: "gmail" }
   | { kind: "limit-menu" }
   | { kind: "remind-menu" }
   | { kind: "statement" }
   | { kind: "unlink" }
+  | { kind: "clear-menu" }
+  | { kind: "clear" }
   | { kind: "category"; slug: string }
   | { kind: "set-limit"; amount: number | null }
   | { kind: "set-remind"; minute: number | null };
 
-type MenuKind = Exclude<TelegramAction["kind"], "category" | "set-limit" | "set-remind">;
+type MenuKind = Exclude<TelegramAction["kind"], "category" | "set-limit" | "set-remind" | "clear">;
 
 const MENU: Record<string, MenuKind> = {
   home: "home",
@@ -132,11 +213,13 @@ const MENU: Record<string, MenuKind> = {
   month: "month",
   spent: "spent-menu",
   scan: "scan",
+  sync: "sync",
   gmail: "gmail",
   limit: "limit-menu",
   remind: "remind-menu",
   stmt: "statement",
   unlink: "unlink",
+  clear: "clear-menu",
 };
 
 export function parseTelegramAction(data: string): TelegramAction | null {
@@ -146,6 +229,7 @@ export function parseTelegramAction(data: string): TelegramAction | null {
     const kind = MENU[value];
     return kind ? ({ kind } as TelegramAction) : null;
   }
+  if (prefix === "x" && value === "clear") return { kind: "clear" };
   if (prefix === "c" && (CATEGORY_SLUGS as readonly string[]).includes(value)) {
     return { kind: "category", slug: value };
   }

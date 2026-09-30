@@ -32,6 +32,8 @@ export const users = pgTable(
     /** PDF waiting for a password reply in this chat. */
     telegramPendingFileId: text("telegram_pending_file_id"),
     telegramPendingFileName: text("telegram_pending_file_name"),
+    /** Last unsolicited category ask. The next one waits six hours, and never 02:00–10:00 IST. */
+    telegramCategoryPingedAt: timestamp("telegram_category_pinged_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },

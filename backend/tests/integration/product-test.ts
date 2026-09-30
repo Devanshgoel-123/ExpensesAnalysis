@@ -284,6 +284,7 @@ async function main() {
   const {
     handleTelegramUpdate,
     notifyMailDebits,
+    sendDueCategoryPrompts,
   } = await import("../../src/telegram/service.js");
   const tgSent: string[] = [];
   const tgSend = async (_chatId: string, text: string) => {
@@ -326,7 +327,8 @@ async function main() {
     },
   ]);
   await notifyMailDebits(registered.user.id, tgInsert.ids, tgSend);
-  if (!tgSent.some((line) => /₹55/.test(line))) {
+  await sendDueCategoryPrompts(new Date("2026-09-30T11:00:00+05:30"), tgSend);
+  if (!tgSent.some((line) => /need a label/.test(line))) {
     throw new Error(`telegram prompt missing: ${tgSent.join(" | ")}`);
   }
   await handleTelegramUpdate(
@@ -340,9 +342,11 @@ async function main() {
     },
     tgSend,
   );
-  const tea = await store.getTransaction(registered.user.id, tgInsert.ids[0]!);
-  if (tea?.categorySlug !== "food" || tea.classificationSource !== "telegram") {
-    throw new Error(`telegram category not applied: ${JSON.stringify(tea)}`);
+  const labeled = (await store.listTransactions(registered.user.id)).filter(
+    (tx) => tx.categorySlug === "food" && tx.classificationSource === "telegram",
+  );
+  if (labeled.length !== 1) {
+    throw new Error(`telegram category not applied: ${JSON.stringify(labeled)}`);
   }
 
   const swiggyForLogo = providers.find((p) => p.canonicalName === "Swiggy");

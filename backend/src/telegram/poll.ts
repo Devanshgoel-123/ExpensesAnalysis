@@ -5,8 +5,8 @@ import type { TelegramUpdate } from "./client.js";
 import { handleTelegramUpdate } from "./service.js";
 
 /**
- * Local dev has no public HTTPS URL, so Telegram cannot POST a webhook.
- * Long-poll getUpdates instead. Production keeps the webhook.
+ * This machine pulls updates from Telegram. No public URL or ngrok tunnel is
+ * required. Production with a real webhook host skips polling.
  */
 export function startTelegramPolling(): void {
   if (!config.telegram.enabled || config.isProduction) return;

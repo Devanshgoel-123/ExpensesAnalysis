@@ -40,6 +40,7 @@ const mapUser = (r: typeof s.users.$inferSelect): UserRow => ({
   telegramRemindedOn: r.telegramRemindedOn ? String(r.telegramRemindedOn).slice(0, 10) : null,
   telegramPendingFileId: r.telegramPendingFileId ?? null,
   telegramPendingFileName: r.telegramPendingFileName ?? null,
+  telegramCategoryPingedAt: r.telegramCategoryPingedAt ? iso(r.telegramCategoryPingedAt) : null,
   createdAt: iso(r.createdAt),
   deletedAt: r.deletedAt ? iso(r.deletedAt) : null,
 });
@@ -668,6 +669,27 @@ export class PostgresStore implements Store {
       .set({ telegramRemindedOn: date })
       .where(eq(s.users.id, userId));
   }
+  async listTelegramLinkedUsers() {
+    const rows = await this.db
+      .select()
+      .from(s.users)
+      .where(and(isNull(s.users.deletedAt), sql`${s.users.telegramChatId} is not null`));
+    return rows.map(mapUser);
+  }
+  async markTelegramCategoryPinged(userId: string, at: string) {
+    await this.db
+      .update(s.users)
+      .set({ telegramCategoryPingedAt: new Date(at) })
+      .where(eq(s.users.id, userId));
+  }
+  async reopenTelegramPrompt(promptId: string) {
+    const [row] = await this.db
+      .update(s.telegramPrompts)
+      .set({ status: "pending", categorySlug: null, answeredAt: null })
+      .where(eq(s.telegramPrompts.id, promptId))
+      .returning();
+    return row ? mapPrompt(row) : null;
+  }
   async listTelegramReminderUsers() {
     const rows = await this.db
       .select()
@@ -695,25 +717,32 @@ export class PostgresStore implements Store {
     transactionId: string;
     chatId: string;
   }): Promise<TelegramPromptRow> {
-    const [row] = await this.db
-      .insert(s.telegramPrompts)
-      .values({
-        userId: input.userId,
-        transactionId: input.transactionId,
-        chatId: input.chatId,
-      })
-      .onConflictDoNothing({ target: s.telegramPrompts.transactionId })
-      .returning();
-    if (row) return mapPrompt(row);
+    const existing = await this.findTelegramPromptByTransaction(input.transactionId);
+    if (existing) return existing;
+    try {
+      const [row] = await this.db
+        .insert(s.telegramPrompts)
+        .values({
+          userId: input.userId,
+          transactionId: input.transactionId,
+          chatId: input.chatId,
+        })
+        .returning();
+      if (!row) throw new Error("telegram prompt insert failed");
+      return mapPrompt(row);
+    } catch (error) {
+      const again = await this.findTelegramPromptByTransaction(input.transactionId);
+      if (again) return again;
+      throw error;
+    }
+  }
+  async findTelegramPromptByTransaction(transactionId: string): Promise<TelegramPromptRow | null> {
     const [existing] = await this.db
       .select()
       .from(s.telegramPrompts)
-      .where(eq(s.telegramPrompts.transactionId, input.transactionId))
+      .where(eq(s.telegramPrompts.transactionId, transactionId))
       .limit(1);
-    if (!existing) {
-      throw new Error("telegram prompt insert failed");
-    }
-    return mapPrompt(existing);
+    return existing ? mapPrompt(existing) : null;
   }
   async getOldestPendingTelegramPrompt(chatId: string) {
     const [row] = await this.db

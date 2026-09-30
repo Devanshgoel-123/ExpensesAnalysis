@@ -84,6 +84,7 @@ export class MemoryStore implements Store {
       telegramRemindedOn: null,
       telegramPendingFileId: null,
       telegramPendingFileName: null,
+      telegramCategoryPingedAt: null,
       createdAt: nowIso(),
       deletedAt: null,
     };
@@ -796,6 +797,24 @@ export class MemoryStore implements Store {
   async markTelegramReminded(userId: string, date: string): Promise<void> {
     const user = await this.findUserById(userId);
     if (user) user.telegramRemindedOn = date;
+  }
+
+  async listTelegramLinkedUsers(): Promise<UserRow[]> {
+    return [...this.users.values()].filter((user) => !user.deletedAt && user.telegramChatId);
+  }
+
+  async markTelegramCategoryPinged(userId: string, at: string): Promise<void> {
+    const user = await this.findUserById(userId);
+    if (user) user.telegramCategoryPingedAt = at;
+  }
+
+  async reopenTelegramPrompt(promptId: string): Promise<TelegramPromptRow | null> {
+    const row = this.telegramPrompts.find((prompt) => prompt.id === promptId);
+    if (!row) return null;
+    row.status = "pending";
+    row.categorySlug = null;
+    row.answeredAt = null;
+    return row;
   }
 
   async listTelegramReminderUsers(): Promise<UserRow[]> {

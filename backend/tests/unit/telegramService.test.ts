@@ -9,6 +9,7 @@ import {
   handleTelegramUpdate,
   notifyMailDebits,
   parseStartCommand,
+  sendDueCategoryPrompts,
   sendDueTelegramReminders,
 } from "../../src/telegram/service.js";
 
@@ -103,7 +104,9 @@ describe("telegram category flow", () => {
     assert.equal(inserted.ids.length, 1);
 
     await notifyMailDebits(user.id, inserted.ids, send);
+    await sendDueCategoryPrompts(new Date("2026-09-30T11:00:00+05:30"), send);
     assert.match(sent.at(-1) ?? "", /₹184/);
+    assert.match(sent.at(-1) ?? "", /No category yet/);
 
     await handleTelegramUpdate(
       {
@@ -120,7 +123,7 @@ describe("telegram category flow", () => {
     const tx = await store.getTransaction(user.id, inserted.ids[0]!);
     assert.equal(tx?.categorySlug, "food");
     assert.equal(tx?.classificationSource, "telegram");
-    assert.match(sent.at(-1) ?? "", /Saved as food/);
+    assert.match(sent.at(-1) ?? "", /Saved as Food/);
   });
 
   it("rejects an expired start token", async () => {
@@ -188,9 +191,10 @@ describe("telegram category flow", () => {
     assert.equal((await store.findUserById(user.id))?.telegramRemindMinute, 21 * 60 + 30);
     await store.setTelegramReminder(user.id, 0);
     const before = sent.length;
-    await sendDueTelegramReminders(new Date(), send);
+    const noon = new Date("2026-09-30T12:00:00+05:30");
+    await sendDueTelegramReminders(noon, send);
     assert.equal(sent.length, before + 1);
-    await sendDueTelegramReminders(new Date(), send);
+    await sendDueTelegramReminders(noon, send);
     assert.equal(sent.length, before + 1);
   });
 });
@@ -291,6 +295,145 @@ describe("telegram buttons", () => {
     );
     assert.match(sent.at(-1) ?? "", /This month/);
     assert.equal(user.id, (await store.findUserByTelegramChatId("77"))?.id);
+  });
+});
+
+describe("telegram category asks", () => {
+  it("stays quiet from 2:00 to 10:00 IST and then asks", async () => {
+    const { store, user } = await setupUser();
+    await store.linkTelegramChat(user.id, "88");
+    const account = await store.getOrCreateAccount(user.id, "hdfc");
+    await store.insertTransactions(user.id, [
+      {
+        importId: null,
+        accountId: account.id,
+        date: "2026-09-20",
+        time: null,
+        description: "UPI coffee",
+        amount: 90,
+        type: "debit",
+        upiId: null,
+        merchant: "Cafe",
+        payee: null,
+        providerId: null,
+        categorySlug: null,
+        classificationSource: "email_alert",
+        fingerprint: "fp-quiet",
+        mailMessageId: null,
+        origin: "mail",
+        verifiedAt: null,
+      },
+    ]);
+    const sent: string[] = [];
+    const send = async (_chatId: string, text: string) => {
+      sent.push(text);
+    };
+    await sendDueCategoryPrompts(new Date("2026-09-30T03:30:00+05:30"), send);
+    assert.equal(sent.length, 0);
+    await sendDueCategoryPrompts(new Date("2026-09-30T10:00:00+05:30"), send);
+    assert.match(sent.at(-1) ?? "", /Cafe/);
+    assert.match(sent.at(-1) ?? "", /No category yet/);
+  });
+
+  it("asks again only after six hours", async () => {
+    const { store, user } = await setupUser();
+    await store.linkTelegramChat(user.id, "89");
+    const account = await store.getOrCreateAccount(user.id, "hdfc");
+    await store.insertTransactions(user.id, [
+      {
+        importId: null,
+        accountId: account.id,
+        date: "2026-09-21",
+        time: null,
+        description: "UPI",
+        amount: 40,
+        type: "debit",
+        upiId: null,
+        merchant: "Stall",
+        payee: null,
+        providerId: null,
+        categorySlug: null,
+        classificationSource: "email_alert",
+        fingerprint: "fp-six",
+        mailMessageId: null,
+        origin: "mail",
+        verifiedAt: null,
+      },
+    ]);
+    const sent: string[] = [];
+    const send = async (_chatId: string, text: string) => {
+      sent.push(text);
+    };
+    await sendDueCategoryPrompts(new Date("2026-09-30T11:00:00+05:30"), send);
+    assert.equal(sent.length, 1);
+    await sendDueCategoryPrompts(new Date("2026-09-30T12:00:00+05:30"), send);
+    assert.equal(sent.length, 1);
+    await sendDueCategoryPrompts(new Date("2026-09-30T17:00:00+05:30"), send);
+    assert.equal(sent.length, 2);
+  });
+
+  it("asks for a type when only the parent category is set", async () => {
+    const { store, user } = await setupUser();
+    await store.linkTelegramChat(user.id, "90");
+    const account = await store.getOrCreateAccount(user.id, "hdfc");
+    const inserted = await store.insertTransactions(user.id, [
+      {
+        importId: null,
+        accountId: account.id,
+        date: "2026-09-22",
+        time: null,
+        description: "UPI",
+        amount: 640,
+        type: "debit",
+        upiId: null,
+        merchant: "Uber",
+        payee: null,
+        providerId: null,
+        categorySlug: "travel",
+        classificationSource: "parser",
+        fingerprint: "fp-uber",
+        mailMessageId: null,
+        origin: "mail",
+        verifiedAt: null,
+      },
+    ]);
+    const sent: string[] = [];
+    const send = async (_chatId: string, text: string) => {
+      sent.push(text);
+    };
+    await sendDueCategoryPrompts(new Date("2026-09-30T11:00:00+05:30"), send);
+    assert.match(sent.at(-1) ?? "", /Uber/);
+    assert.match(sent.at(-1) ?? "", /This is Travel/);
+    await handleTelegramUpdate(
+      {
+        update_id: 30,
+        callback_query: {
+          id: "cb-rides",
+          data: "c:rides",
+          from: { id: 90 },
+          message: { message_id: 4, chat: { id: 90, type: "private" } },
+        },
+      },
+      send,
+    );
+    assert.equal((await store.getTransaction(user.id, inserted.ids[0]!))?.categorySlug, "rides");
+    assert.match(sent.at(-1) ?? "", /Saved as Rides/);
+  });
+
+  it("sync asks to connect email when Gmail is missing", async () => {
+    const { store, user } = await setupUser();
+    await store.linkTelegramChat(user.id, "91");
+    const sent: string[] = [];
+    await handleTelegramUpdate(
+      {
+        update_id: 31,
+        message: { message_id: 5, chat: { id: 91, type: "private" }, text: "/sync" },
+      },
+      async (_chatId, text) => {
+        sent.push(text);
+      },
+    );
+    assert.match(sent.at(-1) ?? "", /Connect email/);
   });
 });
 

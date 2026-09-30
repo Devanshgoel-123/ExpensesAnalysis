@@ -7,9 +7,11 @@ export const TELEGRAM_HELP = [
   "/limit 800 — daily cap, or /limit off",
   "/remind 21:30 — a daily note in IST, or /remind off",
   "/gmail — connect this account's email",
-  "/scan — read bank mail into this account",
+  "/sync — pull new bank mail from Gmail",
+  "/scan — same as /sync",
   "/statement — send a PDF statement in this chat",
   "/unlink — disconnect this chat",
+  "/clear — clear this chat; expenses stay saved",
   "When I ask about a new payment, reply with a category.",
 ].join("\n");
 
@@ -23,8 +25,9 @@ export type TelegramCommand =
   | { kind: "remind"; minute: number | null; valid: boolean }
   | { kind: "unlink" }
   | { kind: "gmail" }
-  | { kind: "scan"; password: string }
+  | { kind: "sync"; password: string }
   | { kind: "statement" }
+  | { kind: "clear" }
   | { kind: "unknown"; name: string };
 
 function commandName(text: string): { name: string; rest: string } | null {
@@ -89,9 +92,12 @@ export function parseTelegramCommand(text: string): TelegramCommand | null {
     case "email":
       return { kind: "gmail" };
     case "scan":
-      return { kind: "scan", password: command.rest };
+    case "sync":
+      return { kind: "sync", password: command.rest };
     case "statement":
       return { kind: "statement" };
+    case "clear":
+      return { kind: "clear" };
     default:
       return { kind: "unknown", name: command.name };
   }
