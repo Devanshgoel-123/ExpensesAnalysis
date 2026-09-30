@@ -15,6 +15,8 @@ import type {
   StatementLineRow,
   Store,
   ClearedUserRecords,
+  TelegramPhoneChallenge,
+  TelegramPhoneChatRow,
   TelegramPromptRow,
   TransactionRow,
   UserRow,
@@ -46,6 +48,7 @@ export class MemoryStore implements Store {
   mailMessages: MailMessageRow[] = [];
   poolingRuns: PoolingRunRow[] = [];
   telegramPrompts: TelegramPromptRow[] = [];
+  phoneChats = new Map<string, TelegramPhoneChatRow>();
   audits: Array<{ userId: string | null; action: string; meta: Record<string, unknown> }> =
     [];
 
@@ -85,6 +88,13 @@ export class MemoryStore implements Store {
       telegramPendingFileId: null,
       telegramPendingFileName: null,
       telegramCategoryPingedAt: null,
+      phoneE164: null,
+      telegramPhonePending: null,
+      telegramPhoneCodeHash: null,
+      telegramPhoneCodeExpires: null,
+      telegramPhoneChatId: null,
+      telegramPhoneAttempts: 0,
+      telegramPhoneSentAt: null,
       createdAt: nowIso(),
       deletedAt: null,
     };
@@ -759,6 +769,69 @@ export class MemoryStore implements Store {
     );
   }
 
+  async findUserByPhone(phone: string): Promise<UserRow | null> {
+    return (
+      [...this.users.values()].find((u) => u.phoneE164 === phone && !u.deletedAt) ?? null
+    );
+  }
+
+  async findUserByPendingPhone(phone: string): Promise<UserRow | null> {
+    return (
+      [...this.users.values()].find(
+        (u) => u.telegramPhonePending === phone && !u.deletedAt,
+      ) ?? null
+    );
+  }
+
+  async setTelegramPhoneChallenge(
+    userId: string,
+    challenge: TelegramPhoneChallenge | null,
+  ): Promise<UserRow | null> {
+    const user = await this.findUserById(userId);
+    if (!user) return null;
+    user.telegramPhonePending = challenge?.phone ?? null;
+    user.telegramPhoneCodeHash = challenge?.codeHash ?? null;
+    user.telegramPhoneCodeExpires = challenge?.expiresAt ?? null;
+    user.telegramPhoneChatId = challenge?.chatId ?? null;
+    user.telegramPhoneAttempts = challenge?.attempts ?? 0;
+    user.telegramPhoneSentAt = challenge?.sentAt ?? null;
+    return user;
+  }
+
+  async recordTelegramPhoneAttempt(userId: string): Promise<UserRow | null> {
+    const user = await this.findUserById(userId);
+    if (!user) return null;
+    user.telegramPhoneAttempts += 1;
+    return user;
+  }
+
+  async setUserPhone(userId: string, phone: string | null): Promise<UserRow | null> {
+    const user = await this.findUserById(userId);
+    if (!user) return null;
+    user.phoneE164 = phone;
+    return user;
+  }
+
+  async upsertTelegramPhoneChat(input: {
+    phoneE164: string;
+    chatId: string;
+    telegramUserId: string;
+  }): Promise<void> {
+    for (const [phone, row] of this.phoneChats) {
+      if (row.chatId === input.chatId) this.phoneChats.delete(phone);
+    }
+    this.phoneChats.set(input.phoneE164, {
+      phoneE164: input.phoneE164,
+      chatId: input.chatId,
+      telegramUserId: input.telegramUserId,
+      updatedAt: nowIso(),
+    });
+  }
+
+  async findTelegramPhoneChat(phone: string): Promise<TelegramPhoneChatRow | null> {
+    return this.phoneChats.get(phone) ?? null;
+  }
+
   async setTelegramLinkToken(
     userId: string,
     token: string | null,
@@ -828,6 +901,13 @@ export class MemoryStore implements Store {
     if (!user) return;
     user.telegramChatId = null;
     user.telegramLinkToken = null;
+    user.phoneE164 = null;
+    user.telegramPhonePending = null;
+    user.telegramPhoneCodeHash = null;
+    user.telegramPhoneCodeExpires = null;
+    user.telegramPhoneChatId = null;
+    user.telegramPhoneAttempts = 0;
+    user.telegramPhoneSentAt = null;
     this.telegramPrompts = this.telegramPrompts.filter((p) => p.userId !== userId);
   }
 

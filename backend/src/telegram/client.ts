@@ -18,12 +18,20 @@ export type TelegramDocument = {
   mime_type?: string;
 };
 
+export type TelegramContact = {
+  phone_number: string;
+  first_name?: string;
+  user_id?: number;
+};
+
 export type TelegramMessage = {
   message_id: number;
   chat: TelegramChat;
+  from?: { id: number };
   text?: string;
   caption?: string;
   document?: TelegramDocument;
+  contact?: TelegramContact;
 };
 
 export type TelegramCallbackQuery = {
@@ -112,34 +120,122 @@ async function callTelegram(method: string, payload: Record<string, unknown>): P
   });
 }
 
-export async function sendTelegramMessage(
+function plainText(text: string): string {
+  return text
+    .replace(/<[^>]+>/g, "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&");
+}
+
+async function postTelegram(
   chatId: string,
   text: string,
-  extra?: { keyboard?: InlineKeyboard },
-): Promise<void> {
-  if (!config.telegram.enabled) return;
-  const payload = {
+  replyMarkup?: Record<string, unknown>,
+): Promise<number | null> {
+  if (!config.telegram.enabled) return null;
+  const payload: Record<string, unknown> = {
     chat_id: chatId,
     text,
     parse_mode: "HTML",
     link_preview_options: { is_disabled: true },
-    ...(extra?.keyboard ? { reply_markup: extra.keyboard } : {}),
+    ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
   };
   let res = await callTelegram("sendMessage", payload);
   if (res.status === 400) {
     const body = await res.text().catch(() => "");
     if (/parse entities/i.test(body)) {
-      const plain = text.replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
-      res = await callTelegram("sendMessage", { ...payload, text: plain, parse_mode: undefined });
+      res = await callTelegram("sendMessage", {
+        ...payload,
+        text: plainText(text),
+        parse_mode: undefined,
+      });
+    } else {
+      logger.warn({ status: res.status, body: body.slice(0, 200) }, "telegram sendMessage failed");
+      return null;
     }
   }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    logger.warn(
-      { status: res.status, body: body.slice(0, 200) },
-      "telegram sendMessage failed",
-    );
+    logger.warn({ status: res.status, body: body.slice(0, 200) }, "telegram sendMessage failed");
+    return null;
   }
+  const parsed = (await res.json()) as { result?: { message_id?: number } };
+  return parsed.result?.message_id ?? null;
+}
+
+export async function sendTelegramMessage(
+  chatId: string,
+  text: string,
+  extra?: { keyboard?: InlineKeyboard },
+): Promise<void> {
+  await postTelegram(chatId, text, extra?.keyboard as Record<string, unknown> | undefined);
+}
+
+export async function editTelegramMessage(
+  chatId: string,
+  messageId: number,
+  text: string,
+  keyboard?: InlineKeyboard,
+): Promise<boolean> {
+  if (!config.telegram.enabled) return false;
+  const payload: Record<string, unknown> = {
+    chat_id: chatId,
+    message_id: messageId,
+    text,
+    parse_mode: "HTML",
+    link_preview_options: { is_disabled: true },
+    ...(keyboard ? { reply_markup: keyboard } : {}),
+  };
+  let res = await callTelegram("editMessageText", payload);
+  if (res.status === 400) {
+    const body = await res.text().catch(() => "");
+    if (/message is not modified/i.test(body)) return true;
+    if (/parse entities/i.test(body)) {
+      res = await callTelegram("editMessageText", {
+        ...payload,
+        text: plainText(text),
+        parse_mode: undefined,
+      });
+    } else {
+      logger.warn({ status: res.status, body: body.slice(0, 200) }, "telegram editMessage failed");
+      return false;
+    }
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    logger.warn({ status: res.status, body: body.slice(0, 200) }, "telegram editMessage failed");
+    return false;
+  }
+  return true;
+}
+
+/** One message that updates in place while a sync is running. Tests get a fresh send each time. */
+export function telegramProgressPublisher(chatId: string, send: TelegramSender) {
+  let messageId: number | null = null;
+  return async (text: string, keyboard?: InlineKeyboard) => {
+    if (send !== sendTelegramMessage) {
+      await send(chatId, text, keyboard ? { keyboard } : undefined);
+      return;
+    }
+    if (messageId == null) {
+      messageId = await postTelegram(chatId, text, keyboard as Record<string, unknown> | undefined);
+      return;
+    }
+    const edited = await editTelegramMessage(chatId, messageId, text, keyboard);
+    if (!edited) {
+      messageId = await postTelegram(chatId, text, keyboard as Record<string, unknown> | undefined);
+    }
+  };
+}
+
+export async function askTelegramContact(chatId: string, text: string): Promise<void> {
+  await postTelegram(chatId, text, {
+    keyboard: [[{ text: "📱 Share my number", request_contact: true }]],
+    resize_keyboard: true,
+    one_time_keyboard: true,
+  });
 }
 
 async function deleteOne(chatId: string, messageId: number): Promise<void> {

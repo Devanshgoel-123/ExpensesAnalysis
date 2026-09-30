@@ -178,6 +178,22 @@ export function createApiClient(token: string) {
         ...auth,
       }),
 
+    requestTelegramPhone: (phone: string) =>
+      requestJson<TelegramStatus>("/api/telegram/phone", {
+        method: "POST",
+        ...auth,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      }),
+
+    confirmTelegramPhone: (code: string) =>
+      requestJson<TelegramStatus>("/api/telegram/verify", {
+        method: "POST",
+        ...auth,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      }),
+
     listProviders: () =>
       requestJson<{ providers: Provider[] }>("/api/providers", auth),
 

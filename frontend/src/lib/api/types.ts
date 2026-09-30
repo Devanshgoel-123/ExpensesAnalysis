@@ -66,10 +66,19 @@ export interface Provider {
   isGlobal: boolean;
 }
 
+export type TelegramVerifyState = {
+  phone: string;
+  codeSent: boolean;
+  expiresAt: string | null;
+  botUrl: string | null;
+};
+
 export type TelegramStatus = {
   configured: boolean;
   linked: boolean;
   botUsername: string | null;
+  phone: string | null;
+  verify: TelegramVerifyState | null;
   deepLink?: string | null;
   startCommand?: string | null;
 };

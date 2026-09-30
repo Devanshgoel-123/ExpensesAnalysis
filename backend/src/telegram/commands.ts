@@ -10,6 +10,7 @@ export const TELEGRAM_HELP = [
   "/sync — pull new bank mail from Gmail",
   "/scan — same as /sync",
   "/statement — send a PDF statement in this chat",
+  "/cancel — drop a statement that is waiting for a password",
   "/unlink — disconnect this chat",
   "/clear — clear this chat; expenses stay saved",
   "When I ask about a new payment, reply with a category.",
@@ -27,6 +28,7 @@ export type TelegramCommand =
   | { kind: "gmail" }
   | { kind: "sync"; password: string }
   | { kind: "statement" }
+  | { kind: "cancel" }
   | { kind: "clear" }
   | { kind: "unknown"; name: string };
 
@@ -96,6 +98,8 @@ export function parseTelegramCommand(text: string): TelegramCommand | null {
       return { kind: "sync", password: command.rest };
     case "statement":
       return { kind: "statement" };
+    case "cancel":
+      return { kind: "cancel" };
     case "clear":
       return { kind: "clear" };
     default:

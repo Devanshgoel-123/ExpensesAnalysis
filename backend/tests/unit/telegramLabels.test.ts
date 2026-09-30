@@ -56,7 +56,7 @@ describe("category gaps", () => {
       gap: { kind: "category" },
       remaining: 1,
     });
-    assert.match(text, /1 payment needs a label/);
+    assert.match(text, /1 payment from today needs a label/);
     assert.match(text, /₹184/);
     assert.match(text, /26 Sep/);
     assert.match(text, /Zepto/);

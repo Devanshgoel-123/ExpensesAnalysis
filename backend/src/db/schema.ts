@@ -34,6 +34,14 @@ export const users = pgTable(
     telegramPendingFileName: text("telegram_pending_file_name"),
     /** Last unsolicited category ask. The next one waits six hours, and never 02:00–10:00 IST. */
     telegramCategoryPingedAt: timestamp("telegram_category_pinged_at", { withTimezone: true }),
+    /** Verified mobile number, digits with country code. Set only after the Telegram code matches. */
+    phoneE164: text("phone_e164"),
+    telegramPhonePending: text("telegram_phone_pending"),
+    telegramPhoneCodeHash: text("telegram_phone_code_hash"),
+    telegramPhoneCodeExpires: timestamp("telegram_phone_code_expires", { withTimezone: true }),
+    telegramPhoneChatId: text("telegram_phone_chat_id"),
+    telegramPhoneAttempts: integer("telegram_phone_attempts").notNull().default(0),
+    telegramPhoneSentAt: timestamp("telegram_phone_sent_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
@@ -318,6 +326,14 @@ export const poolingRuns = pgTable(
     index("pooling_runs_status_idx").on(t.status),
   ],
 );
+
+/** A Telegram account that shared its own number via the bot's contact button. */
+export const telegramPhoneChats = pgTable("telegram_phone_chats", {
+  phoneE164: text("phone_e164").primaryKey(),
+  chatId: text("chat_id").notNull(),
+  telegramUserId: text("telegram_user_id").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const telegramPrompts = pgTable(
   "telegram_prompts",

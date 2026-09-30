@@ -309,7 +309,7 @@ async function main() {
     {
       importId: imp.id,
       accountId: account.id,
-      date: "2026-09-26",
+      date: "2026-09-30",
       time: null,
       description: "UPI-TEA",
       amount: 55,
@@ -328,7 +328,7 @@ async function main() {
   ]);
   await notifyMailDebits(registered.user.id, tgInsert.ids, tgSend);
   await sendDueCategoryPrompts(new Date("2026-09-30T11:00:00+05:30"), tgSend);
-  if (!tgSent.some((line) => /need a label/.test(line))) {
+  if (!tgSent.some((line) => /needs a label/.test(line))) {
     throw new Error(`telegram prompt missing: ${tgSent.join(" | ")}`);
   }
   await handleTelegramUpdate(

@@ -22,6 +22,8 @@ import type {
   ProviderRow,
   Store,
   ClearedUserRecords,
+  TelegramPhoneChallenge,
+  TelegramPhoneChatRow,
   TelegramPromptRow,
   TelegramPromptStatus,
   NewStatementLineInput,
@@ -41,6 +43,13 @@ const mapUser = (r: typeof s.users.$inferSelect): UserRow => ({
   telegramPendingFileId: r.telegramPendingFileId ?? null,
   telegramPendingFileName: r.telegramPendingFileName ?? null,
   telegramCategoryPingedAt: r.telegramCategoryPingedAt ? iso(r.telegramCategoryPingedAt) : null,
+  phoneE164: r.phoneE164 ?? null,
+  telegramPhonePending: r.telegramPhonePending ?? null,
+  telegramPhoneCodeHash: r.telegramPhoneCodeHash ?? null,
+  telegramPhoneCodeExpires: r.telegramPhoneCodeExpires ? iso(r.telegramPhoneCodeExpires) : null,
+  telegramPhoneChatId: r.telegramPhoneChatId ?? null,
+  telegramPhoneAttempts: r.telegramPhoneAttempts ?? 0,
+  telegramPhoneSentAt: r.telegramPhoneSentAt ? iso(r.telegramPhoneSentAt) : null,
   createdAt: iso(r.createdAt),
   deletedAt: r.deletedAt ? iso(r.deletedAt) : null,
 });
@@ -635,6 +644,92 @@ export class PostgresStore implements Store {
       .returning();
     return r ? mapUser(r) : null;
   }
+  async findUserByPhone(phone: string) {
+    const [r] = await this.db
+      .select()
+      .from(s.users)
+      .where(and(eq(s.users.phoneE164, phone), isNull(s.users.deletedAt)))
+      .limit(1);
+    return r ? mapUser(r) : null;
+  }
+  async findUserByPendingPhone(phone: string) {
+    const [r] = await this.db
+      .select()
+      .from(s.users)
+      .where(and(eq(s.users.telegramPhonePending, phone), isNull(s.users.deletedAt)))
+      .limit(1);
+    return r ? mapUser(r) : null;
+  }
+  async setTelegramPhoneChallenge(userId: string, challenge: TelegramPhoneChallenge | null) {
+    const [r] = await this.db
+      .update(s.users)
+      .set({
+        telegramPhonePending: challenge?.phone ?? null,
+        telegramPhoneCodeHash: challenge?.codeHash ?? null,
+        telegramPhoneCodeExpires: challenge?.expiresAt ? new Date(challenge.expiresAt) : null,
+        telegramPhoneChatId: challenge?.chatId ?? null,
+        telegramPhoneAttempts: challenge?.attempts ?? 0,
+        telegramPhoneSentAt: challenge?.sentAt ? new Date(challenge.sentAt) : null,
+      })
+      .where(and(eq(s.users.id, userId), isNull(s.users.deletedAt)))
+      .returning();
+    return r ? mapUser(r) : null;
+  }
+  async recordTelegramPhoneAttempt(userId: string) {
+    const [r] = await this.db
+      .update(s.users)
+      .set({ telegramPhoneAttempts: sql`${s.users.telegramPhoneAttempts} + 1` })
+      .where(and(eq(s.users.id, userId), isNull(s.users.deletedAt)))
+      .returning();
+    return r ? mapUser(r) : null;
+  }
+  async setUserPhone(userId: string, phone: string | null) {
+    const [r] = await this.db
+      .update(s.users)
+      .set({ phoneE164: phone })
+      .where(and(eq(s.users.id, userId), isNull(s.users.deletedAt)))
+      .returning();
+    return r ? mapUser(r) : null;
+  }
+  async upsertTelegramPhoneChat(input: {
+    phoneE164: string;
+    chatId: string;
+    telegramUserId: string;
+  }) {
+    await this.db
+      .delete(s.telegramPhoneChats)
+      .where(eq(s.telegramPhoneChats.chatId, input.chatId));
+    await this.db
+      .insert(s.telegramPhoneChats)
+      .values({
+        phoneE164: input.phoneE164,
+        chatId: input.chatId,
+        telegramUserId: input.telegramUserId,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: s.telegramPhoneChats.phoneE164,
+        set: {
+          chatId: input.chatId,
+          telegramUserId: input.telegramUserId,
+          updatedAt: new Date(),
+        },
+      });
+  }
+  async findTelegramPhoneChat(phone: string): Promise<TelegramPhoneChatRow | null> {
+    const [r] = await this.db
+      .select()
+      .from(s.telegramPhoneChats)
+      .where(eq(s.telegramPhoneChats.phoneE164, phone))
+      .limit(1);
+    if (!r) return null;
+    return {
+      phoneE164: r.phoneE164,
+      chatId: r.chatId,
+      telegramUserId: r.telegramUserId,
+      updatedAt: iso(r.updatedAt),
+    };
+  }
   async linkTelegramChat(userId: string, chatId: string) {
     const [r] = await this.db
       .update(s.users)
@@ -706,7 +801,17 @@ export class PostgresStore implements Store {
   async unlinkTelegram(userId: string) {
     await this.db
       .update(s.users)
-      .set({ telegramChatId: null, telegramLinkToken: null })
+      .set({
+        telegramChatId: null,
+        telegramLinkToken: null,
+        phoneE164: null,
+        telegramPhonePending: null,
+        telegramPhoneCodeHash: null,
+        telegramPhoneCodeExpires: null,
+        telegramPhoneChatId: null,
+        telegramPhoneAttempts: 0,
+        telegramPhoneSentAt: null,
+      })
       .where(eq(s.users.id, userId));
     await this.db
       .delete(s.telegramPrompts)

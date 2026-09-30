@@ -117,7 +117,10 @@ export function homeKeyboard(): InlineKeyboard {
         { text: "📄 Send statement", callback_data: "m:stmt" },
         { text: "🧹 Clear chat", callback_data: "m:clear" },
       ],
-      [{ text: "🔌 Disconnect", callback_data: "m:unlink" }],
+      [
+        { text: "👤 Profile", callback_data: "m:profile" },
+        { text: "🔌 Disconnect", callback_data: "m:unlink" },
+      ],
     ],
   };
 }
@@ -197,6 +200,7 @@ export type TelegramAction =
   | { kind: "limit-menu" }
   | { kind: "remind-menu" }
   | { kind: "statement" }
+  | { kind: "profile" }
   | { kind: "unlink" }
   | { kind: "clear-menu" }
   | { kind: "clear" }
@@ -218,6 +222,7 @@ const MENU: Record<string, MenuKind> = {
   limit: "limit-menu",
   remind: "remind-menu",
   stmt: "statement",
+  profile: "profile",
   unlink: "unlink",
   clear: "clear-menu",
 };

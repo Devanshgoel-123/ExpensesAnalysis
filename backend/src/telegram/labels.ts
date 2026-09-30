@@ -134,7 +134,9 @@ export function formatCategoryAsk(input: {
   remaining: number;
 }): string {
   const waiting =
-    input.remaining === 1 ? "1 payment needs a label" : `${input.remaining} payments need a label`;
+    input.remaining === 1
+      ? "1 payment from today needs a label"
+      : `${input.remaining} payments from today need a label`;
   const hint =
     input.gap.kind === "subcategory"
       ? `${categoryIcon(input.gap.parentSlug)} This is ${esc(input.gap.parentLabel)}. Pick the type 👇`

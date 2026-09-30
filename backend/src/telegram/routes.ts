@@ -1,9 +1,13 @@
 import { Router } from "express";
 import { requireAuth } from "../auth/service.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
+import { validate } from "../middleware/validate.js";
+import { telegramCodeBodySchema, telegramPhoneBodySchema } from "../validators/telegram.js";
 import {
+  confirmTelegramPhoneController,
   createTelegramLinkController,
   getTelegramStatusController,
+  requestTelegramPhoneController,
   telegramWebhookController,
   unlinkTelegramController,
 } from "./controller.js";
@@ -23,4 +27,14 @@ telegramRouter.use((req, res, next) => {
 telegramRouter.get("/status", asyncHandler(getTelegramStatusController));
 telegramRouter.post("/link", asyncHandler(createTelegramLinkController));
 telegramRouter.delete("/link", asyncHandler(unlinkTelegramController));
+telegramRouter.post(
+  "/phone",
+  validate(telegramPhoneBodySchema),
+  asyncHandler(requestTelegramPhoneController),
+);
+telegramRouter.post(
+  "/verify",
+  validate(telegramCodeBodySchema),
+  asyncHandler(confirmTelegramPhoneController),
+);
 telegramRouter.post("/webhook", asyncHandler(telegramWebhookController));

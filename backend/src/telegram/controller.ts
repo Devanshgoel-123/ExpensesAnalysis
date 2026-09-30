@@ -5,9 +5,11 @@ import { AppError } from "../errors/AppError.js";
 import { logger } from "../logger/index.js";
 import type { TelegramUpdate } from "./client.js";
 import {
+  confirmTelegramPhone,
   createTelegramLink,
   getTelegramStatus,
   handleTelegramUpdate,
+  requestTelegramPhone,
   telegramWebhookSecretMatches,
   unlinkTelegramAccount,
 } from "./service.js";
@@ -22,6 +24,16 @@ export const createTelegramLinkController: RequestHandler = async (req, res) => 
 
 export const unlinkTelegramController: RequestHandler = async (req, res) => {
   res.json(await unlinkTelegramAccount(req.user!.id));
+};
+
+export const requestTelegramPhoneController: RequestHandler = async (req, res) => {
+  const { phone } = req.body as { phone: string };
+  res.json(await requestTelegramPhone(req.user!.id, phone));
+};
+
+export const confirmTelegramPhoneController: RequestHandler = async (req, res) => {
+  const { code } = req.body as { code: string };
+  res.json(await confirmTelegramPhone(req.user!.id, code));
 };
 
 export const telegramWebhookController: RequestHandler = async (req, res) => {

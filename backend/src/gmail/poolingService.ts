@@ -76,7 +76,13 @@ function maybeLogProgress(input: {
   }
 }
 
-type ScanCounts = { scanned: number; imported: number; skipped: number };
+type ScanCounts = {
+  scanned: number;
+  imported: number;
+  skipped: number;
+  /** Gmail's estimate for the query currently being scanned. */
+  estimate?: number;
+};
 type ScanQueryResult = ScanCounts & { exhausted: boolean };
 
 const EMPTY_COUNTS: ScanCounts = { scanned: 0, imported: 0, skipped: 0 };
@@ -378,6 +384,7 @@ async function scanQuery(input: {
   let scanned = 0;
   let imported = 0;
   let skipped = 0;
+  let estimate: number | undefined;
   let stop = false;
   let exhausted = false;
 
@@ -395,6 +402,9 @@ async function scanQuery(input: {
       resultSizeEstimate: page.resultSizeEstimate,
       pageToken: page.nextPageToken ?? undefined,
     });
+    if (estimate == null && page.resultSizeEstimate && page.resultSizeEstimate > 0) {
+      estimate = page.resultSizeEstimate;
+    }
     let finishedPage = true;
     for (const messageId of page.ids) {
       if (scanned >= input.maxMessages) {
@@ -439,7 +449,7 @@ async function scanQuery(input: {
       });
 
       if (input.onTick) {
-        const keepGoing = await input.onTick({ scanned, imported, skipped });
+        const keepGoing = await input.onTick({ scanned, imported, skipped, estimate });
         if (!keepGoing) {
           stop = true;
           finishedPage = false;
@@ -616,7 +626,7 @@ export async function runPoolingSync(input: {
     statements: { ...EMPTY_COUNTS },
   };
   let lastPushedBatch = 0;
-  let lastPersistMs = Date.now();
+  let lastPersistMs = 0;
   let aborted = false;
 
   const totals = (): ScanCounts => ({
@@ -635,35 +645,32 @@ export async function runPoolingSync(input: {
     const batch = Math.floor(counts.imported / SCAN_SUCCESS_BATCH);
     const hitBatch =
       counts.imported > 0 && counts.imported % SCAN_SUCCESS_BATCH === 0;
-    const hitHeartbeat = counts.scanned > 0 && counts.scanned % 10 === 0;
-    const duePersist = Date.now() - lastPersistMs >= 60_000;
-    if (hitBatch || hitHeartbeat || duePersist) {
-      const store = await getStore();
-      const recent = await store.listPoolingRuns(input.userId, 5);
-      const current = recent.find((row) => row.id === run.id);
-      if (!current || current.status !== PoolingRunStatus.Running) {
-        aborted = true;
-        return false;
-      }
-      const progressAt = new Date().toISOString();
-      run.meta = { ...run.meta, progressAt };
-      await store.updatePoolingRun(run.id, {
-        scanned: counts.scanned,
+    if (Date.now() - lastPersistMs < 2_000) return stillActive();
+    const store = await getStore();
+    const recent = await store.listPoolingRuns(input.userId, 5);
+    const current = recent.find((row) => row.id === run.id);
+    if (!current || current.status !== PoolingRunStatus.Running) {
+      aborted = true;
+      return false;
+    }
+    const progressAt = new Date().toISOString();
+    run.meta = { ...run.meta, progressAt };
+    await store.updatePoolingRun(run.id, {
+      scanned: counts.scanned,
+      imported: counts.imported,
+      skipped: counts.skipped,
+      meta: run.meta,
+    });
+    lastPersistMs = Date.now();
+    if (hitBatch && batch > lastPushedBatch) {
+      lastPushedBatch = batch;
+      gmailLog.batchPushed({
+        userId: input.userId,
         imported: counts.imported,
+        scanned: counts.scanned,
         skipped: counts.skipped,
-        meta: run.meta,
+        runId: run.id,
       });
-      lastPersistMs = Date.now();
-      if (hitBatch && batch > lastPushedBatch) {
-        lastPushedBatch = batch;
-        gmailLog.batchPushed({
-          userId: input.userId,
-          imported: counts.imported,
-          scanned: counts.scanned,
-          skipped: counts.skipped,
-          runId: run.id,
-        });
-      }
     }
     return stillActive();
   }
@@ -715,8 +722,10 @@ export async function runPoolingSync(input: {
     // Older mail first. Gmail lists newest first, so one query across the
     // whole window only ever stored the latest mail and stopped on 15 Aug.
     let alertExhausted = true;
+    let listedBeforeWindow = 0;
     for (const window of alertWindows) {
       const alertBase = { ...parts.alerts };
+      let windowListed = 0;
       const alertScan = await scanQuery({
         userId: input.userId,
         accountId: input.account.id,
@@ -728,6 +737,14 @@ export async function runPoolingSync(input: {
         mode: PoolingScanMode.Alert,
         runId: run.id,
         onTick: async (local) => {
+          if (local.estimate && local.estimate > windowListed) {
+            windowListed = local.estimate;
+            const next = listedBeforeWindow + windowListed;
+            if (run.meta.estimate !== next) {
+              run.meta = { ...run.meta, estimate: next };
+              lastPersistMs = 0;
+            }
+          }
           parts.alerts = {
             scanned: alertBase.scanned + local.scanned,
             imported: alertBase.imported + local.imported,
@@ -736,6 +753,7 @@ export async function runPoolingSync(input: {
           return checkpoint();
         },
       });
+      listedBeforeWindow += windowListed;
       if (!alertScan.exhausted) alertExhausted = false;
       if (!stillActive() || !alertScan.exhausted) break;
     }
@@ -761,7 +779,18 @@ export async function runPoolingSync(input: {
       mode: PoolingScanMode.Statement,
       runId: run.id,
       onTick: async (local) => {
-        parts.statements = local;
+        if (local.estimate && local.estimate > 0) {
+          const next = listedBeforeWindow + local.estimate;
+          if (run.meta.estimate !== next) {
+            run.meta = { ...run.meta, estimate: next };
+            lastPersistMs = 0;
+          }
+        }
+        parts.statements = {
+          scanned: local.scanned,
+          imported: local.imported,
+          skipped: local.skipped,
+        };
         return checkpoint();
       },
     });

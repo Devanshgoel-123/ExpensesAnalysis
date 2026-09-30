@@ -5,7 +5,7 @@ import { getStore } from "../db/index.js";
 import { BACKFILL_DEFAULT_MAX_MESSAGES } from "../constants/index.js";
 import { ClassificationSource, ImportSource, TxType } from "../enums/index.js";
 import { processPdfImport } from "../imports/service.js";
-import { enablePoolingForUser, getGmailConnectUrl, syncGmailForUser } from "../gmail/service.js";
+import { getGmailConnectUrl, runGmailBackfillForUser } from "../gmail/service.js";
 import { AppError } from "../errors/AppError.js";
 import { logger } from "../logger/index.js";
 import { parseCategoryReply } from "./categories.js";
@@ -32,13 +32,17 @@ import {
 } from "./labels.js";
 import {
   answerTelegramCallback,
+  askTelegramContact,
   clearTelegramChat,
   clearTelegramReplyKeyboard,
   downloadTelegramFile,
+  editTelegramMessage,
   registerTelegramCommands,
   sendTelegramMessage,
+  telegramProgressPublisher,
   type TelegramCallbackQuery,
   type TelegramChatClearer,
+  type TelegramMessage,
   type TelegramSender,
   type TelegramUpdate,
 } from "./client.js";
@@ -55,8 +59,33 @@ import {
   remindKeyboard,
 } from "./ui.js";
 import { TELEGRAM_DELETE_WINDOW_HOURS } from "../constants/telegram.js";
+import {
+  contactIsOwn,
+  generateTelegramCode,
+  hashTelegramCode,
+  maskPhone,
+  normalizePhone,
+  TELEGRAM_CODE_MAX_ATTEMPTS,
+  TELEGRAM_CODE_RESEND_MS,
+  TELEGRAM_CODE_TTL_MS,
+  telegramCodeMatches,
+} from "./phone.js";
+import { followGmailSync, syncProgressText, type SyncRunSnapshot } from "./syncWatch.js";
+import type { InlineKeyboard } from "./ui.js";
+import type { TelegramPhoneChallenge, UserRow } from "../db/types.js";
 
-const NOT_LINKED = "🔗 This chat is not linked. Open Settings in Ledgerline and tap Connect Telegram.";
+const NOT_LINKED =
+  "🔗 This chat isn't linked. Enter your Telegram number in Ledgerline Settings, then send /start and tap Share my number.";
+
+const SHARE_NUMBER = [
+  "📱 <b>Share the mobile number on this Telegram account.</b>",
+  "",
+  "Enter that same number in Ledgerline Settings first.",
+  "Tap the button below — Telegram confirms it is yours, and I'll send a code in this chat.",
+  "Enter the code in Settings. A typed number alone can't link an account.",
+].join("\n");
+
+const activeSyncs = new Set<string>();
 
 const CLEAR_PROMPT = [
   "🧹 <b>Clear this chat?</b>",
@@ -77,10 +106,19 @@ function gmailLinkMessage(url: string): { text: string; keyboard: ReturnType<typ
   };
 }
 
+export type TelegramVerifyState = {
+  phone: string;
+  codeSent: boolean;
+  expiresAt: string | null;
+  botUrl: string | null;
+};
+
 export type TelegramStatus = {
   configured: boolean;
   linked: boolean;
   botUsername: string | null;
+  phone: string | null;
+  verify: TelegramVerifyState | null;
   deepLink?: string | null;
   startCommand?: string | null;
 };
@@ -116,23 +154,40 @@ export function telegramWebhookSecretMatches(
   return header === expected;
 }
 
-function publicStatus(
-  linked: boolean,
-  extras: Pick<TelegramStatus, "deepLink" | "startCommand"> = {},
-): TelegramStatus {
+function verifyState(user: UserRow): TelegramVerifyState | null {
+  if (user.telegramChatId || !user.telegramPhonePending) return null;
+  const expiresAt = user.telegramPhoneCodeExpires;
+  const expired = expiresAt != null && new Date(expiresAt).getTime() <= Date.now();
+  const codeSent = Boolean(user.telegramPhoneCodeHash && user.telegramPhoneChatId && !expired);
   return {
-    configured: config.telegram.enabled,
-    linked,
-    botUsername: config.telegram.botUsername || null,
-    ...extras,
+    phone: maskPhone(user.telegramPhonePending),
+    codeSent,
+    expiresAt: codeSent ? expiresAt : null,
+    botUrl: buildTelegramDeepLink(config.telegram.botUsername, "verify"),
   };
 }
 
-export async function getTelegramStatus(userId: string): Promise<TelegramStatus> {
+function publicStatus(user: UserRow): TelegramStatus {
+  const verify = verifyState(user);
+  return {
+    configured: config.telegram.enabled,
+    linked: Boolean(user.telegramChatId),
+    botUsername: config.telegram.botUsername || null,
+    phone: user.phoneE164 ? maskPhone(user.phoneE164) : null,
+    verify,
+    ...(verify?.botUrl ? { deepLink: verify.botUrl, startCommand: "/start verify" } : {}),
+  };
+}
+
+async function loadUser(userId: string): Promise<UserRow> {
   const store = await getStore();
   const user = await store.findUserById(userId);
   if (!user) throw AppError.notFound("User not found");
-  return publicStatus(Boolean(user.telegramChatId));
+  return user;
+}
+
+export async function getTelegramStatus(userId: string): Promise<TelegramStatus> {
+  return publicStatus(await loadUser(userId));
 }
 
 export async function createTelegramLink(userId: string): Promise<TelegramStatus> {
@@ -140,27 +195,206 @@ export async function createTelegramLink(userId: string): Promise<TelegramStatus
     throw AppError.serviceUnavailable("Telegram is not configured");
   }
   const store = await getStore();
-  const user = await store.findUserById(userId);
-  if (!user) throw AppError.notFound("User not found");
-  if (user.telegramChatId) {
-    return publicStatus(true);
-  }
+  const user = await loadUser(userId);
+  if (user.telegramChatId) return publicStatus(user);
   const token = generateTelegramLinkToken();
-  await store.setTelegramLinkToken(userId, token);
+  const updated = await store.setTelegramLinkToken(userId, token);
   await store.audit(userId, "telegram.link_created", {});
-  return publicStatus(false, {
+  return {
+    ...publicStatus(updated ?? user),
     deepLink: buildTelegramDeepLink(config.telegram.botUsername, token),
     startCommand: `/start ${token}`,
-  });
+  };
 }
 
-export async function unlinkTelegramAccount(
-  userId: string,
-): Promise<TelegramStatus> {
+export async function unlinkTelegramAccount(userId: string): Promise<TelegramStatus> {
   const store = await getStore();
   await store.unlinkTelegram(userId);
   await store.audit(userId, "telegram.unlinked", { source: "settings" });
-  return publicStatus(false);
+  return publicStatus(await loadUser(userId));
+}
+
+function codeMessage(code: string): string {
+  return [
+    "🔐 <b>Ledgerline code</b>",
+    "",
+    `<code>${code}</code>`,
+    "",
+    "Enter this in Settings within 10 minutes.",
+    "If you didn't ask to link this chat, ignore this message.",
+  ].join("\n");
+}
+
+async function deliverCode(
+  userId: string,
+  phone: string,
+  chatId: string,
+  send: TelegramSender,
+): Promise<UserRow | null> {
+  const store = await getStore();
+  const code = generateTelegramCode();
+  const now = new Date().toISOString();
+  const challenge: TelegramPhoneChallenge = {
+    phone,
+    codeHash: hashTelegramCode(userId, code),
+    expiresAt: new Date(Date.now() + TELEGRAM_CODE_TTL_MS).toISOString(),
+    chatId,
+    attempts: 0,
+    sentAt: now,
+  };
+  const updated = await store.setTelegramPhoneChallenge(userId, challenge);
+  await send(chatId, codeMessage(code), { keyboard: homeKeyboard() });
+  await store.audit(userId, "telegram.code_sent", { phone: maskPhone(phone) });
+  return updated;
+}
+
+async function askShareNumber(chatId: string, send: TelegramSender): Promise<void> {
+  if (send === sendTelegramMessage) {
+    await askTelegramContact(chatId, SHARE_NUMBER);
+    return;
+  }
+  await send(chatId, SHARE_NUMBER);
+}
+
+export async function requestTelegramPhone(
+  userId: string,
+  rawPhone: string,
+  send: TelegramSender = sendTelegramMessage,
+): Promise<TelegramStatus> {
+  if (!config.telegram.enabled && send === sendTelegramMessage) {
+    throw AppError.serviceUnavailable("Telegram is not configured");
+  }
+  const phone = normalizePhone(rawPhone);
+  if (!phone) {
+    throw AppError.badRequest("Enter a mobile number. Indian numbers can be 10 digits.");
+  }
+  const store = await getStore();
+  const user = await loadUser(userId);
+  if (user.telegramChatId) return publicStatus(user);
+  const owner = await store.findUserByPhone(phone);
+  if (owner && owner.id !== userId) {
+    throw AppError.conflict("That number is already linked to another Ledgerline account.");
+  }
+  const pendingOwner = await store.findUserByPendingPhone(phone);
+  if (pendingOwner && pendingOwner.id !== userId) {
+    throw AppError.conflict("That number is already waiting to be verified on another account.");
+  }
+  const sentAt = user.telegramPhoneSentAt ? new Date(user.telegramPhoneSentAt).getTime() : 0;
+  const expires = user.telegramPhoneCodeExpires
+    ? new Date(user.telegramPhoneCodeExpires).getTime()
+    : 0;
+  const codeStillFresh =
+    user.telegramPhonePending === phone &&
+    Boolean(user.telegramPhoneCodeHash) &&
+    expires > Date.now() &&
+    Date.now() - sentAt < TELEGRAM_CODE_RESEND_MS &&
+    Boolean(user.telegramPhoneChatId);
+  if (codeStillFresh) return publicStatus(user);
+
+  const known = await store.findTelegramPhoneChat(phone);
+  if (!known) {
+    await store.setTelegramPhoneChallenge(userId, {
+      phone,
+      codeHash: null,
+      expiresAt: null,
+      chatId: null,
+      attempts: 0,
+      sentAt: null,
+    });
+    await store.audit(userId, "telegram.phone_requested", { phone: maskPhone(phone) });
+    return publicStatus(await loadUser(userId));
+  }
+  const chatOwner = await store.findUserByTelegramChatId(known.chatId);
+  if (chatOwner && chatOwner.id !== userId) {
+    throw AppError.conflict("That Telegram account is already linked to another Ledgerline user.");
+  }
+  await deliverCode(userId, phone, known.chatId, send);
+  return publicStatus(await loadUser(userId));
+}
+
+export async function confirmTelegramPhone(userId: string, rawCode: string): Promise<TelegramStatus> {
+  const code = rawCode.replace(/\D/g, "");
+  if (!/^\d{6}$/.test(code)) {
+    throw AppError.badRequest("Enter the 6-digit code from Telegram.");
+  }
+  const store = await getStore();
+  const user = await loadUser(userId);
+  if (user.telegramChatId) return publicStatus(user);
+  if (!user.telegramPhonePending) {
+    throw AppError.badRequest("Enter your Telegram number first.");
+  }
+  if (!user.telegramPhoneChatId || !user.telegramPhoneCodeHash || !user.telegramPhoneCodeExpires) {
+    throw AppError.badRequest("Share your number with the Telegram bot first. The code is sent in that chat.");
+  }
+  if (new Date(user.telegramPhoneCodeExpires).getTime() <= Date.now()) {
+    throw AppError.badRequest("That code expired. Request a new one.");
+  }
+  if (user.telegramPhoneAttempts >= TELEGRAM_CODE_MAX_ATTEMPTS) {
+    throw AppError.badRequest("Too many tries. Request a new code.");
+  }
+  if (!telegramCodeMatches(userId, code, user.telegramPhoneCodeHash)) {
+    await store.recordTelegramPhoneAttempt(userId);
+    throw AppError.badRequest("That code doesn't match.");
+  }
+  const phone = user.telegramPhonePending;
+  const chatId = user.telegramPhoneChatId;
+  const taken = await store.findUserByTelegramChatId(chatId);
+  if (taken && taken.id !== userId) {
+    throw AppError.conflict("This Telegram is already linked to another Ledgerline account.");
+  }
+  const phoneOwner = await store.findUserByPhone(phone);
+  if (phoneOwner && phoneOwner.id !== userId) {
+    throw AppError.conflict("That number is already linked to another Ledgerline account.");
+  }
+  await store.setUserPhone(userId, phone);
+  await store.linkTelegramChat(userId, chatId);
+  const done = await store.setTelegramPhoneChallenge(userId, null);
+  await store.audit(userId, "telegram.linked", { phone: maskPhone(phone) });
+  return publicStatus(done ?? (await loadUser(userId)));
+}
+
+async function handleSharedContact(
+  chatId: string,
+  message: TelegramMessage,
+  send: TelegramSender,
+): Promise<void> {
+  const contact = message.contact;
+  if (!contact) return;
+  if (!contactIsOwn(message.from?.id, contact.user_id)) {
+    await send(
+      chatId,
+      "That contact isn't this account's own number. Tap Share my number so Telegram confirms it.",
+    );
+    await askShareNumber(chatId, send);
+    return;
+  }
+  const phone = normalizePhone(contact.phone_number);
+  if (!phone || message.from?.id == null) {
+    await send(chatId, "Couldn't read that number. Tap Share my number again.");
+    return;
+  }
+  const store = await getStore();
+  await store.upsertTelegramPhoneChat({
+    phoneE164: phone,
+    chatId,
+    telegramUserId: String(message.from.id),
+  });
+  const already = await store.findUserByTelegramChatId(chatId);
+  if (already) {
+    await send(chatId, "🎉 This chat is already linked to your Ledgerline account.", {
+      keyboard: homeKeyboard(),
+    });
+    return;
+  }
+  const waiting = await store.findUserByPendingPhone(phone);
+  if (!waiting) {
+    await send(
+      chatId,
+      "No Ledgerline account is waiting for this number. Enter it in Settings, then share it here again.",
+    );
+    return;
+  }
+  await deliverCode(waiting.id, phone, chatId, send);
 }
 
 async function catalogFor(userId: string): Promise<CatalogCategory[]> {
@@ -168,11 +402,13 @@ async function catalogFor(userId: string): Promise<CatalogCategory[]> {
   return toCatalog(await store.listCategories(userId));
 }
 
-async function currentAsk(userId: string, chatId: string) {
+async function currentAsk(userId: string, chatId: string, now = new Date()) {
   const store = await getStore();
   const catalog = await catalogFor(userId);
-  const open = (await store.listTransactions(userId))
-    .filter((row) => categoryGap(row.categorySlug, catalog))
+  const today = istClock(now).date;
+  const open = (await store.listTransactions(userId, { from: today, to: today })).filter((row) =>
+    categoryGap(row.categorySlug, catalog),
+  )
     .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
   const tx = open[0];
   const gap = tx ? categoryGap(tx.categorySlug, catalog) : null;
@@ -193,8 +429,9 @@ async function sendNextPrompt(
   chatId: string,
   userId: string,
   send: TelegramSender,
+  now = new Date(),
 ): Promise<boolean> {
-  const ask = await currentAsk(userId, chatId);
+  const ask = await currentAsk(userId, chatId, now);
   if (!ask) return false;
   await send(
     chatId,
@@ -215,12 +452,20 @@ async function handleStart(
   token: string | null,
   send: TelegramSender,
 ): Promise<void> {
-  if (send === sendTelegramMessage) await clearTelegramReplyKeyboard(chatId);
-  if (!token) {
-    await send(chatId, "👋 Open Settings in Ledgerline and tap Connect Telegram.");
+  const store = await getStore();
+  if (!token || token === "verify") {
+    const linked = await store.findUserByTelegramChatId(chatId);
+    if (linked) {
+      if (send === sendTelegramMessage) await clearTelegramReplyKeyboard(chatId);
+      await send(chatId, "🎉 This chat is already linked to your Ledgerline account.", {
+        keyboard: homeKeyboard(),
+      });
+      return;
+    }
+    await askShareNumber(chatId, send);
     return;
   }
-  const store = await getStore();
+  if (send === sendTelegramMessage) await clearTelegramReplyKeyboard(chatId);
   const user = await store.findUserByTelegramLinkToken(token);
   if (!user) {
     await send(chatId, "⌛ That link expired. Generate a new one in Settings.");
@@ -341,60 +586,105 @@ async function saveCategoryChoice(
   await sendNextPrompt(chatId, userId, send);
 }
 
+/**
+ * Button taps rewrite the message that was tapped. A new bubble would paste the
+ * whole menu underneath every reply.
+ */
+async function present(
+  chatId: string,
+  text: string,
+  send: TelegramSender,
+  keyboard: InlineKeyboard | undefined,
+  messageId?: number,
+): Promise<void> {
+  if (messageId != null && send === sendTelegramMessage) {
+    const edited = await editTelegramMessage(chatId, messageId, text, keyboard);
+    if (edited) return;
+  }
+  await send(chatId, text, keyboard ? { keyboard } : undefined);
+}
+
+async function formatProfile(userId: string): Promise<string> {
+  const store = await getStore();
+  const user = await store.findUserById(userId);
+  const gmail = await store.getGmailConnection(userId);
+  const gmailLine =
+    gmail && !gmail.disconnectedAt ? esc(gmail.googleEmail) : "Not connected";
+  const limit =
+    user?.dailySpendLimit != null
+      ? `₹${user.dailySpendLimit.toLocaleString("en-IN")}`
+      : "None";
+  const phone = user?.phoneE164 ? maskPhone(user.phoneE164) : "Not linked";
+  const reminder =
+    user?.telegramRemindMinute != null
+      ? formatReminderClock(user.telegramRemindMinute)
+      : "Off";
+  return [
+    "👤 <b>Profile</b>",
+    "",
+    `Name  ${esc(user?.displayName?.trim() || "—")}`,
+    `Email  ${esc(user?.email || "—")}`,
+    `Phone  ${phone}`,
+    `Gmail  ${gmailLine}`,
+    `Daily limit  ${limit}`,
+    `Reminder  ${reminder} IST`,
+  ].join("\n");
+}
+
 async function handleCallback(
   query: TelegramCallbackQuery,
   send: TelegramSender,
   clearChat: TelegramChatClearer,
 ): Promise<void> {
-  if (send === sendTelegramMessage) await answerTelegramCallback(query.id);
+  if (send === sendTelegramMessage) void answerTelegramCallback(query.id);
   const chatId = String(query.message?.chat.id ?? query.from.id);
   if (query.message && query.message.chat.type !== "private") return;
   const action = parseTelegramAction(query.data ?? "");
+  const messageId = query.message?.message_id;
   if (!action) {
-    await send(chatId, "⌛ That button expired.", { keyboard: homeKeyboard() });
+    await present(chatId, "⌛ That button expired.", send, homeKeyboard(), messageId);
     return;
   }
   if (action.kind === "clear") {
     await handleClear(chatId, query.message?.message_id, send, clearChat);
     return;
   }
-  await handleAction(chatId, action, send);
+  await handleAction(chatId, action, send, messageId);
 }
 
 const STATEMENT_HINT =
-  "📄 <b>Send a statement</b>\nAttach the PDF here. Put the password in the caption, or reply with it next.";
+  "📄 <b>Send a statement</b>\nAttach the PDF here. Put the password in the caption, or reply with it next.\nThe password opens that file and is not saved. /cancel drops it.";
 
 async function handleAction(
   chatId: string,
   action: Exclude<NonNullable<ReturnType<typeof parseTelegramAction>>, { kind: "clear" }>,
   send: TelegramSender,
+  messageId?: number,
 ): Promise<void> {
+  const show = (text: string, keyboard?: InlineKeyboard) =>
+    present(chatId, text, send, keyboard, messageId);
   if (action.kind === "home") {
-    await send(chatId, "🏠 <b>Ledgerline</b>\nWhat would you like to see?", { keyboard: homeKeyboard() });
+    await show("🏠 <b>Ledgerline</b>\nWhat would you like to see?", homeKeyboard());
     return;
   }
   if (action.kind === "spent-menu") {
-    await send(chatId, "🏷 <b>Which category?</b>\nI'll show what you spent on it this month.", {
-      keyboard: categoryKeyboard(),
-    });
+    await show("🏷 <b>Which category?</b>\nI'll show what you spent on it this month.", categoryKeyboard());
     return;
   }
   if (action.kind === "limit-menu") {
-    await send(chatId, "🎯 <b>Daily limit</b>\nI'll warn you when a day goes over it.", {
-      keyboard: limitKeyboard(),
-    });
+    await show("🎯 <b>Daily limit</b>\nI'll warn you when a day goes over it.", limitKeyboard());
     return;
   }
   if (action.kind === "remind-menu") {
-    await send(chatId, "⏰ <b>Daily status</b>\nPick a time, India time.", { keyboard: remindKeyboard() });
+    await show("⏰ <b>Daily status</b>\nPick a time, India time.", remindKeyboard());
     return;
   }
   if (action.kind === "statement") {
-    await send(chatId, STATEMENT_HINT, { keyboard: homeKeyboard() });
+    await show(STATEMENT_HINT, homeKeyboard());
     return;
   }
   if (action.kind === "clear-menu") {
-    await send(chatId, CLEAR_PROMPT, { keyboard: clearConfirmKeyboard() });
+    await show(CLEAR_PROMPT, clearConfirmKeyboard());
     return;
   }
   if (action.kind === "unlink") {
@@ -408,18 +698,22 @@ async function handleAction(
   const user = await requireLinked(chatId, send);
   if (!user) return;
   const store = await getStore();
+  if (action.kind === "profile") {
+    await show(await formatProfile(user.id), homeKeyboard());
+    return;
+  }
   if (action.kind === "set-limit") {
     await store.updateUserPreferences(user.id, { dailySpendLimit: action.amount });
-    await send(chatId, limitSetText(action.amount), { keyboard: homeKeyboard() });
+    await show(limitSetText(action.amount), homeKeyboard());
     return;
   }
   if (action.kind === "set-remind") {
     await store.setTelegramReminder(user.id, action.minute);
-    await send(chatId, remindSetText(action.minute), { keyboard: homeKeyboard() });
+    await show(remindSetText(action.minute), homeKeyboard());
     return;
   }
   if (action.kind === "scan" || action.kind === "sync") {
-    await runGmailSync(chatId, user.id, "", send);
+    await runGmailSync(chatId, user.id, "", send, messageId);
     return;
   }
   if (action.kind === "gmail") {
@@ -433,7 +727,7 @@ async function handleAction(
       : action.kind === "month"
         ? formatMonth(snapshot)
         : formatStatus(snapshot);
-  await send(chatId, text, { keyboard: homeKeyboard() });
+  await show(text, homeKeyboard());
 }
 
 function limitSetText(amount: number | null): string {
@@ -476,6 +770,10 @@ export async function handleTelegramUpdate(
   const message = update.message;
   if (!message || message.chat.type !== "private") return;
   const chatId = String(message.chat.id);
+  if (message.contact) {
+    await handleSharedContact(chatId, message, send);
+    return;
+  }
   if (message.document) {
     await handleStatementDocument(chatId, message.document, message.caption ?? "", send, fetchFile);
     return;
@@ -551,7 +849,7 @@ async function handleStatementDocument(
       fileId: document.file_id,
       fileName: document.file_name?.trim() || "statement.pdf",
     });
-    await send(chatId, "📥 <b>Got the PDF.</b>\n🔑 Reply with the statement password.", {
+    await send(chatId, "📥 <b>Got the PDF.</b>\n🔑 Reply with the statement password. It is not saved. /cancel drops this file.", {
       keyboard: homeKeyboard(),
     });
     return;
@@ -616,8 +914,113 @@ async function importStatementFile(
       ].join("\n"),
       { keyboard: homeKeyboard() },
     );
+    const clock = istClock(new Date());
+    if (!isQuietHours(clock.minutes)) {
+      const asked = await sendNextPrompt(chatId, userId, send);
+      if (asked) await store.markTelegramCategoryPinged(userId, new Date().toISOString());
+    }
   } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (/password/i.test(message)) {
+      await store.setTelegramPendingFile(userId, { fileId, fileName });
+      await send(
+        chatId,
+        "🔑 That password didn't open the PDF. Reply with it again. Nothing was saved.",
+        { keyboard: homeKeyboard() },
+      );
+      return;
+    }
+    await store.setTelegramPendingFile(userId, null);
     await send(chatId, errorText(error, "Could not import that statement."), { keyboard: homeKeyboard() });
+  }
+}
+
+async function startMonthScan(userId: string, password: string): Promise<{ runId: string }> {
+  const store = await getStore();
+  if ((await store.listAccounts(userId)).length === 0) {
+    await store.getOrCreateAccount(userId, "hdfc");
+  }
+  const accounts = await store.listAccounts(userId);
+  const account = accounts.find((row) => row.poolingEnabled) ?? accounts[0];
+  if (!account || account.statementSenderEmails.length === 0) {
+    throw AppError.badRequest("Add a bank and its statement sender on Import, then sync again.");
+  }
+  if (!account.poolingEnabled) {
+    await store.setPoolingEnabled(userId, account.id, true);
+  }
+  const running = (await store.listPoolingRuns(userId, 5)).find((run) => run.status === "running");
+  if (running) return { runId: running.id };
+  const month = istClock(new Date()).date.slice(0, 7);
+  const started = await runGmailBackfillForUser(userId, {
+    month,
+    password,
+    maxMessages: BACKFILL_DEFAULT_MAX_MESSAGES,
+  });
+  return { runId: started.runId };
+}
+
+function toSnapshot(run: {
+  id: string;
+  status: string;
+  scanned: number;
+  imported: number;
+  skipped: number;
+  errorMessage: string | null;
+  meta?: Record<string, unknown>;
+}): SyncRunSnapshot {
+  const estimate = run.meta?.estimate;
+  return {
+    id: run.id,
+    status: run.status,
+    scanned: run.scanned,
+    imported: run.imported,
+    skipped: run.skipped,
+    errorMessage: run.errorMessage,
+    estimate: typeof estimate === "number" && estimate > 0 ? estimate : null,
+  };
+}
+
+async function finishGmailSync(
+  chatId: string,
+  userId: string,
+  password: string,
+  send: TelegramSender,
+  messageId?: number,
+): Promise<void> {
+  const publish = telegramProgressPublisher(chatId, send);
+  const say = async (text: string) => {
+    if (messageId != null) {
+      await present(chatId, text, send, homeKeyboard(), messageId);
+      return;
+    }
+    await publish(text);
+  };
+  try {
+    await say(syncProgressText({ status: "running", scanned: 0, imported: 0, skipped: 0, errorMessage: null }));
+    const started = await startMonthScan(userId, password);
+    const run = await followGmailSync({
+      publish: say,
+      announce: false,
+      read: async () => {
+        const store = await getStore();
+        const rows = await store.listPoolingRuns(userId, 5);
+        const current = rows.find((row) => row.id === started.runId);
+        return current ? toSnapshot(current) : null;
+      },
+    });
+    if (!run) return;
+    const snapshot = await loadSpendSnapshot(userId);
+    const clock = istClock(new Date());
+    const quiet = isQuietHours(clock.minutes)
+      ? "\n\n🌙 I'll ask about unlabeled payments after 10:00."
+      : "";
+    await say(`${syncProgressText(run)}\n\n${formatToday(snapshot)}${quiet}`);
+    if (run.status === "failed" || quiet) return;
+    const store = await getStore();
+    const asked = await sendNextPrompt(chatId, userId, send);
+    if (asked) await store.markTelegramCategoryPinged(userId, new Date().toISOString());
+  } catch (error) {
+    await say(errorText(error, "Could not sync Gmail."));
   }
 }
 
@@ -626,51 +1029,29 @@ async function runGmailSync(
   userId: string,
   password: string,
   send: TelegramSender,
+  messageId?: number,
 ): Promise<void> {
   const store = await getStore();
   const connection = await store.getGmailConnection(userId);
   if (!connection || connection.disconnectedAt) {
-    await send(chatId, "📧 Connect email first. Tap 📧 Connect email below.", { keyboard: homeKeyboard() });
+    await present(
+      chatId,
+      "📧 Connect email first. Tap 📧 Connect email below.",
+      send,
+      homeKeyboard(),
+      messageId,
+    );
     return;
   }
-  if ((await store.listAccounts(userId)).length === 0) {
-    await store.getOrCreateAccount(userId, "hdfc");
-  }
-  const pooling = (await store.listAccounts(userId)).some((account) => account.poolingEnabled);
-  let summary: string;
-  try {
-    if (!pooling || password) {
-      await enablePoolingForUser(userId, {
-        password,
-        maxMessages: BACKFILL_DEFAULT_MAX_MESSAGES,
-      });
-      summary = "🔄 <b>Gmail sync started.</b>";
-    } else {
-      const result = await syncGmailForUser(userId);
-      if (result.run.busy) {
-        await send(chatId, "⏳ A Gmail sync is already running.", { keyboard: homeKeyboard() });
-        return;
-      }
-      const imported = result.run.imported;
-      summary =
-        imported === 0
-          ? "✅ <b>Gmail synced.</b> No new mail."
-          : `✅ <b>Gmail synced.</b> ${imported} new message${imported === 1 ? "" : "s"}.`;
-    }
-  } catch (error) {
-    await send(chatId, errorText(error, "Could not sync Gmail."), { keyboard: homeKeyboard() });
-    return;
-  }
-  const clock = istClock(new Date());
-  if (isQuietHours(clock.minutes)) {
-    await send(chatId, `${summary}\n\n🌙 I'll ask about unlabeled payments after 10:00.`, {
-      keyboard: homeKeyboard(),
+  if (activeSyncs.has(userId)) return;
+  activeSyncs.add(userId);
+  void finishGmailSync(chatId, userId, password, send, messageId)
+    .catch((error: unknown) => {
+      logger.warn({ err: error, userId }, "telegram gmail sync failed");
+    })
+    .finally(() => {
+      activeSyncs.delete(userId);
     });
-    return;
-  }
-  await send(chatId, summary, { keyboard: homeKeyboard() });
-  const asked = await sendNextPrompt(chatId, userId, send);
-  if (asked) await store.markTelegramCategoryPinged(userId, new Date().toISOString());
 }
 
 async function requireLinked(chatId: string, send: TelegramSender) {
@@ -689,7 +1070,9 @@ async function handleCommand(
   send: TelegramSender,
 ): Promise<void> {
   if (command.kind === "help") {
-    await send(chatId, "Tap a button. This chat only sees your account.", { keyboard: homeKeyboard() });
+    await send(chatId, "🏠 <b>Ledgerline</b>\nTap a button. This chat only sees your account.", {
+      keyboard: homeKeyboard(),
+    });
     return;
   }
   if (command.kind === "unlink") {
@@ -697,9 +1080,21 @@ async function handleCommand(
     return;
   }
   if (command.kind === "statement") {
-    await send(chatId, "Send the PDF here. Put the password in the caption, or reply with the password next.", {
+    await send(chatId, STATEMENT_HINT, { keyboard: homeKeyboard() });
+    return;
+  }
+  if (command.kind === "cancel") {
+    const user = await requireLinked(chatId, send);
+    if (!user) return;
+    const store = await getStore();
+    await store.setTelegramPendingFile(user.id, null);
+    await send(chatId, "📄 Statement upload cancelled. Your expenses are unchanged.", {
       keyboard: homeKeyboard(),
     });
+    return;
+  }
+  if (command.kind === "clear") {
+    await send(chatId, CLEAR_PROMPT, { keyboard: clearConfirmKeyboard() });
     return;
   }
   if (command.kind === "sync") {
@@ -711,20 +1106,11 @@ async function handleCommand(
   if (command.kind === "gmail") {
     const user = await requireLinked(chatId, send);
     if (!user) return;
-    try {
-      const { url } = getGmailConnectUrl(user.id);
-      await send(chatId, `Connect email for your account. This link expires in 10 minutes.\n${url}`, {
-        keyboard: homeKeyboard(),
-      });
-    } catch (error) {
-      await send(chatId, error instanceof Error ? error.message : "Email connect is not available.", {
-        keyboard: homeKeyboard(),
-      });
-    }
+    await sendGmailLink(chatId, user.id, send);
     return;
   }
   if (command.kind === "unknown") {
-    await send(chatId, "Tap a button.", { keyboard: homeKeyboard() });
+    await send(chatId, "🤷 I don't know that command. Tap a button.", { keyboard: homeKeyboard() });
     return;
   }
   const user = await requireLinked(chatId, send);
@@ -732,32 +1118,20 @@ async function handleCommand(
   const store = await getStore();
   if (command.kind === "limit") {
     if (!command.valid) {
-      await send(chatId, "Pick a limit.", { keyboard: limitKeyboard() });
+      await send(chatId, "🎯 <b>Pick a limit.</b>", { keyboard: limitKeyboard() });
       return;
     }
     await store.updateUserPreferences(user.id, { dailySpendLimit: command.amount });
-    await send(
-      chatId,
-      command.amount == null
-        ? "Daily limit cleared."
-        : `Daily limit set to ₹${command.amount.toLocaleString("en-IN")}.`,
-      { keyboard: homeKeyboard() },
-    );
+    await send(chatId, limitSetText(command.amount), { keyboard: homeKeyboard() });
     return;
   }
   if (command.kind === "remind") {
     if (!command.valid) {
-      await send(chatId, "Pick a time.", { keyboard: remindKeyboard() });
+      await send(chatId, "⏰ <b>Pick a time.</b>", { keyboard: remindKeyboard() });
       return;
     }
     await store.setTelegramReminder(user.id, command.minute);
-    await send(
-      chatId,
-      command.minute == null
-        ? "Daily reminder off."
-        : `I'll send a status every day at ${formatReminderClock(command.minute)} IST.`,
-      { keyboard: homeKeyboard() },
-    );
+    await send(chatId, remindSetText(command.minute), { keyboard: homeKeyboard() });
     return;
   }
   if (command.kind === "spent") {
@@ -792,6 +1166,7 @@ export async function notifyMailDebits(
   for (const id of transactionIds) {
     const tx = await store.getTransaction(userId, id);
     if (!tx || (tx.type !== TxType.Debit && tx.type !== TxType.Credit)) continue;
+    if (tx.date !== istClock(new Date()).date) continue;
     if (!categoryGap(tx.categorySlug, catalog)) continue;
     const prompt = await store.createTelegramPrompt({
       userId,
@@ -805,7 +1180,7 @@ export async function notifyMailDebits(
   return created;
 }
 
-/** Ask each linked chat about unlabeled payments, at most once every six hours, never 02:00–10:00 IST. */
+/** Ask each linked chat about today's unlabeled payments, at most once every six hours, never 02:00–10:00 IST. */
 export async function sendDueCategoryPrompts(
   now = new Date(),
   send: TelegramSender = sendTelegramMessage,
@@ -820,7 +1195,7 @@ export async function sendDueCategoryPrompts(
     if (!user.telegramChatId) continue;
     if (!categoryAskDue(user.telegramCategoryPingedAt, now, clock.minutes)) continue;
     await store.markTelegramCategoryPinged(user.id, now.toISOString());
-    const asked = await sendNextPrompt(user.telegramChatId, user.id, send);
+    const asked = await sendNextPrompt(user.telegramChatId, user.id, send, now);
     if (asked) sent += 1;
   }
   return sent;
@@ -855,7 +1230,13 @@ export function startTelegramSchedules(): void {
   void registerTelegramCommands();
   const tick = () => {
     void sendDueCategoryPrompts().catch((error: unknown) => {
-      logger.warn({ err: error }, "telegram category ask failed");
+      const reason =
+        error && typeof error === "object" && "cause" in error && error.cause instanceof Error
+          ? error.cause.message
+          : error instanceof Error
+            ? (error.message.split("\n")[0]?.slice(0, 180) ?? error.message)
+            : String(error);
+      logger.warn({ reason }, "telegram category ask failed");
     });
   };
   setTimeout(tick, 20_000).unref?.();

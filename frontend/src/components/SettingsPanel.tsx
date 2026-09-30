@@ -57,6 +57,9 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [showDanger, setShowDanger] = useState(false);
   const [telegram, setTelegram] = useState<TelegramStatus | null>(null);
+  const [phone, setPhone] = useState("");
+  const [code, setCode] = useState("");
+  const [telegramBusy, setTelegramBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!api) return;
@@ -77,6 +80,21 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
   useEffect(() => {
     setDisplayName(user?.displayName ?? "");
   }, [user?.displayName]);
+
+  const waitingForShare = Boolean(
+    telegram?.verify && !telegram.verify.codeSent && !telegram.linked,
+  );
+
+  useEffect(() => {
+    if (!api || !waitingForShare) return;
+    const timer = window.setInterval(() => {
+      void api
+        .telegramStatus()
+        .then(setTelegram)
+        .catch(() => undefined);
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [api, waitingForShare]);
 
   useEffect(() => {
     let cancelled = false;
@@ -198,21 +216,14 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
       </section>
 
       <section className="settings-section">
-        <h3 className="ui-header">Telegram categories</h3>
+        <h3 className="ui-header">Telegram</h3>
         <p className="meta">
           {telegram
             ? telegramConnectHint(telegram)
-            : "Ask the bot which category a new mail spend belongs to."}
+            : "Link the mobile number on your Telegram account to this Gmail login."}
         </p>
-        {telegram?.startCommand ? (
-          <p className="meta" style={{ marginTop: "0.5rem" }}>
-            In Telegram, send{" "}
-            <code>{telegram.startCommand}</code>
-            {telegram.botUsername ? ` to @${telegram.botUsername}` : ""}.
-          </p>
-        ) : null}
-        <div className="sort-bar" style={{ marginTop: "0.75rem" }}>
-          {telegram?.linked ? (
+        {telegram?.linked ? (
+          <div className="sort-bar" style={{ marginTop: "0.75rem" }}>
             <button
               type="button"
               className="ghost"
@@ -221,56 +232,116 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
                   setError(null);
                   const next = await api.unlinkTelegram();
                   setTelegram(next);
+                  setPhone("");
+                  setCode("");
                   setMessage("Telegram disconnected");
                 } catch (err) {
                   setError(
-                    err instanceof Error
-                      ? err.message
-                      : "Could not disconnect Telegram",
+                    err instanceof Error ? err.message : "Could not disconnect Telegram",
                   );
                 }
               }}
             >
               Disconnect Telegram
             </button>
-          ) : (
-            <button
-              type="button"
-              className="cta"
-              disabled={telegram?.configured === false}
-              onClick={async () => {
-                try {
-                  setError(null);
-                  const next = await api.createTelegramLink();
-                  setTelegram(next);
-                  setMessage(
-                    next.deepLink
-                      ? "Open Telegram to finish connecting"
-                      : "Send the /start command below in Telegram",
-                  );
-                } catch (err) {
-                  setError(
-                    err instanceof Error
-                      ? err.message
-                      : "Could not create Telegram link",
-                  );
-                }
+          </div>
+        ) : (
+          <>
+            <form
+              className="profile-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                setError(null);
+                setMessage(null);
+                setTelegramBusy(true);
+                void api
+                  .requestTelegramPhone(phone)
+                  .then((next) => {
+                    setTelegram(next);
+                    setMessage(
+                      next.verify?.codeSent
+                        ? "Code sent on Telegram"
+                        : "Open Telegram and tap Share my number",
+                    );
+                  })
+                  .catch((err) =>
+                    setError(err instanceof Error ? err.message : "Could not send a code"),
+                  )
+                  .finally(() => setTelegramBusy(false));
               }}
             >
-              Connect Telegram
-            </button>
-          )}
-          {telegram?.deepLink ? (
-            <a
-              className="cta inline-flex"
-              href={telegram.deepLink}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open Telegram
-            </a>
-          ) : null}
-        </div>
+              <label className="field">
+                <span>Mobile number on Telegram</span>
+                <input
+                  value={phone}
+                  inputMode="tel"
+                  autoComplete="tel"
+                  maxLength={20}
+                  placeholder="98765 43210"
+                  disabled={telegram?.configured === false || telegramBusy}
+                  onChange={(event) => setPhone(event.target.value)}
+                />
+              </label>
+              <button
+                type="submit"
+                className="cta"
+                disabled={telegram?.configured === false || telegramBusy || phone.trim().length < 8}
+              >
+                {telegramBusy ? "Sending…" : "Send code"}
+              </button>
+            </form>
+            {telegram?.verify?.codeSent ? (
+              <form
+                className="profile-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setError(null);
+                  setMessage(null);
+                  setTelegramBusy(true);
+                  void api
+                    .confirmTelegramPhone(code)
+                    .then((next) => {
+                      setTelegram(next);
+                      setCode("");
+                      setMessage(next.linked ? "Telegram linked" : "Code not accepted");
+                    })
+                    .catch((err) =>
+                      setError(err instanceof Error ? err.message : "Could not verify that code"),
+                    )
+                    .finally(() => setTelegramBusy(false));
+                }}
+              >
+                <label className="field">
+                  <span>Code from Telegram</span>
+                  <input
+                    value={code}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    placeholder="6-digit code"
+                    disabled={telegramBusy}
+                    onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  />
+                </label>
+                <button type="submit" className="cta" disabled={telegramBusy || code.length !== 6}>
+                  Link account
+                </button>
+              </form>
+            ) : null}
+            {telegram?.verify?.botUrl ? (
+              <div className="sort-bar" style={{ marginTop: "0.75rem" }}>
+                <a
+                  className="cta inline-flex"
+                  href={telegram.verify.botUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open Telegram
+                </a>
+              </div>
+            ) : null}
+          </>
+        )}
       </section>
 
       <section className="settings-section">

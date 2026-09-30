@@ -30,8 +30,32 @@ export interface UserRow {
   telegramPendingFileId: string | null;
   telegramPendingFileName: string | null;
   telegramCategoryPingedAt: string | null;
+  /** Digits with country code. Null until a Telegram code confirms it. */
+  phoneE164: string | null;
+  telegramPhonePending: string | null;
+  telegramPhoneCodeHash: string | null;
+  telegramPhoneCodeExpires: string | null;
+  telegramPhoneChatId: string | null;
+  telegramPhoneAttempts: number;
+  telegramPhoneSentAt: string | null;
   createdAt: string;
   deletedAt: string | null;
+}
+
+export interface TelegramPhoneChatRow {
+  phoneE164: string;
+  chatId: string;
+  telegramUserId: string;
+  updatedAt: string;
+}
+
+export interface TelegramPhoneChallenge {
+  phone: string;
+  codeHash: string | null;
+  expiresAt: string | null;
+  chatId: string | null;
+  attempts: number;
+  sentAt: string | null;
 }
 
 export type TelegramPromptStatus = "pending" | "answered" | "expired";
@@ -494,6 +518,20 @@ export interface Store {
 
   findUserByTelegramChatId(chatId: string): Promise<UserRow | null>;
   findUserByTelegramLinkToken(token: string): Promise<UserRow | null>;
+  findUserByPhone(phone: string): Promise<UserRow | null>;
+  findUserByPendingPhone(phone: string): Promise<UserRow | null>;
+  setTelegramPhoneChallenge(
+    userId: string,
+    challenge: TelegramPhoneChallenge | null,
+  ): Promise<UserRow | null>;
+  recordTelegramPhoneAttempt(userId: string): Promise<UserRow | null>;
+  setUserPhone(userId: string, phone: string | null): Promise<UserRow | null>;
+  upsertTelegramPhoneChat(input: {
+    phoneE164: string;
+    chatId: string;
+    telegramUserId: string;
+  }): Promise<void>;
+  findTelegramPhoneChat(phone: string): Promise<TelegramPhoneChatRow | null>;
   setTelegramLinkToken(userId: string, token: string | null): Promise<UserRow | null>;
   linkTelegramChat(userId: string, chatId: string): Promise<UserRow | null>;
   unlinkTelegram(userId: string): Promise<void>;
