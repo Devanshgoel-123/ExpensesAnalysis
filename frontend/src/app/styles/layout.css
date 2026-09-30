@@ -99,14 +99,10 @@
 .app-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1.25rem;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--header-bg);
-  backdrop-filter: blur(10px);
+  justify-content: flex-end;
+  gap: 0.65rem;
+  margin-bottom: 1.15rem;
+  min-height: 2.5rem;
 }
 
 .app-header-left {
@@ -117,6 +113,7 @@
 }
 
 .app-title {
+  display: none;
   margin: 0;
   font-size: 1.15rem;
 }

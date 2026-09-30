@@ -13,34 +13,24 @@ import type { DashboardView } from "@/lib/dashboardViews";
 interface AppShellProps {
   view: DashboardView;
   onNavigate: (view: DashboardView) => void;
-  periodLabel: string;
   monthControl: React.ReactNode;
-  hasData: boolean;
   hasAnyData: boolean;
   userEmail?: string | null;
   avatarUrl?: string | null;
   displayName?: string | null;
   fetchError?: string | null;
-  onImportAnother: () => void;
-  onRefresh: () => void;
-  onLogout: () => void;
   children: React.ReactNode;
 }
 
 export function AppShell({
   view,
   onNavigate,
-  periodLabel,
   monthControl,
-  hasData,
   hasAnyData,
   userEmail,
   avatarUrl,
   displayName,
   fetchError,
-  onImportAnother,
-  onRefresh,
-  onLogout,
   children,
 }: AppShellProps) {
   const pathname = usePathname();
@@ -77,17 +67,9 @@ export function AppShell({
       <div className="app-main">
         <DashboardHeader
           view={view}
-          periodLabel={periodLabel}
           monthControl={monthControl}
-          hasData={hasData}
-          userEmail={userEmail}
-          avatarUrl={avatarUrl}
-          displayName={displayName}
           onMenuOpen={() => setSidebarOpen(true)}
           onOpenSearch={() => setPaletteOpen(true)}
-          onImportAnother={onImportAnother}
-          onRefresh={onRefresh}
-          onLogout={onLogout}
         />
         {fetchError ? (
           <p className="form-error mb-3 px-1" role="alert">

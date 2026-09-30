@@ -39,6 +39,14 @@
   .mobile-nav {
     display: flex;
   }
+
+  .app-header {
+    justify-content: space-between;
+  }
+
+  .app-title {
+    display: block;
+  }
 }
 
 @media (max-width: 900px) {
@@ -111,16 +119,13 @@
     grid-template-columns: 1fr;
   }
 
-  .dash-top,
-  .app-header {
+  .dash-top {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .header-search {
-    display: inline-flex;
-    max-width: none;
-    width: 100%;
+  .header-search span {
+    display: none;
   }
 
   .app-header-actions {

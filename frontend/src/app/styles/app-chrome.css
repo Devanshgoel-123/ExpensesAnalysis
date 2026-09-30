@@ -1,19 +1,18 @@
 /* ── Header, hero, command palette & footer ── */
 .header-search {
   display: inline-flex;
-  flex: 1;
-  max-width: 28rem;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 0.65rem;
+  gap: 0.45rem;
   height: 2.5rem;
-  padding: 0 0.9rem;
+  padding: 0 0.7rem;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: var(--surface);
+  background: transparent;
   color: var(--muted);
   cursor: pointer;
   text-align: left;
-  transition: border-color var(--ease), background var(--ease);
+  transition: border-color var(--ease), background var(--ease), color var(--ease);
 }
 
 .header-search:hover {
@@ -22,11 +21,7 @@
 }
 
 .header-search span {
-  flex: 1;
   font-size: 0.85rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .user-avatar {

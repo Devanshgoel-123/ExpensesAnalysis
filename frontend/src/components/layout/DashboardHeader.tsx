@@ -1,39 +1,26 @@
 "use client";
 
-import { ArrowLeft, LogOut, Menu, Moon, RefreshCw, Search, Sun } from "lucide-react";
+import { Menu, Moon, Search, Sun } from "lucide-react";
 import { viewLabel, type DashboardView } from "@/lib/dashboardViews";
-import { UserAvatar } from "@/components/layout/UserAvatar";
-import { userInitials } from "@/helpers/userInitials";
 import { useTheme } from "@/lib/theme";
 
 interface DashboardHeaderProps {
   view: DashboardView;
-  periodLabel: string;
   monthControl: React.ReactNode;
-  hasData: boolean;
-  userEmail?: string | null;
-  avatarUrl?: string | null;
-  displayName?: string | null;
   onMenuOpen: () => void;
   onOpenSearch: () => void;
-  onImportAnother: () => void;
-  onRefresh: () => void;
-  onLogout: () => void;
 }
 
+/**
+ * A thin tools row. The sidebar already names the page and the account,
+ * and each view has its own heading, so this bar only keeps the month,
+ * search, and theme.
+ */
 export function DashboardHeader({
   view,
-  periodLabel,
   monthControl,
-  hasData,
-  userEmail,
-  avatarUrl,
-  displayName,
   onMenuOpen,
   onOpenSearch,
-  onImportAnother,
-  onRefresh,
-  onLogout,
 }: DashboardHeaderProps) {
   const { theme, toggleTheme } = useTheme();
 
@@ -48,44 +35,28 @@ export function DashboardHeader({
         >
           <Menu size={20} />
         </button>
-        <div>
-          <h1 className="ui-header app-title">{viewLabel(view)}</h1>
-          <p className="meta">{periodLabel}</p>
-        </div>
+        <h1 className="ui-header app-title">{viewLabel(view)}</h1>
       </div>
-      <button type="button" className="header-search" onClick={onOpenSearch}>
-        <Search size={16} aria-hidden />
-        <span>Search views…</span>
-        <kbd className="kbd">⌘K</kbd>
-      </button>
       <div className="app-header-actions">
         {monthControl}
         <button
           type="button"
+          className="header-search"
+          onClick={onOpenSearch}
+          aria-label="Search views"
+        >
+          <Search size={16} aria-hidden />
+          <span>Search</span>
+          <kbd className="kbd">⌘K</kbd>
+        </button>
+        <button
+          type="button"
           className="icon-btn"
           onClick={toggleTheme}
-          aria-label={
-            theme === "light" ? "Switch to dark mode" : "Switch to light mode"
-          }
+          aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
         >
           {theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
         </button>
-        {hasData ? (
-          <button type="button" className="ghost" onClick={onRefresh}>
-            <RefreshCw size={16} /> Refresh
-          </button>
-        ) : null}
-        <button type="button" className="ghost" onClick={onImportAnother}>
-          <ArrowLeft size={16} /> Import
-        </button>
-        <button type="button" className="ghost" onClick={onLogout}>
-          <LogOut size={16} /> Log out
-        </button>
-        <UserAvatar
-          initials={userInitials({ email: userEmail, displayName })}
-          src={avatarUrl}
-          title={displayName ?? userEmail ?? undefined}
-        />
       </div>
     </header>
   );

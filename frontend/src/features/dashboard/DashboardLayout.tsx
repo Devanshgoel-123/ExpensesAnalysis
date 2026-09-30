@@ -18,15 +18,11 @@ import { useAuth } from "@/lib/auth";
 function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { logout, user } = useAuth();
+  const { user } = useAuth();
   const {
     month,
     setMonth,
-    periodLabel,
     hasAnyData,
-    hasMonthData,
-    refresh,
-    goToImport,
     fetchError,
     importStatus,
     fetching,
@@ -59,10 +55,11 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   );
 
   const monthControl = (
-    <label className="field field-inline">
-      <span className="meta">Month</span>
+    <label className="field field-inline month-control">
+      <span className="sr-only">Month</span>
       <input
         type="month"
+        aria-label="Month"
         min={monthMin}
         max={monthMax}
         value={month}
@@ -75,17 +72,12 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     <AppShell
       view={view}
       onNavigate={navigate}
-      periodLabel={periodLabel}
       monthControl={monthControl}
-      hasData={hasMonthData}
       hasAnyData={hasAnyData}
       userEmail={user?.email}
       avatarUrl={user?.avatarUrl}
       displayName={user?.displayName}
       fetchError={DATA_OPTIONAL_VIEWS.includes(view) ? fetchError : null}
-      onImportAnother={goToImport}
-      onRefresh={refresh}
-      onLogout={logout}
     >
       {children}
     </AppShell>
