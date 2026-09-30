@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { INDIA_RETAIL_BRANDS } from "../providers/indiaRetail.js";
 import type { CategoryMeta } from "./types.js";
 import type { MemoryStore } from "./memory.js";
 
@@ -140,4 +141,17 @@ export async function seedMemoryReferenceData(store: MemoryStore): Promise<void>
     }
   }
 
+  for (const brand of INDIA_RETAIL_BRANDS) {
+    await store.upsertProvider({
+      userId: null,
+      canonicalName: brand.canonicalName,
+      aliases: brand.aliases,
+      upiHandles: brand.upiHandles,
+      senderDomains: brand.senderDomains,
+      websiteDomain: brand.websiteDomain,
+      logoUrl: `/providers/${brand.logoFile}`,
+      categorySlug: brand.categorySlug,
+      isGlobal: true,
+    });
+  }
 }

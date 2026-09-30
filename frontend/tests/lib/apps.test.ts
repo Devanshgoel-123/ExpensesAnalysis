@@ -229,6 +229,9 @@ describe("logoForAppName", () => {
     expect(logoForAppName("Jio WiFi")).toBe("/providers/jio.svg");
     expect(logoForAppName("Apple")).toBe("/providers/apple.svg");
     expect(logoForAppName("Apollo Hospital")).toBe("/providers/apollo.svg");
+    expect(logoForAppName("Nykaa")).toBe("/providers/nykaa.svg");
+    expect(logoForAppName("Reliance Trends")).toBe("/providers/reliance-trends.svg");
+    expect(logoForAppName("Levi's")).toBe("/providers/levis.svg");
     expect(logoForAppName("Office Cafeteria")).toBe("/providers/office-cafeteria.png");
     expect(logoForAppName("Dominos")).toBe("/providers/dominos.svg");
     expect(logoForAppName("Pizza Hut")).toBe("/providers/pizzahut.svg");
