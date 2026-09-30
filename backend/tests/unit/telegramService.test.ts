@@ -9,6 +9,7 @@ import { followGmailSync, syncProgressText } from "../../src/telegram/syncWatch.
 import {
   buildTelegramDeepLink,
   confirmTelegramPhone,
+  formatTelegramError,
   handleTelegramUpdate,
   notifyMailDebits,
   parseStartCommand,
@@ -665,6 +666,23 @@ describe("telegram profile", () => {
     assert.match(sent.at(-1) ?? "", /Profile/);
     assert.match(sent.at(-1) ?? "", /tg@example.com/);
     assert.match(sent.at(-1) ?? "", /Not linked/);
+  });
+});
+
+describe("telegram errors", () => {
+  it("hides the SQL when a database query fails", () => {
+    const error = new Error(
+      'Failed query: select "id" from "pooling_runs" where "pooling_runs"."user_id" = $1\nparams: abc',
+    );
+    error.cause = new Error("Connection terminated unexpectedly");
+    assert.equal(formatTelegramError(error, "Could not sync Gmail."), "⚠️ Could not sync Gmail.");
+  });
+
+  it("keeps a short message the user can act on", () => {
+    assert.equal(
+      formatTelegramError(new Error("Add a bank and its statement sender on Import, then sync again."), "Could not sync Gmail."),
+      "⚠️ Add a bank and its statement sender on Import, then sync again.",
+    );
   });
 });
 

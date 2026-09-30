@@ -34,7 +34,6 @@ import {
   answerTelegramCallback,
   askTelegramContact,
   clearTelegramChat,
-  clearTelegramReplyKeyboard,
   downloadTelegramFile,
   editTelegramMessage,
   registerTelegramCommands,
@@ -456,7 +455,6 @@ async function handleStart(
   if (!token || token === "verify") {
     const linked = await store.findUserByTelegramChatId(chatId);
     if (linked) {
-      if (send === sendTelegramMessage) await clearTelegramReplyKeyboard(chatId);
       await send(chatId, "🎉 This chat is already linked to your Ledgerline account.", {
         keyboard: homeKeyboard(),
       });
@@ -465,7 +463,6 @@ async function handleStart(
     await askShareNumber(chatId, send);
     return;
   }
-  if (send === sendTelegramMessage) await clearTelegramReplyKeyboard(chatId);
   const user = await store.findUserByTelegramLinkToken(token);
   if (!user) {
     await send(chatId, "⌛ That link expired. Generate a new one in Settings.");
@@ -514,6 +511,18 @@ async function handleClear(
   await send(chatId, CLEARED, { keyboard: homeKeyboard() });
 }
 
+async function pendingAsk(userId: string, chatId: string, now = new Date()) {
+  const store = await getStore();
+  const pending = await store.getOldestPendingTelegramPrompt(chatId);
+  if (pending && pending.userId === userId) {
+    const tx = await store.getTransaction(userId, pending.transactionId);
+    const catalog = await catalogFor(userId);
+    const gap = tx ? categoryGap(tx.categorySlug, catalog) : null;
+    if (tx && gap) return { catalog, tx, gap, prompt: pending, remaining: 1 };
+  }
+  return currentAsk(userId, chatId, now);
+}
+
 async function handleCategoryReply(
   chatId: string,
   text: string,
@@ -525,7 +534,7 @@ async function handleCategoryReply(
     await send(chatId, NOT_LINKED);
     return;
   }
-  const ask = await currentAsk(user.id, chatId);
+  const ask = await pendingAsk(user.id, chatId);
   if (!ask) {
     await send(chatId, "✨ All caught up. No payment is waiting for a category.", {
       keyboard: homeKeyboard(),
@@ -548,7 +557,7 @@ async function applyCategory(chatId: string, slug: string, send: TelegramSender)
     await send(chatId, NOT_LINKED);
     return;
   }
-  const ask = await currentAsk(user.id, chatId);
+  const ask = await pendingAsk(user.id, chatId);
   if (!ask) {
     await send(chatId, await formatCategorySpend(user.id, slug), { keyboard: homeKeyboard() });
     return;
@@ -742,9 +751,37 @@ function remindSetText(minute: number | null): string {
     : `⏰ I'll send your status every day at <b>${formatReminderClock(minute)}</b> IST.`;
 }
 
+const TECHNICAL_ERROR =
+  /failed query:|params:|select "|insert "|update "|prepared statement|ECONN|ENOTFOUND|timeout|Connection|terminated|pool after/i;
+
+function errorDetail(error: unknown): string {
+  if (!(error instanceof Error)) return "";
+  const cause = error.cause instanceof Error ? error.cause.message : "";
+  return cause || error.message;
+}
+
+/** Database failures include the SQL. The chat should only see a short line. */
+export function formatTelegramError(error: unknown, fallback: string): string {
+  const detail = errorDetail(error).split("\n")[0]?.trim() ?? "";
+  if (!detail || TECHNICAL_ERROR.test(detail) || detail.length > 180) {
+    logger.warn({ err: error }, "telegram action failed");
+    return `⚠️ ${fallback}`;
+  }
+  return `⚠️ ${esc(detail)}`;
+}
+
 function errorText(error: unknown, fallback: string): string {
-  const message = error instanceof Error ? error.message : fallback;
-  return `⚠️ ${esc(message.slice(0, 300))}`;
+  return formatTelegramError(error, fallback);
+}
+
+async function withDbRetry<T>(work: () => Promise<T>): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    if (!TECHNICAL_ERROR.test(errorDetail(error))) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    return work();
+  }
 }
 
 async function sendGmailLink(chatId: string, userId: string, send: TelegramSender): Promise<void> {
@@ -781,14 +818,6 @@ export async function handleTelegramUpdate(
   if (!message.text) return;
   const text = message.text.trim();
   const button = text.toLowerCase();
-  const fromOldKeypad =
-    button === "scan mail" ||
-    button === "status" ||
-    button === "connect email" ||
-    button === "today";
-  if (fromOldKeypad && send === sendTelegramMessage) {
-    await clearTelegramReplyKeyboard(chatId);
-  }
   const asCommand =
     button === "scan mail"
       ? "/scan"
@@ -935,6 +964,13 @@ async function importStatementFile(
   }
 }
 
+function runIsFresh(run: { status: string; startedAt: string; meta?: Record<string, unknown> }): boolean {
+  if (run.status !== "running") return false;
+  const stamp = typeof run.meta?.progressAt === "string" ? run.meta.progressAt : run.startedAt;
+  const at = new Date(stamp).getTime();
+  return Number.isFinite(at) && Date.now() - at < 3 * 60 * 1000;
+}
+
 async function startMonthScan(userId: string, password: string): Promise<{ runId: string }> {
   const store = await getStore();
   if ((await store.listAccounts(userId)).length === 0) {
@@ -948,7 +984,8 @@ async function startMonthScan(userId: string, password: string): Promise<{ runId
   if (!account.poolingEnabled) {
     await store.setPoolingEnabled(userId, account.id, true);
   }
-  const running = (await store.listPoolingRuns(userId, 5)).find((run) => run.status === "running");
+  const recent = await withDbRetry(() => store.listPoolingRuns(userId, 5));
+  const running = recent.find((run) => run.status === "running" && runIsFresh(run));
   if (running) return { runId: running.id };
   const month = istClock(new Date()).date.slice(0, 7);
   const started = await runGmailBackfillForUser(userId, {
@@ -1003,7 +1040,7 @@ async function finishGmailSync(
       announce: false,
       read: async () => {
         const store = await getStore();
-        const rows = await store.listPoolingRuns(userId, 5);
+        const rows = await withDbRetry(() => store.listPoolingRuns(userId, 5));
         const current = rows.find((row) => row.id === started.runId);
         return current ? toSnapshot(current) : null;
       },
