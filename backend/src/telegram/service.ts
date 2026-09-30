@@ -617,8 +617,12 @@ async function formatProfile(userId: string): Promise<string> {
   const store = await getStore();
   const user = await store.findUserById(userId);
   const gmail = await store.getGmailConnection(userId);
+  const sameInbox =
+    gmail != null &&
+    !gmail.disconnectedAt &&
+    gmail.googleEmail.toLowerCase() === (user?.email ?? "").toLowerCase();
   const gmailLine =
-    gmail && !gmail.disconnectedAt ? esc(gmail.googleEmail) : "Not connected";
+    !gmail || gmail.disconnectedAt ? "Not connected" : sameInbox ? "Connected" : esc(gmail.googleEmail);
   const limit =
     user?.dailySpendLimit != null
       ? `₹${user.dailySpendLimit.toLocaleString("en-IN")}`
@@ -626,7 +630,7 @@ async function formatProfile(userId: string): Promise<string> {
   const phone = user?.phoneE164 ? maskPhone(user.phoneE164) : "Not linked";
   const reminder =
     user?.telegramRemindMinute != null
-      ? formatReminderClock(user.telegramRemindMinute)
+      ? `${formatReminderClock(user.telegramRemindMinute)} IST`
       : "Off";
   return [
     "👤 <b>Profile</b>",
@@ -636,7 +640,7 @@ async function formatProfile(userId: string): Promise<string> {
     `Phone  ${phone}`,
     `Gmail  ${gmailLine}`,
     `Daily limit  ${limit}`,
-    `Reminder  ${reminder} IST`,
+    `Reminder  ${reminder}`,
   ].join("\n");
 }
 

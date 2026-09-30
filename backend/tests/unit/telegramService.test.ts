@@ -666,6 +666,8 @@ describe("telegram profile", () => {
     assert.match(sent.at(-1) ?? "", /Profile/);
     assert.match(sent.at(-1) ?? "", /tg@example.com/);
     assert.match(sent.at(-1) ?? "", /Not linked/);
+    assert.match(sent.at(-1) ?? "", /Reminder {2}Off/);
+    assert.doesNotMatch(sent.at(-1) ?? "", /Off IST/);
   });
 });
 
