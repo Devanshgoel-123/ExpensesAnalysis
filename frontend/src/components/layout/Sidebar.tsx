@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Moon, Sun, X } from "lucide-react";
+import { X } from "lucide-react";
 import {
   DASHBOARD_NAV,
   DASHBOARD_NAV_GROUPS,
@@ -12,7 +12,6 @@ import {
 } from "@/lib/dashboardViews";
 import { UserAvatar } from "@/components/layout/UserAvatar";
 import { userInitials } from "@/helpers/userInitials";
-import { useTheme } from "@/lib/theme";
 import { cn } from "@/helpers/cn";
 
 interface SidebarProps {
@@ -37,7 +36,6 @@ export function Sidebar({
   hasAnyData = true,
 }: SidebarProps) {
   const navById = new Map(DASHBOARD_NAV.map((item) => [item.id, item]));
-  const { theme, toggleTheme } = useTheme();
   const pathname = usePathname();
 
   return (
@@ -136,22 +134,6 @@ export function Sidebar({
         </nav>
 
         <div className="sidebar-foot">
-          <div className="sidebar-theme-row">
-            <span className="meta">Appearance</span>
-            <button
-              type="button"
-              className="icon-btn"
-              onClick={toggleTheme}
-              aria-label={
-                theme === "light" ? "Switch to dark mode" : "Switch to light mode"
-              }
-            >
-              {theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
-            </button>
-          </div>
-          <Link href="/architecture" className="sidebar-foot-link" onClick={onClose}>
-            Architecture
-          </Link>
           <Link href="/privacy" className="sidebar-foot-link" onClick={onClose}>
             Privacy
           </Link>
