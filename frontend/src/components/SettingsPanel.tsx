@@ -193,9 +193,11 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
               </button>
             ) : null}
           </div>
-          <button type="submit" className="cta">
-            Save name
-          </button>
+          {displayName.trim() !== (user?.displayName ?? "").trim() ? (
+            <button type="submit" className="cta">
+              Save name
+            </button>
+          ) : null}
         </form>
       </section>
 

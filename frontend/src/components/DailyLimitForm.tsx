@@ -77,6 +77,10 @@ export function DailyLimitForm({ limit, compact = false, onSave }: DailyLimitFor
     void save(parsed);
   }
 
+  const trimmed = draft.trim();
+  const parsedDraft = trimmed ? parseRupeeAmount(trimmed) : null;
+  const unchanged = trimmed ? parsedDraft === limit : limit == null;
+
   return (
     <form className={`limit-form${compact ? " compact" : ""}`} onSubmit={onSubmit}>
       <label className="limit-field">
@@ -94,7 +98,7 @@ export function DailyLimitForm({ limit, compact = false, onSave }: DailyLimitFor
         />
       </label>
       <div className="limit-actions">
-        <button type="submit" className="cta" disabled={saving}>
+        <button type="submit" className="cta" disabled={saving || unchanged}>
           {saving ? "Saving…" : limit != null ? "Update" : "Set limit"}
         </button>
         {limit != null ? (
