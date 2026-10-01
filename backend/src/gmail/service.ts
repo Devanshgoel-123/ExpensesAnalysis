@@ -120,15 +120,24 @@ export async function getGmailStatusForUser(userId: string) {
 }
 
 /** Build the Google OAuth URL used for Gmail read-only connect. */
-export function getGmailConnectUrl(userId: string): { url: string } {
+export function getGmailConnectUrl(
+  userId: string,
+  returnToApp = false,
+): { url: string } {
   if (!gmailConfigured()) {
     throw AppError.serviceUnavailable(
       "Gmail OAuth is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.",
     );
   }
-  const state = jwt.sign({ sub: userId, purpose: "gmail_connect" }, config.jwtSecret, {
-    expiresIn: "10m",
-  });
+  const state = jwt.sign(
+    {
+      sub: userId,
+      purpose: "gmail_connect",
+      ...(returnToApp ? { returnTo: "app" } : {}),
+    },
+    config.jwtSecret,
+    { expiresIn: "10m" },
+  );
   return { url: buildGmailAuthUrl(state) };
 }
 
@@ -183,7 +192,7 @@ export async function runGmailBackfillForUser(
   return { status: "running" as const, runId };
 }
 
-/** Enable hourly pooling and run the initial alert + PDF sync. */
+/** Enable pooling and run the initial alert + PDF sync. */
 export async function enablePoolingForUser(
   userId: string,
   body: EnablePoolingBody,

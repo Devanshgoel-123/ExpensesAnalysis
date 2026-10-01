@@ -22,3 +22,8 @@ uploads/
 *.pdf
 data/
 backend/dumps/
+
+# Xcode
+ios/**/xcuserdata/
+ios/**/DerivedData/
+*.xcuserstate

@@ -125,3 +125,59 @@ export async function loginOrRegisterWithGoogle(input: {
   const authUser = { id: user.id, email: user.email };
   return { token: signToken(authUser), user: authUser };
 }
+
+/**
+ * Sign in with Apple. The identity token is verified before this runs.
+ * A random hash fills the required password column; the person never chooses or sends a password.
+ */
+export async function loginOrRegisterWithApple(input: {
+  appleSub: string;
+  email?: string | null;
+  displayName?: string | null;
+}): Promise<{ token: string; user: AuthUser }> {
+  const appleSub = input.appleSub.trim();
+  if (!appleSub) {
+    throw AppError.unauthorized("Apple did not return an account id");
+  }
+  const email = input.email?.trim().toLowerCase() || null;
+  const displayName = input.displayName?.trim() || null;
+  const store = await getStore();
+
+  let user = await store.findUserByAppleSub(appleSub);
+  if (!user && email) {
+    const existing = await store.findUserByEmail(email);
+    if (existing?.appleSub && existing.appleSub !== appleSub) {
+      throw AppError.conflict("That email is already linked to another Apple ID");
+    }
+    if (existing) {
+      user = await store.setAppleSub(existing.id, appleSub);
+    }
+  }
+
+  if (!user) {
+    if (!email) {
+      throw AppError.badRequest(
+        "Apple did not share an email. Remove Ledgerline from Sign in with Apple settings and try again.",
+      );
+    }
+    const passwordHash = await bcrypt.hash(randomBytes(32).toString("hex"), 10);
+    const created = await store.createUser({
+      email,
+      passwordHash,
+      displayName,
+    });
+    user = await store.setAppleSub(created.id, appleSub);
+    await store.audit(created.id, "auth.register.apple", {});
+  } else {
+    if (displayName && !user.displayName) {
+      user = (await store.updateUserProfile(user.id, { displayName })) ?? user;
+    }
+    await store.audit(user.id, "auth.login.apple", {});
+  }
+
+  if (!user) {
+    throw AppError.unauthorized("Could not sign in with Apple");
+  }
+  const authUser = { id: user.id, email: user.email };
+  return { token: signToken(authUser), user: authUser };
+}

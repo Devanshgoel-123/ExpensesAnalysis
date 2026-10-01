@@ -78,6 +78,7 @@ export class MemoryStore implements Store {
       id: randomUUID(),
       email,
       passwordHash: input.passwordHash,
+      appleSub: null,
       displayName: input.displayName ?? null,
       avatarUrl: null,
       dailySpendLimit: null,
@@ -99,6 +100,20 @@ export class MemoryStore implements Store {
       deletedAt: null,
     };
     this.users.set(user.id, user);
+    return user;
+  }
+
+  async findUserByAppleSub(appleSub: string): Promise<UserRow | null> {
+    return (
+      [...this.users.values()].find((user) => user.appleSub === appleSub && !user.deletedAt) ??
+      null
+    );
+  }
+
+  async setAppleSub(userId: string, appleSub: string): Promise<UserRow | null> {
+    const user = this.users.get(userId);
+    if (!user || user.deletedAt) return null;
+    user.appleSub = appleSub;
     return user;
   }
 

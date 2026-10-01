@@ -21,7 +21,7 @@ export const getGmailStatusController: RequestHandler = async (req, res) => {
 
 /** GET /api/gmail/connect — OAuth URL for Gmail read-only consent. */
 export const getGmailConnectController: RequestHandler = async (req, res) => {
-  res.json(getGmailConnectUrl(req.user!.id));
+  res.json(getGmailConnectUrl(req.user!.id, req.query.return === "app"));
 };
 
 /** POST /api/gmail/disconnect — revoke Gmail and disable pooling. */

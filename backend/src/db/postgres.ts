@@ -173,6 +173,22 @@ export class PostgresStore implements Store {
       .limit(1);
     return r ? mapUser(r) : null;
   }
+  async findUserByAppleSub(appleSub: string) {
+    const [r] = await this.db
+      .select()
+      .from(s.users)
+      .where(and(eq(s.users.appleSub, appleSub), isNull(s.users.deletedAt)))
+      .limit(1);
+    return r ? mapUser(r) : null;
+  }
+  async setAppleSub(userId: string, appleSub: string) {
+    const [r] = await this.db
+      .update(s.users)
+      .set({ appleSub })
+      .where(and(eq(s.users.id, userId), isNull(s.users.deletedAt)))
+      .returning();
+    return r ? mapUser(r) : null;
+  }
   async findUserById(id: string) {
     const [r] = await this.db
       .select()

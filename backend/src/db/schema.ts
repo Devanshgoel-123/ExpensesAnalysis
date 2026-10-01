@@ -21,6 +21,8 @@ export const users = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     email: text("email").notNull().unique(),
     passwordHash: text("password_hash").notNull(),
+    /** Stable Sign in with Apple subject. Null for accounts that never used the iOS app. */
+    appleSub: text("apple_sub"),
     displayName: text("display_name"),
     avatarUrl: text("avatar_url"),
     dailySpendLimit: numeric("daily_spend_limit"),
@@ -49,6 +51,7 @@ export const users = pgTable(
     index("users_deleted_idx").on(t.deletedAt),
     uniqueIndex("users_telegram_chat_idx").on(t.telegramChatId),
     uniqueIndex("users_telegram_link_token_idx").on(t.telegramLinkToken),
+    uniqueIndex("users_apple_sub_idx").on(t.appleSub),
   ],
 );
 

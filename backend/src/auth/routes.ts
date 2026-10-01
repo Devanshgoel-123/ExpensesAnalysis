@@ -7,9 +7,32 @@ import {
   buildGoogleLoginAuthUrl,
   gmailConfigured,
 } from "../gmail/client.js";
-import { requireAuth } from "./service.js";
+import { verifyAppleIdentityToken } from "./apple.js";
+import { loginOrRegisterWithApple, requireAuth } from "./service.js";
 
 export const authRouter = Router();
+
+authRouter.post("/apple", async (req, res) => {
+  const body = req.body as { identityToken?: unknown; displayName?: unknown };
+  const identityToken = typeof body.identityToken === "string" ? body.identityToken : "";
+  if (!identityToken) {
+    throw AppError.badRequest("Missing Apple identity token");
+  }
+  const displayName =
+    typeof body.displayName === "string" ? body.displayName.trim().slice(0, 80) : null;
+  const claims = await verifyAppleIdentityToken(identityToken, config.appleBundleId);
+  const result = await loginOrRegisterWithApple({
+    appleSub: claims.sub,
+    email: claims.email ?? null,
+    displayName,
+  });
+  const store = await getStore();
+  const user = await store.findUserById(result.user.id);
+  res.json({
+    token: result.token,
+    user: user ? publicUser(user) : result.user,
+  });
+});
 
 authRouter.get("/google", (_req, res) => {
   if (!gmailConfigured()) {

@@ -33,6 +33,7 @@ const envSchema = z.object({
     ),
   FRONTEND_URL: z.string().url().default("http://localhost:3000"),
   ALLOW_ANON_PARSE: z.enum(["0", "1"]).default("0"),
+  APPLE_BUNDLE_ID: z.string().min(1).default("com.ledgerline.ios"),
   GOOGLE_CLIENT_ID: z.string().optional().default(""),
   GOOGLE_CLIENT_SECRET: z.string().optional().default(""),
   GOOGLE_REDIRECT_URI: z
@@ -72,6 +73,7 @@ export type AppConfig = {
   jwtSecret: string;
   encryptionKey: string;
   frontendUrl: string;
+  appleBundleId: string;
   allowAnonParse: boolean;
   google: {
     clientId: string;
@@ -217,6 +219,7 @@ function loadConfig(): AppConfig {
     jwtSecret: env.JWT_SECRET,
     encryptionKey: env.ENCRYPTION_KEY,
     frontendUrl: env.FRONTEND_URL,
+    appleBundleId: env.APPLE_BUNDLE_ID,
     allowAnonParse: env.ALLOW_ANON_PARSE === "1",
     google: {
       clientId: env.GOOGLE_CLIENT_ID,

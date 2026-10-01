@@ -20,6 +20,7 @@ export interface UserRow {
   id: string;
   email: string;
   passwordHash: string;
+  appleSub: string | null;
   displayName: string | null;
   avatarUrl: string | null;
   dailySpendLimit: number | null;
@@ -292,7 +293,9 @@ export interface Store {
     displayName?: string | null;
   }): Promise<UserRow>;
   findUserByEmail(email: string): Promise<UserRow | null>;
+  findUserByAppleSub(appleSub: string): Promise<UserRow | null>;
   findUserById(id: string): Promise<UserRow | null>;
+  setAppleSub(userId: string, appleSub: string): Promise<UserRow | null>;
   updateUserPreferences(
     userId: string,
     patch: Partial<UserPreferences>,

@@ -51,11 +51,20 @@ function redirectAuthError(res: Response, message: string): void {
   res.redirect(url.toString());
 }
 
+/** iOS ASWebAuthenticationSession return. Only this fixed scheme is allowed. */
+function appGmailRedirect(status: "connected" | "error", detail?: string): string {
+  const url = new URL("ledgerline://gmail");
+  url.searchParams.set("status", status);
+  if (detail) url.searchParams.set("detail", detail.slice(0, 180));
+  return url.toString();
+}
+
 export async function handleGmailOAuthCallback(
   req: Request,
   res: Response,
 ): Promise<void> {
   let purpose = "unknown";
+  let returnToApp = false;
   try {
     const oauthError = req.query.error ? String(req.query.error) : "";
     const code = String(req.query.code ?? "");
@@ -74,8 +83,17 @@ export async function handleGmailOAuthCallback(
           ? "Google sign-in was cancelled"
           : `Google sign-in failed (${oauthError})`;
       if (purpose === "gmail_connect") {
+        let returnTo: string | undefined;
+        try {
+          const peeked = jwt.verify(state, config.jwtSecret) as { returnTo?: string };
+          returnTo = peeked.returnTo;
+        } catch {
+          returnTo = undefined;
+        }
         res.redirect(
-          `${config.frontendUrl}?gmail=error&detail=${encodeURIComponent(message)}`,
+          returnTo === "app"
+            ? appGmailRedirect("error", message)
+            : `${config.frontendUrl}?gmail=error&detail=${encodeURIComponent(message)}`,
         );
         return;
       }
@@ -89,8 +107,10 @@ export async function handleGmailOAuthCallback(
     const payload = jwt.verify(state, config.jwtSecret) as {
       sub?: string;
       purpose: string;
+      returnTo?: string;
     };
     purpose = payload.purpose;
+    returnToApp = payload.returnTo === "app";
 
     if (payload.purpose === "google_login") {
       const tokens = await exchangeCode(code);
@@ -159,7 +179,11 @@ export async function handleGmailOAuthCallback(
       return;
     }
     await persistGoogleConnection({ userId: payload.sub, tokens });
-    res.redirect(`${config.frontendUrl}/import?gmail=connected`);
+    res.redirect(
+      payload.returnTo === "app"
+        ? appGmailRedirect("connected")
+        : `${config.frontendUrl}/import?gmail=connected`,
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "OAuth failed";
     if (purpose === "google_login") {
@@ -167,7 +191,9 @@ export async function handleGmailOAuthCallback(
       return;
     }
     res.redirect(
-      `${config.frontendUrl}/import?gmail=error&detail=${encodeURIComponent(message)}`,
+      returnToApp
+        ? appGmailRedirect("error", message)
+        : `${config.frontendUrl}/import?gmail=error&detail=${encodeURIComponent(message)}`,
     );
   }
 }
