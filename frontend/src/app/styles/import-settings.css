@@ -96,14 +96,170 @@
 
 .settings-sections {
   display: grid;
-  gap: 1rem;
+  gap: 0.85rem;
+  width: min(100%, 32rem);
+  margin-inline: auto;
 }
 
 .profile-form {
   display: grid;
   gap: 0.75rem;
-  max-width: 24rem;
+  max-width: 36rem;
   margin-top: 0.85rem;
+}
+
+.settings-identity {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  align-items: center;
+  max-width: none;
+  margin-top: 0;
+  gap: 1rem;
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+}
+
+.settings-row h3 {
+  margin: 0;
+}
+
+.settings-row .meta {
+  margin: 0.25rem 0 0;
+}
+
+.settings-row-end {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.settings-row-end .status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 7.25rem;
+}
+
+.settings-row-end .ghost,
+.settings-actions .ghost,
+.settings-actions .cta,
+.settings-section .limit-form .cta,
+.settings-section .limit-form .ghost {
+  box-sizing: border-box;
+  min-height: 2rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+}
+
+.settings-row-end .ghost {
+  justify-content: center;
+}
+
+.settings-value {
+  color: var(--foreground);
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.settings-reveal {
+  display: grid;
+  gap: 0.65rem;
+  width: min(100%, 15rem);
+  margin: 0.85rem auto 0;
+  justify-items: center;
+}
+
+.settings-reveal .field,
+.settings-reveal .limit-form {
+  width: 100%;
+  max-width: none;
+  margin-top: 0;
+}
+
+.settings-reveal .cta,
+.settings-reveal .ghost {
+  width: auto;
+  justify-self: center;
+}
+
+.settings-reveal .limit-actions {
+  justify-content: center;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.45rem;
+  margin-top: 0.85rem;
+}
+
+.settings-identity-copy {
+  display: grid;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.settings-identity-copy .meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-avatar {
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--bg-muted);
+  cursor: pointer;
+  transition: border-color var(--ease);
+}
+
+.settings-avatar:hover {
+  border-color: var(--border-strong);
+}
+
+.settings-avatar img,
+.settings-avatar span {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.status-pill {
+  flex-shrink: 0;
+  margin-top: 0;
+  padding: 0.28rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.status-pill.is-on {
+  color: var(--success);
+  background: var(--success-soft);
+  border-color: color-mix(in srgb, var(--success) 32%, var(--border));
 }
 
 .profile-photo-row {
@@ -125,12 +281,23 @@
 }
 
 .settings-section h3 {
-  margin: 0 0 0.35rem;
-  font-size: 1rem;
+  margin: 0;
+  font-size: 0.95rem;
 }
 
 .settings-section > .meta {
-  margin-bottom: 0.85rem;
+  margin-top: 0.3rem;
+}
+
+@media (max-width: 640px) {
+  .settings-row,
+  .settings-identity {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-row-end {
+    justify-content: flex-start;
+  }
 }
 
 .kbd {

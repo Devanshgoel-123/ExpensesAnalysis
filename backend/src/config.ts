@@ -45,7 +45,7 @@ const envSchema = z.object({
   POOLING_WORKER_SEPARATE: z.enum(["0", "1"]).default("0"),
   POOLING_WORKER_HOST: z.string().min(1).default("127.0.0.1"),
   POOLING_WORKER_PORT: z.coerce.number().int().min(1).max(65535).default(5473),
-  POOLING_WORKER_INTERVAL_MS: z.coerce.number().int().positive().default(120_000),
+  POOLING_WORKER_INTERVAL_MS: z.coerce.number().int().positive().default(6 * 60 * 60 * 1000),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(120),
   RATE_LIMIT_AUTH_MAX: z.coerce.number().int().positive().default(20),

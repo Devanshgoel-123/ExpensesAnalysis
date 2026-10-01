@@ -7,6 +7,9 @@ import { useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/useApi";
 import { pathForView } from "@/lib/dashboardViews";
 import { telegramConnectHint, type TelegramStatus } from "@/lib/telegram";
+import type { GmailStatus } from "@/lib/api/types";
+import { formatInr } from "@/helpers/currency";
+import { userInitials } from "@/helpers/userInitials";
 
 function resizeAvatar(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -57,21 +60,27 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [showDanger, setShowDanger] = useState(false);
   const [telegram, setTelegram] = useState<TelegramStatus | null>(null);
+  const [gmail, setGmail] = useState<GmailStatus | null>(null);
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [telegramBusy, setTelegramBusy] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [editingLimit, setEditingLimit] = useState(false);
+  const [editingPhone, setEditingPhone] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!api) return;
     try {
-      const [rulesRes, prefsRes, telegramRes] = await Promise.all([
+      const [rulesRes, prefsRes, telegramRes, gmailRes] = await Promise.all([
         api.listRules(),
         api.fetchPreferences(),
         api.telegramStatus().catch(() => null),
+        api.gmailStatus().catch(() => null),
       ]);
       setRules(rulesRes.rules);
       setDailyLimit(prefsRes.dailySpendLimit);
       setTelegram(telegramRes);
+      setGmail(gmailRes);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load settings");
     }
@@ -113,9 +122,6 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
     <div className="settings-sections">
       <header>
         <h2 className="month-label">Settings</h2>
-        <p className="meta" style={{ marginTop: "0.35rem" }}>
-          Signed in as {user?.email}
-        </p>
       </header>
 
       {(message || error) && (
@@ -126,234 +132,305 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
       )}
 
       <section className="settings-section">
-        <h3 className="ui-header">Profile</h3>
-        <p className="meta">
-          Your name and photo show in the sidebar and header.
-        </p>
-        <form
-          className="profile-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            setError(null);
-            setMessage(null);
-            void saveProfile({ displayName: displayName.trim() || null })
-              .then(() => setMessage("Profile saved"))
-              .catch((err) =>
-                setError(err instanceof Error ? err.message : "Could not save profile"),
-              );
-          }}
-        >
-          <label className="field">
-            <span>Name</span>
+        <div className="settings-identity">
+          <label className="settings-avatar" title="Change photo">
+            {user?.avatarUrl ? (
+              <img src={user.avatarUrl} alt="" />
+            ) : (
+              <span>{userInitials(user)}</span>
+            )}
             <input
-              value={displayName}
-              maxLength={80}
-              onChange={(event) => setDisplayName(event.target.value)}
-              placeholder="Your name"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              hidden
+              disabled={avatarBusy}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (!file) return;
+                setAvatarBusy(true);
+                setError(null);
+                void resizeAvatar(file)
+                  .then((avatarUrl) => saveProfile({ avatarUrl }))
+                  .then(() => setMessage("Photo updated"))
+                  .catch((err) =>
+                    setError(err instanceof Error ? err.message : "Could not save photo"),
+                  )
+                  .finally(() => setAvatarBusy(false));
+              }}
             />
           </label>
-          <div className="profile-photo-row">
-            <label className="ghost profile-photo-btn">
-              {avatarBusy ? "Saving photo…" : "Upload photo"}
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                hidden
-                disabled={avatarBusy}
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  event.target.value = "";
-                  if (!file) return;
-                  setAvatarBusy(true);
-                  setError(null);
-                  void resizeAvatar(file)
-                    .then((avatarUrl) => saveProfile({ avatarUrl }))
-                    .then(() => setMessage("Photo updated"))
-                    .catch((err) =>
-                      setError(err instanceof Error ? err.message : "Could not save photo"),
-                    )
-                    .finally(() => setAvatarBusy(false));
-                }}
-              />
-            </label>
-            {user?.avatarUrl ? (
+          <div className="settings-row">
+            <div>
+              <h3 className="ui-header">{user?.displayName?.trim() || "Your name"}</h3>
+              <p className="meta">{avatarBusy ? "Saving photo…" : user?.email}</p>
+            </div>
+            <div className="settings-row-end">
               <button
                 type="button"
                 className="ghost"
                 onClick={() => {
-                  setError(null);
-                  void saveProfile({ avatarUrl: null })
-                    .then(() => setMessage("Photo removed"))
-                    .catch((err) =>
-                      setError(err instanceof Error ? err.message : "Could not remove photo"),
-                    );
+                  setDisplayName(user?.displayName ?? "");
+                  setEditingName((open) => !open);
                 }}
               >
-                Remove photo
+                {editingName ? "Close" : "Edit"}
               </button>
-            ) : null}
+              {user?.avatarUrl ? (
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => {
+                    setError(null);
+                    void saveProfile({ avatarUrl: null })
+                      .then(() => setMessage("Photo removed"))
+                      .catch((err) =>
+                        setError(err instanceof Error ? err.message : "Could not remove photo"),
+                      );
+                  }}
+                >
+                  Remove
+                </button>
+              ) : null}
+            </div>
           </div>
-          {displayName.trim() !== (user?.displayName ?? "").trim() ? (
-            <button type="submit" className="cta">
-              Save name
+        </div>
+        {editingName ? (
+          <form
+            className="settings-reveal"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setError(null);
+              setMessage(null);
+              void saveProfile({ displayName: displayName.trim() || null })
+                .then(() => {
+                  setMessage("Profile saved");
+                  setEditingName(false);
+                })
+                .catch((err) =>
+                  setError(err instanceof Error ? err.message : "Could not save profile"),
+                );
+            }}
+          >
+            <label className="field">
+              <span>Name</span>
+              <input
+                value={displayName}
+                maxLength={80}
+                onChange={(event) => setDisplayName(event.target.value)}
+                placeholder="Your name"
+              />
+            </label>
+            <button
+              type="submit"
+              className="cta"
+              disabled={displayName.trim() === (user?.displayName ?? "").trim()}
+            >
+              Save
             </button>
-          ) : null}
-        </form>
+          </form>
+        ) : null}
       </section>
 
       <section className="settings-section">
-        <h3 className="ui-header">Daily limit</h3>
-        <p className="meta">
-          Cap debit spend per day. Overview and Daily Limit use this as a calm
-          health signal.
-        </p>
-        <DailyLimitForm
-          limit={dailyLimit}
-          onSave={async (next) => {
-            const applied = await saveLimit(next);
-            setDailyLimit(applied);
-            onChanged?.();
-          }}
-        />
-      </section>
-
-      <section className="settings-section">
-        <h3 className="ui-header">Telegram</h3>
-        <p className="meta">
-          {telegram
-            ? telegramConnectHint(telegram)
-            : "Link the mobile number on your Telegram account to this Gmail login."}
-        </p>
-        {telegram?.linked ? (
-          <div className="sort-bar" style={{ marginTop: "0.75rem" }}>
+        <div className="settings-row">
+          <div>
+            <h3 className="ui-header">Daily limit</h3>
+            <p className="meta">
+              Cap debit spend per day. Overview uses this as a calm health signal.
+            </p>
+          </div>
+          <div className="settings-row-end">
+            <span className="settings-value">
+              {dailyLimit != null ? formatInr(dailyLimit) : "Not set"}
+            </span>
             <button
               type="button"
               className="ghost"
-              onClick={async () => {
-                try {
-                  setError(null);
-                  const next = await api.unlinkTelegram();
-                  setTelegram(next);
-                  setPhone("");
-                  setCode("");
-                  setMessage("Telegram disconnected");
-                } catch (err) {
-                  setError(
-                    err instanceof Error ? err.message : "Could not disconnect Telegram",
-                  );
-                }
-              }}
+              onClick={() => setEditingLimit((open) => !open)}
             >
-              Disconnect Telegram
+              {editingLimit ? "Close" : "Edit"}
             </button>
           </div>
-        ) : (
-          <>
-            <form
-              className="profile-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                setError(null);
-                setMessage(null);
-                setTelegramBusy(true);
-                void api
-                  .requestTelegramPhone(phone)
-                  .then((next) => {
-                    setTelegram(next);
-                    setMessage(
-                      next.verify?.codeSent
-                        ? "Code sent on Telegram"
-                        : "Open Telegram and tap Share my number",
-                    );
-                  })
-                  .catch((err) =>
-                    setError(err instanceof Error ? err.message : "Could not send a code"),
-                  )
-                  .finally(() => setTelegramBusy(false));
+        </div>
+        {editingLimit ? (
+          <div className="settings-reveal">
+            <DailyLimitForm
+              limit={dailyLimit}
+              onSave={async (next) => {
+                const applied = await saveLimit(next);
+                setDailyLimit(applied);
+                setEditingLimit(false);
+                onChanged?.();
               }}
-            >
-              <label className="field">
-                <span>Mobile number on Telegram</span>
-                <input
-                  value={phone}
-                  inputMode="tel"
-                  autoComplete="tel"
-                  maxLength={20}
-                  placeholder="98765 43210"
-                  disabled={telegram?.configured === false || telegramBusy}
-                  onChange={(event) => setPhone(event.target.value)}
-                />
-              </label>
-              <button
-                type="submit"
-                className="cta"
-                disabled={telegram?.configured === false || telegramBusy || phone.trim().length < 8}
-              >
-                {telegramBusy ? "Sending…" : "Send code"}
-              </button>
-            </form>
-            {telegram?.verify?.codeSent ? (
-              <form
-                className="profile-form"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  setError(null);
-                  setMessage(null);
-                  setTelegramBusy(true);
-                  void api
-                    .confirmTelegramPhone(code)
-                    .then((next) => {
-                      setTelegram(next);
-                      setCode("");
-                      setMessage(next.linked ? "Telegram linked" : "Code not accepted");
-                    })
-                    .catch((err) =>
-                      setError(err instanceof Error ? err.message : "Could not verify that code"),
-                    )
-                    .finally(() => setTelegramBusy(false));
-                }}
-              >
-                <label className="field">
-                  <span>Code from Telegram</span>
-                  <input
-                    value={code}
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    maxLength={6}
-                    placeholder="6-digit code"
-                    disabled={telegramBusy}
-                    onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                  />
-                </label>
-                <button type="submit" className="cta" disabled={telegramBusy || code.length !== 6}>
-                  Link account
-                </button>
-              </form>
-            ) : null}
-            {telegram?.verify?.botUrl ? (
-              <div className="sort-bar" style={{ marginTop: "0.75rem" }}>
-                <a
-                  className="cta inline-flex"
-                  href={telegram.verify.botUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Open Telegram
-                </a>
-              </div>
-            ) : null}
-          </>
-        )}
+            />
+          </div>
+        ) : null}
       </section>
 
       <section className="settings-section">
-        <h3 className="ui-header">Gmail connection</h3>
-        <p className="meta">
-          Connect Gmail and scan bank mail on Import.
-        </p>
-        <Link href={pathForView("import")} className="cta inline-flex">
-          Manage Gmail import
-        </Link>
+        <div className="settings-row">
+          <div>
+            <h3 className="ui-header">Telegram</h3>
+            <p className="meta">
+              {telegram
+                ? telegramConnectHint(telegram)
+                : "Link the mobile number on your Telegram account to this login."}
+            </p>
+          </div>
+          <div className="settings-row-end">
+            <span className={`status-pill ${telegram?.linked ? "is-on" : "is-off"}`}>
+              {telegram?.linked ? "Connected" : "Not linked"}
+            </span>
+            {telegram?.linked ? (
+              <button
+                type="button"
+                className="ghost"
+                onClick={async () => {
+                  try {
+                    setError(null);
+                    const next = await api.unlinkTelegram();
+                    setTelegram(next);
+                    setPhone("");
+                    setCode("");
+                    setEditingPhone(false);
+                    setMessage("Telegram disconnected");
+                  } catch (err) {
+                    setError(
+                      err instanceof Error ? err.message : "Could not disconnect Telegram",
+                    );
+                  }
+                }}
+              >
+                Disconnect
+              </button>
+            ) : telegram?.verify?.codeSent ? null : (
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => setEditingPhone((open) => !open)}
+              >
+                {editingPhone ? "Close" : telegram?.verify ? "Edit" : "Link"}
+              </button>
+            )}
+            {!telegram?.linked &&
+            telegram?.verify &&
+            !telegram.verify.codeSent &&
+            telegram.verify.botUrl ? (
+              <a className="ghost" href={telegram.verify.botUrl} target="_blank" rel="noreferrer">
+                Open Telegram
+              </a>
+            ) : null}
+          </div>
+        </div>
+        {!telegram?.linked && editingPhone && !telegram?.verify?.codeSent ? (
+          <form
+            className="settings-reveal"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setError(null);
+              setMessage(null);
+              setTelegramBusy(true);
+              void api
+                .requestTelegramPhone(phone)
+                .then((next) => {
+                  setTelegram(next);
+                  setEditingPhone(false);
+                  setMessage(
+                    next.verify?.codeSent
+                      ? "Code sent on Telegram"
+                      : "Open Telegram and tap Share my number",
+                  );
+                })
+                .catch((err) =>
+                  setError(err instanceof Error ? err.message : "Could not send a code"),
+                )
+                .finally(() => setTelegramBusy(false));
+            }}
+          >
+            <label className="field">
+              <span>Mobile number on Telegram</span>
+              <input
+                value={phone}
+                inputMode="tel"
+                autoComplete="tel"
+                maxLength={20}
+                placeholder="98765 43210"
+                disabled={telegram?.configured === false || telegramBusy}
+                onChange={(event) => setPhone(event.target.value)}
+              />
+            </label>
+            <button
+              type="submit"
+              className="cta"
+              disabled={telegram?.configured === false || telegramBusy || phone.trim().length < 8}
+            >
+              {telegramBusy ? "Sending…" : "Send code"}
+            </button>
+          </form>
+        ) : null}
+        {!telegram?.linked && telegram?.verify?.codeSent ? (
+          <form
+            className="settings-reveal"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setError(null);
+              setMessage(null);
+              setTelegramBusy(true);
+              void api
+                .confirmTelegramPhone(code)
+                .then((next) => {
+                  setTelegram(next);
+                  setCode("");
+                  setEditingPhone(false);
+                  setMessage(next.linked ? "Telegram linked" : "Code not accepted");
+                })
+                .catch((err) =>
+                  setError(err instanceof Error ? err.message : "Could not verify that code"),
+                )
+                .finally(() => setTelegramBusy(false));
+            }}
+          >
+            <label className="field">
+              <span>Code from Telegram</span>
+              <input
+                value={code}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                placeholder="6-digit code"
+                disabled={telegramBusy}
+                onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              />
+            </label>
+            <button type="submit" className="cta" disabled={telegramBusy || code.length !== 6}>
+              Link account
+            </button>
+          </form>
+        ) : null}
+      </section>
+
+      <section className="settings-section">
+        <div className="settings-row">
+          <div>
+            <h3 className="ui-header">Gmail</h3>
+            <p className="meta">
+              {gmail?.connected
+                ? gmail.email
+                  ? `Reading bank mail for ${gmail.email}.`
+                  : "Bank mail is connected."
+                : "Connect Gmail on Import to scan bank mail."}
+            </p>
+          </div>
+          <div className="settings-row-end">
+            <span className={`status-pill ${gmail?.connected ? "is-on" : "is-off"}`}>
+              {gmail?.connected ? "Connected" : "Not connected"}
+            </span>
+            <Link href={pathForView("import")} className="ghost">
+              {gmail?.connected ? "Manage" : "Connect"}
+            </Link>
+          </div>
+        </div>
       </section>
 
       {rules.some((rule) => !rule.setPayeeName) ? (
@@ -391,7 +468,7 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
       <section className="settings-section">
         <h3 className="ui-header">Account</h3>
         <p className="meta">Session and privacy controls.</p>
-        <div className="sort-bar">
+        <div className="settings-actions">
           <button
             type="button"
             className="ghost"

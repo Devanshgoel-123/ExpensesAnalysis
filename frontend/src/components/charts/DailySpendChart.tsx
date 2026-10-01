@@ -25,6 +25,44 @@ export interface DailySpendChartProps {
   categories?: CategorySummary[];
   dailyLimit?: number | null;
   insights?: DailyInsights;
+  /** YYYY-MM. Days start at the 1st so a new month fills from the left. */
+  month?: string;
+}
+
+function daysOfMonth(month: string): string[] {
+  const match = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!match) return [];
+  const year = Number(match[1]);
+  const monthNumber = Number(match[2]);
+  const count = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  return Array.from({ length: count }, (_, index) => {
+    const day = String(index + 1).padStart(2, "0");
+    return `${match[1]}-${match[2]}-${day}`;
+  });
+}
+
+/** Day 1 is the first slot. The current month stops at today; earlier months show every day. */
+function daysFromMonthStart(
+  rows: DailySpend[],
+  month: string | undefined,
+  today: string,
+): DailySpend[] {
+  const key =
+    month && /^\d{4}-\d{2}$/.test(month) ? month : rows[0]?.date.slice(0, 7);
+  if (!key || !/^\d{4}-\d{2}$/.test(key)) return rows;
+  const days = daysOfMonth(key);
+  if (days.length === 0) return rows;
+  const isCurrent = key === today.slice(0, 7);
+  const lastSpend = rows.reduce((latest, row) => (row.date > latest ? row.date : latest), "");
+  const end = month
+    ? isCurrent
+      ? today
+      : days[days.length - 1]!
+    : lastSpend || days[0]!;
+  const amounts = new Map(rows.map((row) => [row.date.slice(0, 10), row.amount]));
+  return days
+    .filter((date) => date <= end)
+    .map((date) => ({ date, amount: amounts.get(date) ?? 0 }));
 }
 
 function todayIso(): string {
@@ -49,12 +87,17 @@ export function DailySpendChart({
   categories = [],
   dailyLimit,
   insights,
+  month,
 }: DailySpendChartProps) {
   const debitDays = useMemo(
     () => (transactions ? debitDailySpend(transactions) : null),
     [transactions],
   );
   const rows = debitDays ?? normalizeDailySpend(data);
+  const plotted = useMemo(
+    () => (rows.some((day) => day.amount > 0) ? daysFromMonthStart(rows, month, todayIso()) : rows),
+    [rows, month],
+  );
   const period = useMemo(() => {
     if (!transactions) return null;
     let spent = 0;
@@ -76,8 +119,8 @@ export function DailySpendChart({
     rows.length > 0 ? rows.reduce((sum, day) => sum + day.amount, 0) / rows.length : 0;
 
   const points = useMemo<DetailBarPoint[]>(() => {
-    const step = rows.length <= 8 ? 1 : Math.ceil(rows.length / 6);
-    return rows.map((day, index) => {
+    const step = plotted.length <= 8 ? 1 : Math.ceil(plotted.length / 6);
+    return plotted.map((day, index) => {
       const tone = spendTone(day.amount, avg, limit);
       const toneLabel = spendToneLabel(tone, day.amount, limit);
       const compared = versusAverageCopy(day.amount, avg);
@@ -109,7 +152,7 @@ export function DailySpendChart({
         value: day.amount,
         axisPrimary: formatChartDay(day.date),
         axisSecondary: formatChartWeekday(day.date),
-        showLabel: rows.length <= 12 || index % step === 0 || index === rows.length - 1,
+        showLabel: plotted.length <= 12 || index % step === 0 || index === plotted.length - 1,
         tone,
         toneLabel,
         title,
@@ -126,7 +169,7 @@ export function DailySpendChart({
         overLimit: limit != null && day.amount > limit,
       };
     });
-  }, [rows, avg, limit, today, transactions, categories]);
+  }, [plotted, avg, limit, today, transactions, categories]);
 
   const guides = useMemo<ChartGuide[]>(() => {
     const next: ChartGuide[] = [];

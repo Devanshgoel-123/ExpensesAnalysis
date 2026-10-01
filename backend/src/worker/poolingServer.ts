@@ -29,7 +29,7 @@ process.on("unhandledRejection", (reason) => {
 const HOST = config.poolingWorker.host;
 const PORT = config.poolingWorker.port;
 const INTERVAL_MS = config.poolingWorker.intervalMs;
-const TICK_TIMEOUT_MS = Math.min(Math.max(INTERVAL_MS - 5_000, 60_000), 120_000);
+const TICK_TIMEOUT_MS = 15 * 60 * 1000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {

@@ -1,24 +1,27 @@
+import { BACKFILL_DEFAULT_MAX_MESSAGES } from "../constants/index.js";
 import { getStore } from "../db/index.js";
+import { PoolingRunTrigger } from "../enums/pooling.js";
+import { poolingScanWindow } from "../helpers/dates.js";
 import { childLogger } from "../logger/index.js";
 import { renewWatch } from "./client.js";
-import { runAllPoolingPolls } from "./poolingService.js";
+import { runAllPoolingBackfills } from "./poolingService.js";
 
 const log = childLogger({ module: "gmail-jobs" });
 
 let pollInFlight = false;
 let watchInFlight = false;
 
-/** Daily watch renewal + hourly pooling dispatcher for enabled accounts. */
-export function startGmailJobs(): void {
-  const HOUR = 60 * 60 * 1000;
-  const DAY = 24 * HOUR;
+const SIX_HOURS = 6 * 60 * 60 * 1000;
+const DAY = 24 * 60 * 60 * 1000;
 
+/** Daily watch renewal, and a current-month Gmail sync every 6 hours. */
+export function startGmailJobs(): void {
   log.info(
-    { pollIntervalMs: HOUR, watchIntervalMs: DAY },
-    "gmail jobs scheduled — hourly pooling dispatcher, daily watch renewal",
+    { pollIntervalMs: SIX_HOURS, watchIntervalMs: DAY },
+    "gmail jobs scheduled — current-month sync every 6 hours, daily watch renewal",
   );
 
-  // Kick an initial dispatcher pass shortly after boot so ops can verify quickly.
+  // One pass shortly after boot, then every 6 hours.
   setTimeout(() => {
     void dispatchPoolingPolls("boot");
   }, 15_000).unref?.();
@@ -29,7 +32,7 @@ export function startGmailJobs(): void {
 
   setInterval(() => {
     void dispatchPoolingPolls("interval");
-  }, HOUR).unref?.();
+  }, SIX_HOURS).unref?.();
 }
 
 async function renewAllWatches(): Promise<void> {
@@ -64,9 +67,23 @@ async function dispatchPoolingPolls(source: "boot" | "interval"): Promise<void> 
   }
   pollInFlight = true;
   try {
-    log.info({ source }, "pooling dispatcher tick");
-    const result = await runAllPoolingPolls();
-    log.info({ source, ...result }, "pooling dispatcher tick complete");
+    const month = poolingScanWindow().to.slice(0, 7);
+    log.info({ source, month }, "pooling dispatcher tick");
+    const result = await runAllPoolingBackfills({
+      month,
+      maxMessages: BACKFILL_DEFAULT_MAX_MESSAGES,
+      trigger: PoolingRunTrigger.Dispatcher,
+    });
+    log.info(
+      {
+        source,
+        month,
+        accountCount: result.accountCount,
+        succeeded: result.succeeded,
+        failed: result.failed,
+      },
+      "pooling dispatcher tick complete",
+    );
   } catch (error) {
     log.error(
       {
@@ -80,12 +97,23 @@ async function dispatchPoolingPolls(source: "boot" | "interval"): Promise<void> 
   }
 }
 
-/** Manual trigger for ops / tests. */
+/** Manual trigger for ops / tests. Syncs the current IST month. */
 export async function triggerPoolingDispatcher(): Promise<{
   accountCount: number;
   succeeded: number;
   failed: number;
   skipped: number;
 }> {
-  return runAllPoolingPolls();
+  const month = poolingScanWindow().to.slice(0, 7);
+  const result = await runAllPoolingBackfills({
+    month,
+    maxMessages: BACKFILL_DEFAULT_MAX_MESSAGES,
+    trigger: PoolingRunTrigger.Dispatcher,
+  });
+  return {
+    accountCount: result.accountCount,
+    succeeded: result.succeeded,
+    failed: result.failed,
+    skipped: 0,
+  };
 }

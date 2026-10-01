@@ -76,6 +76,7 @@ export function OverviewPage() {
           transactions={data.transactions}
           categories={data.categories ?? []}
           insights={dailyInsights}
+          month={month}
         />
       </LedgerlineFadeContent>
 

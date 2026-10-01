@@ -1071,6 +1071,7 @@ export async function probeGmailQueries(input: {
 export async function runAllPoolingBackfills(options?: {
   month?: string;
   maxMessages?: number;
+  trigger?: PoolingRunTrigger;
 }): Promise<{
   accountCount: number;
   succeeded: number;
@@ -1119,7 +1120,7 @@ export async function runAllPoolingBackfills(options?: {
         account,
         month: options?.month,
         maxMessages: options?.maxMessages ?? 50,
-        trigger: "manual_sync",
+        trigger: options?.trigger ?? PoolingRunTrigger.ManualSync,
       });
       succeeded += 1;
       results.push({
