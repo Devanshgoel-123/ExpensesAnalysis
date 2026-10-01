@@ -9,8 +9,6 @@ import type { Provider } from "@/lib/api/types";
 import {
   groupAppsByCategory,
   logoForAppName,
-  logoForCategory,
-  spendByCategorySlug,
 } from "@/helpers/apps";
 import { formatInr } from "@/helpers/currency";
 import { formatMonthTitle } from "@/helpers/finance";
@@ -18,6 +16,98 @@ import { BrandMark } from "@/components/BrandMark";
 import { LedgerlineFadeContent } from "@/components/animations/LedgerlineFadeContent";
 import { Panel, PanelHead } from "@/components/ui/Panel";
 import { LoadingState } from "@/components/ui/LoadingState";
+import type { CategorySummary } from "@/types";
+
+function categoryChoices(categories: CategorySummary[], current: string | null) {
+  const parents = categories.filter((category) => !category.meta?.parent);
+  if (!current || parents.some((category) => category.slug === current)) return parents;
+  const selected = categories.find((category) => category.slug === current);
+  return selected ? [selected, ...parents] : parents;
+}
+
+function AppCard({
+  name,
+  logoUrl,
+  total,
+  count,
+  categorySlug,
+  categories,
+  upiHandles,
+  onCategory,
+  onAddUpi,
+}: {
+  name: string;
+  logoUrl: string | null;
+  total: number;
+  count: number;
+  categorySlug: string | null;
+  categories: CategorySummary[];
+  upiHandles: string[];
+  onCategory: (slug: string) => Promise<void>;
+  onAddUpi: (handle: string) => Promise<void>;
+}) {
+  return (
+    <article className="app-card">
+      <header className="app-card-head">
+        <BrandMark name={name} logoUrl={logoUrl} size={40} />
+        <div className="app-card-id">
+          <strong>{name}</strong>
+          <p className="meta">
+            {count > 0
+              ? `${formatInr(total)} · ${count} txn${count === 1 ? "" : "s"}`
+              : "No tagged spend yet"}
+          </p>
+        </div>
+      </header>
+      <label className="field field-compact">
+        <span>Category</span>
+        <select
+          aria-label={`Category for ${name}`}
+          value={categorySlug ?? ""}
+          onChange={(event) => {
+            void onCategory(event.target.value);
+          }}
+        >
+          {categoryChoices(categories, categorySlug).map((category) => (
+            <option key={category.slug} value={category.slug}>
+              {category.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <form
+        className="app-upi"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const input = event.currentTarget.elements.namedItem("upi");
+          if (!(input instanceof HTMLInputElement)) return;
+          const handle = input.value.trim();
+          if (!handle) return;
+          void onAddUpi(handle).then(() => {
+            input.value = "";
+          });
+        }}
+      >
+        <span className="app-upi-label">UPI ids</span>
+        {upiHandles.length > 0 ? (
+          <ul className="app-upi-list">
+            {upiHandles.map((handle) => (
+              <li key={handle} title={handle}>
+                {handle}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="meta">No vendor UPI id yet</p>
+        )}
+        <div className="app-upi-add">
+          <input name="upi" aria-label={`Add a UPI id for ${name}`} placeholder="name@bank" autoComplete="off" />
+          <button type="submit">Add</button>
+        </div>
+      </form>
+    </article>
+  );
+}
 
 export function AppsPage() {
   const { data, month, fetching, refresh } = useDashboard();
@@ -49,10 +139,6 @@ export function AppsPage() {
         data?.categories ?? [],
       ),
     [providers, data],
-  );
-  const categorySpend = useMemo(
-    () => spendByCategorySlug(data?.transactions ?? []),
-    [data],
   );
 
   if (fetching && !data) {
@@ -87,202 +173,44 @@ export function AppsPage() {
               title={group.label}
               subtitle={`${group.apps.length} app${group.apps.length === 1 ? "" : "s"}`}
             />
-            {group.apps.length === 0 &&
-            !(data.categories ?? []).some((category) => category.meta?.parent === group.slug) ? (
+            {group.apps.length === 0 ? (
               <p className="meta">No apps in this category yet</p>
             ) : (
-              <div className="apps-sections">
-                {(data.categories ?? [])
-                  .filter((category) => category.meta?.parent === group.slug)
-                  .sort((a, b) => a.sortOrder - b.sortOrder)
-                  .map((category) => {
-                    const nested = group.apps.filter(
-                      (app) => app.provider.categorySlug === category.slug,
-                    );
-                    if (nested.length === 0) return null;
-                    const spent = categorySpend.get(category.slug) ?? { total: 0, count: 0 };
-                    return (
-                    <section key={category.slug} className="apps-subblock">
-                    <article className="app-card">
-                      <header className="app-card-head">
-                        <BrandMark
-                          name={category.label}
-                          logoUrl={logoForCategory(category.slug)}
-                          size={40}
-                        />
-                        <div className="app-card-id">
-                          <strong>{category.label}</strong>
-                          <p className="meta">
-                            {spent.count > 0
-                              ? `${formatInr(spent.total)} · ${spent.count} txn${spent.count === 1 ? "" : "s"}`
-                              : "No tagged spend yet"}
-                          </p>
-                        </div>
-                      </header>
-                      <div className="field field-compact">
-                        <span>Category</span>
-                        <p className="app-card-value">{group.label}</p>
-                      </div>
-                    </article>
-                    <div className="apps-grid">
-                      {nested.map(({ provider, total, count }) => (
-                        <article key={provider.id} className="app-card">
-                          <header className="app-card-head">
-                            <BrandMark name={provider.canonicalName} logoUrl={provider.logoUrl} size={40} />
-                            <div className="app-card-id">
-                              <strong>{provider.canonicalName}</strong>
-                              <p className="meta">
-                                {count > 0
-                                  ? `${formatInr(total)} · ${count} txn${count === 1 ? "" : "s"}`
-                                  : "No tagged spend yet"}
-                              </p>
-                            </div>
-                          </header>
-                        </article>
-                      ))}
-                    </div>
-                    </section>
-                    );
-                  })}
-                <div className="apps-grid">
-                {(data.categories ?? [])
-                  .filter((category) => category.meta?.parent === group.slug)
-                  .filter(
-                    (category) =>
-                      category.slug !== "passed-on" &&
-                      !group.apps.some((app) => app.provider.categorySlug === category.slug),
-                  )
-                  .sort((a, b) => a.sortOrder - b.sortOrder)
-                  .map((category) => {
-                    const spent = categorySpend.get(category.slug) ?? { total: 0, count: 0 };
-                    return (
-                    <article key={category.slug} className="app-card">
-                      <header className="app-card-head">
-                        <BrandMark
-                          name={category.label}
-                          logoUrl={logoForCategory(category.slug)}
-                          size={40}
-                        />
-                        <div className="app-card-id">
-                          <strong>{category.label}</strong>
-                          <p className="meta">
-                            {spent.count > 0
-                              ? `${formatInr(spent.total)} · ${spent.count} txn${spent.count === 1 ? "" : "s"}`
-                              : "No tagged spend yet"}
-                          </p>
-                        </div>
-                      </header>
-                      <div className="field field-compact">
-                        <span>Category</span>
-                        <p className="app-card-value">{group.label}</p>
-                      </div>
-                    </article>
-                    );
-                  })}
-                {group.apps
-                  .filter((app) => {
-                    const parent = (data.categories ?? []).find(
-                      (category) => category.slug === app.provider.categorySlug,
-                    )?.meta?.parent;
-                    return parent !== group.slug;
-                  })
-                  .map(({ provider, total, count }) => (
-                  <article key={provider.id} className="app-card">
-                    <header className="app-card-head">
-                      <BrandMark
-                        name={provider.canonicalName}
-                        logoUrl={provider.logoUrl}
-                        size={40}
-                      />
-                      <div className="app-card-id">
-                        <strong>{provider.canonicalName}</strong>
-                        <p className="meta">
-                          {count > 0
-                            ? `${formatInr(total)} · ${count} txn${count === 1 ? "" : "s"}`
-                            : "No tagged spend yet"}
-                        </p>
-                      </div>
-                    </header>
-                    <label className="field field-compact">
-                      <span>Category</span>
-                      <select
-                        aria-label={`Category for ${provider.canonicalName}`}
-                        value={provider.categorySlug ?? ""}
-                        onChange={async (event) => {
-                          if (!api || !provider.id) return;
-                          const next = event.target.value;
-                          try {
-                            setError(null);
-                            await api.patchProvider(provider.id, {
-                              categorySlug: next,
-                            });
-                            await loadProviders();
-                            refresh();
-                          } catch (err) {
-                            setError(
-                              err instanceof Error
-                                ? err.message
-                                : "Could not move app",
-                            );
-                          }
-                        }}
-                      >
-                        {(data.categories ?? [])
-                          .filter((category) => !category.meta?.parent)
-                          .map((category) => (
-                          <option key={category.slug} value={category.slug}>
-                            {category.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <form
-                      className="app-upi"
-                      onSubmit={async (event) => {
-                        event.preventDefault();
-                        if (!api || !provider.id) return;
-                        const input = event.currentTarget.elements.namedItem("upi");
-                        if (!(input instanceof HTMLInputElement)) return;
-                        const handle = input.value.trim();
-                        if (!handle) return;
-                        try {
-                          setError(null);
-                          await api.patchProvider(provider.id, { addUpiHandle: handle });
-                          input.value = "";
-                          setMessage(`${handle} saved on ${provider.canonicalName}`);
-                          await loadProviders();
-                        } catch (err) {
-                          setError(
-                            err instanceof Error ? err.message : "Could not save UPI id",
-                          );
-                        }
-                      }}
-                    >
-                      <span className="app-upi-label">UPI ids</span>
-                      {provider.upiHandles.length > 0 ? (
-                        <ul className="app-upi-list">
-                          {provider.upiHandles.map((handle) => (
-                            <li key={handle} title={handle}>
-                              {handle}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="meta">No vendor UPI id yet</p>
-                      )}
-                      <div className="app-upi-add">
-                        <input
-                          name="upi"
-                          aria-label={`Add a UPI id for ${provider.canonicalName}`}
-                          placeholder="name@bank"
-                          autoComplete="off"
-                        />
-                        <button type="submit">Add</button>
-                      </div>
-                    </form>
-                  </article>
+              <div className="apps-grid">
+                {group.apps.map(({ provider, total, count }) => (
+                  <AppCard
+                    key={provider.id}
+                    name={provider.canonicalName}
+                    logoUrl={provider.logoUrl}
+                    total={total}
+                    count={count}
+                    categorySlug={provider.categorySlug}
+                    categories={data.categories ?? []}
+                    upiHandles={provider.upiHandles}
+                    onCategory={async (next) => {
+                      if (!api || !provider.id) return;
+                      try {
+                        setError(null);
+                        await api.patchProvider(provider.id, { categorySlug: next });
+                        await loadProviders();
+                        refresh();
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : "Could not move app");
+                      }
+                    }}
+                    onAddUpi={async (handle) => {
+                      if (!api || !provider.id) return;
+                      try {
+                        setError(null);
+                        await api.patchProvider(provider.id, { addUpiHandle: handle });
+                        setMessage(`${handle} saved on ${provider.canonicalName}`);
+                        await loadProviders();
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : "Could not save UPI id");
+                      }
+                    }}
+                  />
                 ))}
-                </div>
               </div>
             )}
           </Panel>
