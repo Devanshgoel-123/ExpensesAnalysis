@@ -64,7 +64,8 @@ export function mapTransaction(row: Record<string, unknown>): TransactionRow {
     ),
     fingerprint: String(row.fingerprint),
     mailMessageId: (row.mailMessageId as string | null) ?? null,
-    origin: row.origin === "statement" ? "statement" : "mail",
+    origin:
+      row.origin === "statement" || row.origin === "manual" ? row.origin : "mail",
     verifiedAt: row.verifiedAt
       ? new Date(row.verifiedAt as Date | string).toISOString()
       : null,

@@ -358,6 +358,27 @@ export function createApiClient(token: string) {
         ...auth,
       }),
 
+    createManualExpense: (body: {
+      date: string;
+      amount: number;
+      categorySlug: string;
+      description: string;
+    }) =>
+      requestJson<{ transaction: unknown }>("/api/imports/transactions", {
+        method: "POST",
+        ...auth,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+
+    setBillSplit: (id: string, friends: { name: string; amount: number }[]) =>
+      requestJson<{ transaction: unknown }>(`/api/imports/transactions/${id}/splits`, {
+        method: "PUT",
+        ...auth,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ friends }),
+      }),
+
     correctTransaction: (
       id: string,
       body: {

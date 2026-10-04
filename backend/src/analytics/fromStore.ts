@@ -1,4 +1,5 @@
 import type { CategoryRow, ProviderRow, TransactionRow } from "../db/types.js";
+import { myShare } from "../splits/share.js";
 import { resolveAmountBand } from "../categories/heuristics.js";
 import { ClassificationSource } from "../enums/classification.js";
 import { counterpartyFromNarration, isAccountBank, merchantIsAccountBank } from "../narration/party.js";
@@ -19,8 +20,14 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+function countedAmount(row: TransactionRow): number {
+  if (row.type !== "debit") return row.amount;
+  return myShare(row.amount, row.splits ?? []);
+}
+
 function signedAmount(row: TransactionRow): number {
-  return row.type === "credit" ? -row.amount : row.amount;
+  const amount = countedAmount(row);
+  return row.type === "credit" ? -amount : amount;
 }
 
 interface SpendIdentity {
@@ -177,6 +184,8 @@ function rowToApiTransaction(
   category: string | null;
   categoryLabel: string | null;
   logoUrl: string | null;
+  myShare: number;
+  splits: { name: string; amount: number }[];
 } {
   const provider = providers.find((p) => p.id === row.providerId) ?? null;
   const identity = resolveSpendIdentity(row, providers);
@@ -192,6 +201,8 @@ function rowToApiTransaction(
     description: row.description,
     amount: row.amount,
     type: row.type,
+    myShare: row.type === "debit" ? countedAmount(row) : row.amount,
+    splits: row.splits ?? [],
     upiId: identity.upiId,
     merchant: identity.merchant,
     payee: row.payee,
@@ -217,7 +228,7 @@ function buildAmountBand(
   for (const t of debits) {
     if (t.categorySlug !== config.slug) continue;
     bandCount += 1;
-    bandTotal += t.amount;
+    bandTotal += countedAmount(t);
     bandDayCounts[t.date] = (bandDayCounts[t.date] ?? 0) + 1;
   }
 
@@ -248,7 +259,9 @@ export function buildAnalyticsFromRows(
 
   const spendByDay = new Map<string, number>();
   for (const t of debits) {
-    spendByDay.set(t.date, (spendByDay.get(t.date) ?? 0) + Math.abs(t.amount));
+    const share = countedAmount(t);
+    if (share <= 0) continue;
+    spendByDay.set(t.date, (spendByDay.get(t.date) ?? 0) + share);
   }
   for (const t of refunds) {
     spendByDay.set(t.date, (spendByDay.get(t.date) ?? 0) - Math.abs(t.amount));
@@ -361,7 +374,7 @@ export function buildAnalyticsFromRows(
     if (!bucket) continue;
     bucket.total = round2(bucket.total + signedAmount(t));
     bucket.count += 1;
-    if (t.type === "debit") bucket.paid = round2(bucket.paid + t.amount);
+    if (t.type === "debit") bucket.paid = round2(bucket.paid + countedAmount(t));
     else bucket.received = round2(bucket.received + t.amount);
     if (!bucket.days.includes(t.date)) bucket.days.push(t.date);
     if (!bucket.lastDate || t.date > bucket.lastDate) bucket.lastDate = t.date;
@@ -381,7 +394,7 @@ export function buildAnalyticsFromRows(
       dayCounts: {},
     } satisfies AmountBand);
 
-  const grossSpent = round2(debits.reduce((sum, t) => sum + t.amount, 0));
+  const grossSpent = round2(debits.reduce((sum, t) => sum + countedAmount(t), 0));
   const totalReceived = round2(credits.reduce((sum, t) => sum + t.amount, 0));
   const totalRefunded = round2(refunds.reduce((sum, t) => sum + t.amount, 0));
   const totalSpent = round2(grossSpent - totalRefunded);

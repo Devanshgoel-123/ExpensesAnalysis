@@ -189,8 +189,9 @@ export function peopleFromTransactions(
     if (!name) continue;
     const person = ensure(name);
     const paid = txn.type === TxType.Debit;
+    const share = txn.myShare ?? txn.amount;
     person.count += 1;
-    if (paid) person.paid = Math.round((person.paid + txn.amount) * 100) / 100;
+    if (paid) person.paid = Math.round((person.paid + share) * 100) / 100;
     else person.received = Math.round((person.received + txn.amount) * 100) / 100;
     person.total = Math.round((person.paid - person.received) * 100) / 100;
     if (!person.days.includes(txn.date)) person.days.push(txn.date);
@@ -213,10 +214,10 @@ export function peopleFromTransactions(
 
 /** Spend is money out minus refunds. Salary and other credits stay on Received. Money you only passed on is neither. */
 export function spendAmount(
-  txn: Pick<Transaction, "type" | "amount" | "isRefund" | "category">,
+  txn: Pick<Transaction, "type" | "amount" | "isRefund" | "category" | "myShare">,
 ): number {
   if (txn.category === CategorySlug.PassedOn) return 0;
-  if (txn.type === TxType.Debit) return Math.abs(txn.amount);
+  if (txn.type === TxType.Debit) return Math.abs(txn.myShare ?? txn.amount);
   if (txn.type === TxType.Credit && txn.isRefund) return -Math.abs(txn.amount);
   return 0;
 }

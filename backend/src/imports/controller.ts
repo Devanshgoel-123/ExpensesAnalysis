@@ -12,12 +12,15 @@ import { assertPdfUpload, mapPdfImportError } from "./pdfErrors.js";
 import {
   clearImportedDataForUser,
   correctTransactionForUser,
+  createManualExpense,
   deleteTransactionForUser,
   getDashboardForUser,
   getImportStatusForUser,
   listImportsForUser,
   processPdfImport,
+  setBillSplit,
 } from "./service.js";
+import type { BillSplitBody, ManualExpenseBody } from "../validators/imports.js";
 
 export const getDashboardController: RequestHandler = async (req, res) => {
   const query = req.query as DashboardQuery;
@@ -76,6 +79,18 @@ export const parseEphemeralController: RequestHandler = async (req, res) => {
 
 export const deleteTransactionController: RequestHandler = async (req, res) => {
   res.json(await deleteTransactionForUser(req.user!.id, String(req.params.id)));
+};
+
+export const createManualExpenseController: RequestHandler = async (req, res) => {
+  const body = req.body as ManualExpenseBody;
+  const transaction = await createManualExpense(req.user!.id, body);
+  res.status(201).json({ transaction });
+};
+
+export const setBillSplitController: RequestHandler = async (req, res) => {
+  const body = req.body as BillSplitBody;
+  const transaction = await setBillSplit(req.user!.id, String(req.params.id), body.friends);
+  res.json({ transaction });
 };
 
 export const correctTransactionController: RequestHandler = async (req, res) => {

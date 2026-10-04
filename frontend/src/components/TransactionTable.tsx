@@ -10,6 +10,7 @@ import { BrandMark } from "@/components/BrandMark";
 import { SpotlightCard } from "@/components/SpotlightCard";
 import { CategoryMenu } from "@/components/CategoryMenu";
 import { TxnAssignPicker } from "@/components/TxnAssignPicker";
+import { BillSplitControl } from "@/components/LedgerMoneyForms";
 
 interface TransactionTableProps {
   items: Transaction[];
@@ -23,6 +24,7 @@ interface TransactionTableProps {
   ) => void;
   deletingId?: string | null;
   onDelete?: (txn: Transaction) => void;
+  onChanged?: () => void;
 }
 
 type SortKey = "date" | "amount" | "merchant" | "category";
@@ -75,6 +77,7 @@ export function TransactionTable({
   onAssign,
   deletingId,
   onDelete,
+  onChanged,
 }: TransactionTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -318,6 +321,7 @@ export function TransactionTable({
                             >
                               {spend.title}
                             </div>
+                            <BillSplitControl txn={txn} onSaved={() => onChanged?.()} />
                             {txn.description && txn.description !== spend.title ? (
                               <div className="desc meta">{txn.description}</div>
                             ) : null}
@@ -376,6 +380,7 @@ export function TransactionTable({
                         <div>
                           <strong>{spend.title}</strong>
                           <p className="meta">{formatShortDate(txn.date)}</p>
+                          <BillSplitControl txn={txn} onSaved={() => onChanged?.()} />
                         </div>
                       </div>
                       <strong className={`mono ${txn.type}`}>

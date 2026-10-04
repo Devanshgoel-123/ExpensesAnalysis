@@ -224,6 +224,24 @@ export const transactions = pgTable(
   ],
 );
 
+/** Friends' shares of a bill. Only the remainder counts as your spend. */
+export const transactionSplits = pgTable(
+  "transaction_splits",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    transactionId: uuid("transaction_id")
+      .notNull()
+      .references(() => transactions.id, { onDelete: "cascade" }),
+    friendName: text("friend_name").notNull(),
+    amount: numeric("amount").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("transaction_splits_txn_idx").on(t.transactionId)],
+);
+
 /** Parsed statement rows — evidence only; the ledger stays in `transactions`. */
 export const statementLines = pgTable(
   "statement_lines",

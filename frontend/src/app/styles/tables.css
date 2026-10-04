@@ -350,6 +350,55 @@ td.credit,
   opacity: 0.6;
 }
 
+.manual-expense,
+.bill-split {
+  display: grid;
+  gap: 0.55rem;
+  margin-bottom: 0.85rem;
+}
+
+.manual-expense {
+  grid-template-columns: 1.4fr 0.7fr 1fr 0.8fr auto;
+  align-items: end;
+}
+
+.manual-expense-actions,
+.bill-split-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.bill-split-row input {
+  min-width: 0;
+  flex: 1;
+  padding: 0.4rem 0.55rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--foreground);
+}
+
+.bill-split-quiet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.6rem;
+  align-items: center;
+  margin-top: 0.25rem;
+}
+
+.bill-split-open {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+@media (max-width: 800px) {
+  .manual-expense {
+    grid-template-columns: 1fr;
+  }
+}
+
 .txn-cards {
   display: none;
   gap: 0.65rem;

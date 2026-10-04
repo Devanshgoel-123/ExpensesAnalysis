@@ -7,6 +7,7 @@ import type { Provider } from "@/lib/api/types";
 import type { Transaction } from "@/types";
 import { formatInrExact } from "@/helpers/currency";
 import { TransactionTable } from "@/components/TransactionTable";
+import { ManualExpenseForm } from "@/components/LedgerMoneyForms";
 import { LedgerlineFadeContent } from "@/components/animations/LedgerlineFadeContent";
 
 export function TransactionsPage() {
@@ -129,6 +130,7 @@ export function TransactionsPage() {
 
   return (
     <LedgerlineFadeContent className="txn-fill">
+      <ManualExpenseForm categories={data.categories ?? []} onSaved={refresh} />
       <TransactionTable
         items={items}
         categories={data.categories ?? []}
@@ -138,6 +140,7 @@ export function TransactionsPage() {
         onAssign={onAssign}
         deletingId={deletingId}
         onDelete={onDelete}
+        onChanged={refresh}
       />
     </LedgerlineFadeContent>
   );

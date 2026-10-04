@@ -60,6 +60,7 @@ export function Sidebar({
       >
         <div className="sidebar-top">
           <div className="sidebar-brand-row">
+            <img className="sidebar-logo" src="/logo.svg" alt="" width={28} height={28} />
             <UserAvatar
               initials={userInitials({ email: userEmail, displayName })}
               src={avatarUrl}

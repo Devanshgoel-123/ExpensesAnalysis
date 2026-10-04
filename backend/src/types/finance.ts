@@ -18,7 +18,7 @@ export interface Transaction {
   /** Credit that gives back money spent (refund, reversal, merchant credit). */
   isRefund?: boolean;
   /** `mail` alert row, or `statement` gap filled from a balance-checked line. */
-  origin?: "mail" | "statement";
+  origin?: "mail" | "statement" | "manual";
   /** A statement line confirmed amount and direction. */
   verified?: boolean;
 }

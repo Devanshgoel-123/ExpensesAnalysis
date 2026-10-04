@@ -49,6 +49,7 @@ export class MemoryStore implements Store {
   poolingRuns: PoolingRunRow[] = [];
   telegramPrompts: TelegramPromptRow[] = [];
   phoneChats = new Map<string, TelegramPhoneChatRow>();
+  billSplits = new Map<string, { name: string; amount: number }[]>();
   audits: Array<{ userId: string | null; action: string; meta: Record<string, unknown> }> =
     [];
 
@@ -467,6 +468,10 @@ export class MemoryStore implements Store {
     );
   }
 
+  private withSplits(row: TransactionRow): TransactionRow {
+    return { ...row, splits: this.billSplits.get(row.id) ?? [] };
+  }
+
   async listTransactions(
     userId: string,
     options?: ListTransactionsOptions,
@@ -480,17 +485,31 @@ export class MemoryStore implements Store {
       })
       .sort((a, b) => b.date.localeCompare(a.date));
     const offset = options?.offset ?? 0;
-    if (options?.limit === undefined) return rows.slice(offset);
-    return rows.slice(offset, offset + options.limit);
+    const page =
+      options?.limit === undefined
+        ? rows.slice(offset)
+        : rows.slice(offset, offset + options.limit);
+    return page.map((row) => this.withSplits(row));
   }
 
   async getTransaction(
     userId: string,
     id: string,
   ): Promise<TransactionRow | null> {
-    return (
-      this.transactions.find((t) => t.id === id && t.userId === userId) ?? null
-    );
+    const row = this.transactions.find((t) => t.id === id && t.userId === userId);
+    return row ? this.withSplits(row) : null;
+  }
+
+  async replaceTransactionSplits(
+    userId: string,
+    transactionId: string,
+    friends: { name: string; amount: number }[],
+  ): Promise<TransactionRow | null> {
+    const row = this.transactions.find((t) => t.id === transactionId && t.userId === userId);
+    if (!row) return null;
+    if (friends.length === 0) this.billSplits.delete(transactionId);
+    else this.billSplits.set(transactionId, friends);
+    return this.withSplits(row);
   }
 
   async updateTransaction(
@@ -532,6 +551,7 @@ export class MemoryStore implements Store {
     this.telegramPrompts = this.telegramPrompts.filter(
       (row) => row.transactionId !== id,
     );
+    this.billSplits.delete(id);
     return true;
   }
 

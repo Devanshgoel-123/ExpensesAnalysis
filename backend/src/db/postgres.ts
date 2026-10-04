@@ -536,6 +536,13 @@ export class PostgresStore implements Store {
   listTransactions(u: string, o?: ListTransactionsOptions) {
     return this.imports.listTransactions(u, o);
   }
+  replaceTransactionSplits(
+    userId: string,
+    transactionId: string,
+    friends: { name: string; amount: number }[],
+  ) {
+    return this.imports.replaceTransactionSplits(userId, transactionId, friends);
+  }
   getTransaction(u: string, id: string) {
     return this.imports.getTransaction(u, id);
   }

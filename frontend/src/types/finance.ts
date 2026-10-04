@@ -18,8 +18,11 @@ export interface Transaction {
   logoUrl?: string | null;
   /** Credit that gives back money spent (refund, reversal, merchant credit). */
   isRefund?: boolean;
-  origin?: "mail" | "statement";
+  origin?: "mail" | "statement" | "manual";
   verified?: boolean;
+  /** Your part of the bill after friends' shares. */
+  myShare?: number;
+  splits?: { name: string; amount: number }[];
 }
 
 export interface CategorySummary {

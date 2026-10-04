@@ -1,4 +1,5 @@
 import { buildAnalyticsFromRows } from "../analytics/fromStore.js";
+import { randomUUID } from "node:crypto";
 import { getStore } from "../db/index.js";
 import type {
   CategoryRow,
@@ -15,6 +16,12 @@ import {
   type ReconcileSummary,
   type RescanAlerts,
 } from "../statementMatch/reconcile.js";
+import {
+  SplitInputError,
+  assertSharesFit,
+  normalizeFriends,
+  roundMoney,
+} from "../splits/share.js";
 import type { ParseResult } from "../types/index.js";
 import {
   buildTrackedPayees,
@@ -249,4 +256,72 @@ export async function correctTransactionForUser(input: {
     transaction: updated,
     reclassified,
   };
+}
+
+export async function createManualExpense(
+  userId: string,
+  input: { date: string; amount: number; categorySlug: string; description: string },
+) {
+  const description = input.description.trim();
+  if (!description || description.length > 200) {
+    throw AppError.badRequest("Say what this expense was, in 200 characters or fewer");
+  }
+  if (!Number.isFinite(input.amount) || input.amount <= 0 || input.amount > 10_000_000) {
+    throw AppError.badRequest("Amount has to be more than zero");
+  }
+  const store = await getStore();
+  const categories = await store.listCategories(userId);
+  const category = categories.find((item) => item.slug === input.categorySlug);
+  if (!category) throw AppError.badRequest("Pick a category that exists");
+  const amount = roundMoney(input.amount);
+  const inserted = await store.insertTransactions(userId, [
+    {
+      importId: null,
+      accountId: null,
+      date: input.date,
+      time: null,
+      description,
+      amount,
+      type: "debit",
+      upiId: null,
+      merchant: description,
+      payee: null,
+      providerId: null,
+      categorySlug: category.slug,
+      classificationSource: ClassificationSource.UserOverride,
+      fingerprint: `manual:${randomUUID()}`,
+      mailMessageId: null,
+      origin: "manual",
+      verifiedAt: null,
+    },
+  ]);
+  const id = inserted.ids[0];
+  if (!id) throw AppError.badRequest("Could not save that expense");
+  await store.audit(userId, "transaction.manual", { transactionId: id });
+  return store.getTransaction(userId, id);
+}
+
+export async function setBillSplit(
+  userId: string,
+  transactionId: string,
+  friendsInput: Array<{ name: string; amount: number }>,
+) {
+  const store = await getStore();
+  const tx = await store.getTransaction(userId, transactionId);
+  if (!tx) throw AppError.notFound("Transaction not found");
+  if (tx.type !== "debit") throw AppError.badRequest("Only a payment can be split");
+  let friends;
+  try {
+    friends = normalizeFriends(friendsInput);
+    assertSharesFit(tx.amount, friends);
+  } catch (error) {
+    if (error instanceof SplitInputError) throw AppError.badRequest(error.message);
+    throw error;
+  }
+  const saved = await store.replaceTransactionSplits(userId, transactionId, friends);
+  await store.audit(userId, "transaction.split", {
+    transactionId,
+    friends: friends.length,
+  });
+  return saved;
 }

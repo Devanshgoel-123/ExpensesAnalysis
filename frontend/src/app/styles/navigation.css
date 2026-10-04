@@ -47,6 +47,13 @@
   flex: 1;
 }
 
+.sidebar-logo {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 7px;
+  flex: none;
+}
+
 .sidebar-brand-copy {
   min-width: 0;
 }

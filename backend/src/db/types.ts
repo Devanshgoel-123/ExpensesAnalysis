@@ -161,8 +161,8 @@ export interface ImportRow {
   updatedAt: string;
 }
 
-/** `mail` rows come from a debit/credit alert; `statement` rows fill a gap the alerts missed. */
-export type TxOrigin = "mail" | "statement";
+/** `mail` from an alert, `statement` from a gap the alerts missed, `manual` typed in. */
+export type TxOrigin = "mail" | "statement" | "manual";
 
 export interface TransactionRow {
   id: string;
@@ -184,6 +184,8 @@ export interface TransactionRow {
   mailMessageId: string | null;
   origin: TxOrigin;
   verifiedAt: string | null;
+  /** Friends' parts of this bill. Missing means the whole amount is yours. */
+  splits?: { name: string; amount: number }[];
 }
 
 export interface StatementLineRow {
@@ -399,6 +401,11 @@ export interface Store {
     userId: string,
     options?: ListTransactionsOptions,
   ): Promise<TransactionRow[]>;
+  replaceTransactionSplits(
+    userId: string,
+    transactionId: string,
+    friends: { name: string; amount: number }[],
+  ): Promise<TransactionRow | null>;
   getTransaction(
     userId: string,
     id: string,

@@ -56,6 +56,28 @@ describe("buildAnalyticsFromRows spend", () => {
     assert.equal(result.transactions.find((t) => t.id === "2")?.isRefund, false);
   });
 
+  it("counts only your share when a bill is split with friends", () => {
+    const result = buildAnalyticsFromRows(
+      [
+        baseRow({
+          id: "dinner",
+          amount: 1800,
+          fingerprint: "dinner",
+          splits: [
+            { name: "Asha", amount: 600 },
+            { name: "Rohan", amount: 600 },
+          ],
+        }),
+      ],
+      [],
+      [],
+      [],
+    );
+    assert.equal(result.summary.totalSpent, 600);
+    assert.deepEqual(result.daily, [{ date: "2026-08-01", amount: 600 }]);
+    assert.equal(result.merchantSpend[0]?.total, 600);
+  });
+
   it("does not subtract salary from spend", () => {
     const result = buildAnalyticsFromRows(
       [

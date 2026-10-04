@@ -1,6 +1,6 @@
 import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import type { AppDb } from "../client.js";
-import { imports, statementLines, transactions } from "../schema.js";
+import { imports, statementLines, transactionSplits, transactions } from "../schema.js";
 import type {
   ImportRow,
   ListTransactionsOptions,
@@ -196,7 +196,55 @@ export class PostgresImportRepository {
       options?.limit === undefined
         ? await base
         : await base.limit(options.limit);
-    return rows.map(mapTransaction);
+    const mapped = rows.map(mapTransaction);
+    if (mapped.length === 0) return mapped;
+    const splits = await this.db
+      .select()
+      .from(transactionSplits)
+      .where(
+        and(
+          eq(transactionSplits.userId, userId),
+          inArray(
+            transactionSplits.transactionId,
+            mapped.map((row) => row.id),
+          ),
+        ),
+      );
+    const byTxn = new Map<string, { name: string; amount: number }[]>();
+    for (const split of splits) {
+      const list = byTxn.get(split.transactionId) ?? [];
+      list.push({ name: split.friendName, amount: Number(split.amount) });
+      byTxn.set(split.transactionId, list);
+    }
+    return mapped.map((row) => ({ ...row, splits: byTxn.get(row.id) ?? [] }));
+  }
+
+  async replaceTransactionSplits(
+    userId: string,
+    transactionId: string,
+    friends: { name: string; amount: number }[],
+  ): Promise<TransactionRow | null> {
+    const existing = await this.getTransaction(userId, transactionId);
+    if (!existing) return null;
+    await this.db
+      .delete(transactionSplits)
+      .where(
+        and(
+          eq(transactionSplits.userId, userId),
+          eq(transactionSplits.transactionId, transactionId),
+        ),
+      );
+    if (friends.length > 0) {
+      await this.db.insert(transactionSplits).values(
+        friends.map((friend) => ({
+          userId,
+          transactionId,
+          friendName: friend.name,
+          amount: String(friend.amount),
+        })),
+      );
+    }
+    return { ...existing, splits: friends };
   }
   async getTransaction(
     userId: string,

@@ -5,17 +5,21 @@ import { uploadRateLimiter } from "../middleware/rateLimit.js";
 import { validate } from "../middleware/validate.js";
 import { uuidParamSchema } from "../validators/common.js";
 import {
+  billSplitBodySchema,
   correctTransactionBodySchema,
   dashboardQuerySchema,
+  manualExpenseBodySchema,
   parsePasswordBodySchema,
 } from "../validators/imports.js";
 import {
   clearImportedDataController,
   correctTransactionController,
+  createManualExpenseController,
   deleteTransactionController,
   getDashboardController,
   getImportStatusController,
   listImportsController,
+  setBillSplitController,
   uploadImportController,
 } from "./controller.js";
 
@@ -42,6 +46,15 @@ importRouter.post(
   upload.single("file"),
   validate(parsePasswordBodySchema),
   uploadImportController,
+);
+
+importRouter.post("/transactions", validate(manualExpenseBodySchema), createManualExpenseController);
+
+importRouter.put(
+  "/transactions/:id/splits",
+  validate(uuidParamSchema, "params"),
+  validate(billSplitBodySchema),
+  setBillSplitController,
 );
 
 importRouter.delete(
