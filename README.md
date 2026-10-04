@@ -54,3 +54,15 @@ Invite code: `beta-ledgerline`. Tests: `DATABASE_URL=memory npm --prefix backend
 | `DATABASE_URL` | Postgres URL (`memory` is test-only) |
 | `CORS_ORIGINS` / `FRONTEND_URL` | Allowlist + OAuth redirect origin |
 | `NEXT_PUBLIC_API_URL` | Browser → API origin (baked into the web image) |
+
+Bring your own Google OAuth client and Telegram bot. Those credentials are not in this repo.
+
+A walkthrough for showing the product is in [docs/DEMO.md](docs/DEMO.md).
+
+## Security
+
+Do not commit `.env`, statement PDFs, or database dumps. Report vulnerabilities using [SECURITY.md](SECURITY.md), not a public issue.
+
+## License
+
+[MIT](LICENSE) © 2026 Devansh Goel
