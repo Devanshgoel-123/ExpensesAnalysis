@@ -129,9 +129,9 @@ async function processAlertMessage(input: {
   const store = await getStore();
   const existingMail = await store.findMailMessageByGmailId(input.userId, input.messageId);
   const existingTx = await store.findTransactionByMailMessageId(input.userId, input.messageId);
-  if (existingMail?.amount != null && existingMail.txType) {
-    // Parsed before with no ledger row: it was a mirror of a debit, or removed on purpose.
-    if (!existingTx) return MailProcessResult.Skipped;
+  // Only skip once a ledger row exists. Mail that was saved and then never
+  // inserted (a scan died after the upsert) has to be imported on the next pass.
+  if (existingMail?.amount != null && existingMail.txType && existingTx) {
     const context = await loadClassificationContext(input.userId);
     const typeSettled = existingTx.verifiedAt != null || existingTx.type === existingMail.txType;
     const labelSettled =
@@ -435,8 +435,17 @@ async function scanQuery(input: {
           if (result === "imported") imported += 1;
           else skipped += 1;
         }
-      } catch {
+      } catch (error) {
         skipped += 1;
+        logger.warn(
+          {
+            userId: input.userId,
+            messageId,
+            mode: input.mode,
+            err: error instanceof Error ? error.message : String(error),
+          },
+          "mail scan failed for one message",
+        );
       }
 
       maybeLogProgress({
