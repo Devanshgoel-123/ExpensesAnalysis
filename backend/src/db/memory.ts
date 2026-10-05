@@ -36,6 +36,7 @@ function definedOnly<T extends object>(patch: T): Partial<T> {
 export class MemoryStore implements Store {
   users = new Map<string, UserRow>();
   invites = new Map<string, { code: string; maxUses: number; usedCount: number }>();
+  allowedEmails = new Set<string>();
   categories: CategoryRow[] = [];
   bankPresets: BankPresetRow[] = [];
   providers: ProviderRow[] = [];
@@ -157,6 +158,18 @@ export class MemoryStore implements Store {
     if (!this.invites.has(code)) {
       this.invites.set(code, { code, maxUses, usedCount: 0 });
     }
+  }
+
+  async listAllowedEmails(): Promise<string[]> {
+    return [...this.allowedEmails].sort();
+  }
+
+  async approveEmail(email: string): Promise<void> {
+    this.allowedEmails.add(email.trim().toLowerCase());
+  }
+
+  async revokeEmail(email: string): Promise<boolean> {
+    return this.allowedEmails.delete(email.trim().toLowerCase());
   }
 
   async listCategories(userId: string): Promise<CategoryRow[]> {

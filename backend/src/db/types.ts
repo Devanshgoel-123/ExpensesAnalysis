@@ -306,6 +306,9 @@ export interface Store {
   softDeleteUser(userId: string): Promise<void>;
   consumeInvite(code: string): Promise<boolean>;
   seedInvite(code: string, maxUses?: number): Promise<void>;
+  listAllowedEmails(): Promise<string[]>;
+  approveEmail(email: string): Promise<void>;
+  revokeEmail(email: string): Promise<boolean>;
 
   listCategories(userId: string): Promise<CategoryRow[]>;
   upsertCategory(input: Omit<CategoryRow, "id"> & { id?: string }): Promise<CategoryRow>;

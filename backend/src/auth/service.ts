@@ -26,9 +26,25 @@ export function signToken(user: AuthUser): string {
   });
 }
 
-export function isGoogleEmailAllowed(email: string): boolean {
-  if (config.google.allowedEmails.length === 0) return true;
-  return config.google.allowedEmails.includes(email.trim().toLowerCase());
+/**
+ * Env allowlist and the allowed_emails table are combined.
+ * When both are empty, sign-in stays open so a fresh install is not locked.
+ */
+export function emailAllowedByLists(
+  email: string,
+  envEmails: readonly string[],
+  approvedEmails: readonly string[],
+): boolean {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return false;
+  if (envEmails.length === 0 && approvedEmails.length === 0) return true;
+  return envEmails.includes(normalized) || approvedEmails.includes(normalized);
+}
+
+export async function isEmailAllowed(email: string): Promise<boolean> {
+  const store = await getStore();
+  const approved = await store.listAllowedEmails();
+  return emailAllowedByLists(email, config.google.allowedEmails, approved);
 }
 
 export function requireAuth(req: Request, _res: Response, next: NextFunction): void {
@@ -104,7 +120,7 @@ export async function loginOrRegisterWithGoogle(input: {
   if (!email) {
     throw AppError.unauthorized("Google did not return an email");
   }
-  if (!isGoogleEmailAllowed(email)) {
+  if (!(await isEmailAllowed(email))) {
     throw AppError.forbidden("This Google account is not allowed to sign in");
   }
 

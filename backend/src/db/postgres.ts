@@ -236,6 +236,27 @@ export class PostgresStore implements Store {
       .values({ code, maxUses })
       .onConflictDoNothing();
   }
+  async listAllowedEmails() {
+    const rows = await this.db
+      .select({ email: s.allowedEmails.email })
+      .from(s.allowedEmails)
+      .orderBy(asc(s.allowedEmails.email));
+    return rows.map((row) => row.email);
+  }
+  async approveEmail(email: string) {
+    const normalized = email.trim().toLowerCase();
+    await this.db
+      .insert(s.allowedEmails)
+      .values({ email: normalized })
+      .onConflictDoNothing();
+  }
+  async revokeEmail(email: string) {
+    const rows = await this.db
+      .delete(s.allowedEmails)
+      .where(eq(s.allowedEmails.email, email.trim().toLowerCase()))
+      .returning({ email: s.allowedEmails.email });
+    return rows.length > 0;
+  }
   async listCategories(userId: string) {
     return (
       await this.db

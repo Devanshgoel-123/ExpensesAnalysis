@@ -52,6 +52,12 @@ export const users = pgTable(
   ],
 );
 
+/** Emails approved to sign in. Existing accounts are seeded by migration. */
+export const allowedEmails = pgTable("allowed_emails", {
+  email: text("email").primaryKey(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const invites = pgTable("invites", {
   code: text("code").primaryKey(),
   maxUses: integer("max_uses").notNull().default(1),

@@ -15,6 +15,7 @@
     "migrate": "tsx src/db/migrate-cli.ts",
     "migrate:down": "tsx src/db/migrate-cli.ts --down",
     "seed": "tsx src/db/seeds/demo.ts",
+    "allow-email": "tsx src/scripts/approveEmail.ts",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio"
   },

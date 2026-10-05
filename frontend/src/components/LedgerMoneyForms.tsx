@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { CategorySummary, Transaction } from "@/types";
 import { formatInr } from "@/helpers/currency";
 import { useApi } from "@/lib/useApi";
@@ -116,6 +116,43 @@ export function BillSplitControl({
   );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [savedFriends, setSavedFriends] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!open || !api) return;
+    let cancelled = false;
+    void api.listRules().then((res) => {
+      if (cancelled) return;
+      const names = new Set<string>();
+      for (const rule of res.rules) {
+        const tags = Array.isArray(rule.setTags) ? rule.setTags : [];
+        if (tags.includes("upi-block")) continue;
+        if (!tags.includes("friend") && !tags.includes("family")) continue;
+        const name = typeof rule.setPayeeName === "string" ? rule.setPayeeName.trim() : "";
+        if (name) names.add(name);
+      }
+      setSavedFriends([...names].sort((a, b) => a.localeCompare(b)));
+    }).catch(() => {
+      if (!cancelled) setSavedFriends([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, api]);
+
+  function addSavedFriend(name: string) {
+    if (!name) return;
+    setFriends((current) => {
+      if (current.some((friend) => friend.name.trim().toLowerCase() === name.toLowerCase())) {
+        return current;
+      }
+      const empty = current.findIndex((friend) => !friend.name.trim());
+      if (empty >= 0) {
+        return current.map((friend, index) => (index === empty ? { ...friend, name } : friend));
+      }
+      return [...current, { name, amount: "" }];
+    });
+  }
 
   if (txn.type !== "debit" || !txn.id) return null;
 
@@ -160,6 +197,26 @@ export function BillSplitControl({
           .finally(() => setBusy(false));
       }}
     >
+      {savedFriends.length > 0 ? (
+        <label className="field field-compact">
+          <span>Saved friend</span>
+          <select
+            aria-label="Add a saved friend"
+            value=""
+            onChange={(event) => {
+              addSavedFriend(event.target.value);
+              event.target.value = "";
+            }}
+          >
+            <option value="">Add someone you already track</option>
+            {savedFriends.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
       {friends.map((friend, index) => (
         <div className="bill-split-row" key={index}>
           <input
