@@ -601,6 +601,8 @@ export async function runPoolingSync(input: {
   trigger?: PoolingRunTrigger;
   /** Fired once the run row exists, before mail is scanned. */
   onStarted?: (runId: string) => void;
+  /** When set, search these senders instead of the account's bank alone. */
+  senders?: string[];
 }): Promise<PoolingSyncResult> {
   const connection = await ensureHistoryId(input.connection);
   if (!connection.refreshTokenEncrypted) {
@@ -710,10 +712,13 @@ export async function runPoolingSync(input: {
       };
     }
 
-    const senders = sendersForBank(
-      input.account.bank,
-      input.account.statementSenderEmails,
-    );
+    const senders =
+      input.senders && input.senders.length > 0
+        ? input.senders
+        : sendersForBank(
+            input.account.bank,
+            input.account.statementSenderEmails,
+          );
     const statementQuery = buildStatementQuery(senders, dateWindow);
     const alertWindows = month
       ? [dateWindow]

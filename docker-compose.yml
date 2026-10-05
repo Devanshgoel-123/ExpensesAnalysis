@@ -45,13 +45,23 @@ services:
     restart: unless-stopped
     ports:
       - "${API_PORT:-4000}:4000"
+    # Docker's embedded resolver (127.0.0.11) returns ENOTFOUND for the Neon
+    # pooler host. Public resolvers answer that name.
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    # backend/.env holds Telegram (and a few local-only flags). Root .env
+    # is listed second so it wins when both files set the same key.
     env_file:
+      - backend/.env
       - .env
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: 4000
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_PRETTY: "0"
+      # Keep scans running in this container even if backend/.env disables them for local npm.
+      DISABLE_INLINE_GMAIL_JOBS: "0"
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
@@ -114,7 +124,11 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     command: ["node", "dist/worker/poolingServer.js"]
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     env_file:
+      - backend/.env
       - .env
     environment:
       NODE_ENV: ${NODE_ENV:-production}

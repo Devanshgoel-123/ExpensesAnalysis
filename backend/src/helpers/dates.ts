@@ -1,8 +1,7 @@
 import {
   ISO_DATE_RE,
   IST_TIME_ZONE,
-  POOLING_EARLIEST_DATE,
-  POOLING_LOOKBACK_MONTHS,
+  POOLING_START_DATE,
   STATEMENT_SCAN_MAX,
   STATEMENT_SCAN_MIN,
 } from "../constants/index.js";
@@ -62,24 +61,18 @@ export function toIstCalendarDate(raw: string | null | undefined): string | null
 }
 
 export type PoolingScanWindow = {
-  /** Inclusive oldest date (1st of the month six months back). */
+  /** Inclusive oldest date. */
   from: string;
   /** Inclusive newest date (today, IST). */
   to: string;
 };
 
-/**
- * Today (IST) back to the 1st of the month `POOLING_LOOKBACK_MONTHS` earlier.
- * 26 Sep 2026 → { from: 2026-03-01, to: 2026-09-26 }.
- */
+/** Today (IST) back to `POOLING_START_DATE`. No rolling month cap. */
 export function poolingScanWindow(now: Date = new Date()): PoolingScanWindow {
   const to =
     toIstCalendarDate(now.toISOString()) ??
     now.toLocaleDateString("en-CA", { timeZone: IST_TIME_ZONE });
-  const [year, month] = to.split("-").map(Number);
-  const start = new Date(Date.UTC(year, month - 1 - POOLING_LOOKBACK_MONTHS, 1));
-  const rolling = `${start.getUTCFullYear()}-${pad2(start.getUTCMonth() + 1)}-01`;
-  const from = rolling < POOLING_EARLIEST_DATE ? POOLING_EARLIEST_DATE : rolling;
+  const from = POOLING_START_DATE < to ? POOLING_START_DATE : to;
   return { from, to };
 }
 
@@ -129,7 +122,7 @@ export function isOnOrAfterPoolingCutoff(
 
 /**
  * Gmail after/before window. `after` is inclusive; `before` is exclusive.
- * Always clamped to the live 2-month scan window.
+ * Always clamped to the live scan window.
  */
 export function poolingDateWindow(month?: string | null): {
   after: string;

@@ -83,6 +83,64 @@
   background: var(--info-soft);
 }
 
+.import-bank-field {
+  max-width: 36rem;
+  margin-bottom: 0.85rem;
+}
+
+.import-bank-label {
+  display: block;
+  margin-bottom: 0.45rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.import-bank-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.import-bank-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2.75rem;
+  padding: 0.35rem 0.8rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.import-bank-choice.selected {
+  border-color: var(--copper);
+  background: var(--copper-soft);
+}
+
+.import-bank-choice:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.import-bank-field .meta {
+  margin: 0.45rem 0 0;
+}
+
+.import-bank-status {
+  margin: 0 0 0.75rem;
+}
+
+.import-bank-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
 .import-privacy {
   margin-top: 0.85rem;
   padding: 0.85rem 1rem;

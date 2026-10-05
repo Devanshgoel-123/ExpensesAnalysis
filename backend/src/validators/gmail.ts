@@ -20,6 +20,7 @@ export const enablePoolingBodySchema = z.object({
     .optional()
     .default(200),
   accountId: z.string().uuid().optional(),
+  banks: z.array(z.string().trim().min(1).max(32)).min(1).max(2).optional(),
 });
 
 export const gmailBackfillBodySchema = z.object({

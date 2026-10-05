@@ -53,6 +53,7 @@ export function PeoplePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [removingName, setRemovingName] = useState<string | null>(null);
+  const [removingUpi, setRemovingUpi] = useState<string | null>(null);
 
   const loadPeople = useCallback(async () => {
     if (!api) return;
@@ -70,11 +71,20 @@ export function PeoplePage() {
 
   const groupByName = new Map<string, PersonGroup>();
   const ruleNames: string[] = [];
+  const trackedUpis = new Map<string, string[]>();
   for (const rule of rules) {
     const payee = typeof rule.setPayeeName === "string" ? rule.setPayeeName : "";
     if (!payee) continue;
+    const tags = Array.isArray(rule.setTags) ? rule.setTags : [];
+    if (tags.includes("upi-block")) continue;
     ruleNames.push(payee);
-    groupByName.set(payee.toLowerCase(), personGroup(rule.setTags) ?? "family");
+    groupByName.set(payee.toLowerCase(), personGroup(tags) ?? "family");
+    const upi = typeof rule.matchUpiId === "string" ? rule.matchUpiId : "";
+    if (!upi) continue;
+    const key = payee.toLowerCase();
+    const list = trackedUpis.get(key) ?? [];
+    if (!list.some((id) => id.toLowerCase() === upi.toLowerCase())) list.push(upi);
+    trackedUpis.set(key, list);
   }
 
   const { people, paymentsByName } = peopleFromTransactions(
@@ -89,9 +99,12 @@ export function PeoplePage() {
     const key = person.name.toLowerCase();
     grouped.get(groupByName.get(key) ?? "family")?.push(person);
     const upiIds = [
-      ...new Set(
-        (paymentsByName[key] ?? []).flatMap((payment) => (payment.upiId ? [payment.upiId] : [])),
-      ),
+      ...new Set([
+        ...(trackedUpis.get(key) ?? []),
+        ...(paymentsByName[key] ?? []).flatMap((payment) =>
+          payment.upiId ? [payment.upiId] : [],
+        ),
+      ]),
     ];
     if (upiIds.length > 0) detailByName[key] = upiIds;
   }
@@ -199,6 +212,32 @@ export function PeoplePage() {
             paymentsByName={paymentsByName}
             detailByName={detailByName}
             removingName={removingName}
+            removingUpi={removingUpi}
+            onRemoveUpi={
+              item.id === "office"
+                ? undefined
+                : async (person, upiId) => {
+                    if (!api || removingUpi) return;
+                    setRemovingUpi(`${person}\0${upiId}`);
+                    setError(null);
+                    try {
+                      const result = await api.detachPersonUpi({ name: person, upiId });
+                      await loadPeople();
+                      refresh();
+                      setMessage(
+                        result.cleared > 0
+                          ? `${upiId} is no longer tracked as ${person}. ${result.cleared} payment${result.cleared === 1 ? "" : "s"} unlabeled.`
+                          : `${upiId} is no longer tracked as ${person}.`,
+                      );
+                    } catch (err) {
+                      setError(
+                        err instanceof Error ? err.message : "Could not remove that UPI id",
+                      );
+                    } finally {
+                      setRemovingUpi(null);
+                    }
+                  }
+            }
             onRemove={
               item.id === "office"
                 ? undefined

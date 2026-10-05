@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BACKFILL_DEFAULT_MAX_MESSAGES,
+  displayScanWindow,
   formatIsoDateLabel,
   formatScanWindowLabel,
   monthsInPoolingWindow,
@@ -10,40 +11,28 @@ import {
 describe("pooling scan window", () => {
   const now = new Date("2026-09-26T12:00:00+05:30");
 
-  it("walks from today back to the 1st of the month six months earlier", () => {
+  it("starts at 1 Jan 2016 and ends today", () => {
     expect(poolingScanWindow(now)).toEqual({
-      from: "2026-03-01",
+      from: "2016-01-01",
       to: "2026-09-26",
     });
   });
 
-  it("lists the months in that window, oldest first", () => {
-    expect(monthsInPoolingWindow(now)).toEqual([
-      "2026-03",
-      "2026-04",
-      "2026-05",
-      "2026-06",
-      "2026-07",
-      "2026-08",
-      "2026-09",
-    ]);
+  it("lists months from that start through the current month", () => {
+    const months = monthsInPoolingWindow(now);
+    expect(months[0]).toBe("2016-01");
+    expect(months[months.length - 1]).toBe("2026-09");
   });
 
-  it("crosses the year boundary from January", () => {
+  it("uses the same start in January", () => {
     const january = new Date("2026-01-15T12:00:00+05:30");
     expect(poolingScanWindow(january)).toEqual({
-      from: "2025-07-01",
+      from: "2016-01-01",
       to: "2026-01-15",
     });
-    expect(monthsInPoolingWindow(january)).toEqual([
-      "2025-07",
-      "2025-08",
-      "2025-09",
-      "2025-10",
-      "2025-11",
-      "2025-12",
-      "2026-01",
-    ]);
+    const months = monthsInPoolingWindow(january);
+    expect(months[0]).toBe("2016-01");
+    expect(months[months.length - 1]).toBe("2026-01");
   });
 
   it("asks Gmail for the same backfill cap the API uses", () => {
@@ -55,5 +44,21 @@ describe("pooling scan window", () => {
     expect(formatIsoDateLabel("2026-07-01")).toMatch(/Jul/);
     expect(formatIsoDateLabel("2026-07-01")).toMatch(/2026/);
     expect(formatScanWindowLabel(poolingScanWindow(now))).toContain("–");
+  });
+
+  it("shows this month instead of 1 Jan 2016", () => {
+    expect(displayScanWindow(null, now)).toEqual({
+      from: "2026-09-01",
+      to: "2026-09-26",
+    });
+    expect(displayScanWindow("2026-09-20", now)).toEqual({
+      from: "2026-09-21",
+      to: "2026-09-26",
+    });
+    expect(displayScanWindow("2026-09-26", now)).toEqual({
+      from: "2026-09-26",
+      to: "2026-09-26",
+    });
+    expect(formatScanWindowLabel(displayScanWindow(null, now))).not.toMatch(/Jan/);
   });
 });

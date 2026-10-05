@@ -2,13 +2,10 @@
 export const IST_TIME_ZONE = "Asia/Kolkata";
 
 /**
- * Scan starts at today (IST) and walks backward to the 1st of the month
- * this many calendar months earlier. 26 Sep → 1 Mar.
+ * Oldest bank mail the scanner will ask for. There is no rolling month cap.
+ * 1 Jan 2016 is the start of UPI, so this is the whole trail.
  */
-export const POOLING_LOOKBACK_MONTHS = 6;
-
-/** Nothing before this date is scanned, matched, or kept. */
-export const POOLING_EARLIEST_DATE = "2026-07-01";
+export const POOLING_START_DATE = "2016-01-01";
 
 /** Log progress every N messages scanned. */
 export const POOLING_PROGRESS_EVERY = 50;

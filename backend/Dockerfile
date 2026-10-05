@@ -12,14 +12,16 @@ COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
 
-FROM node:22-alpine AS runner
+FROM node:22-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV LOG_PRETTY=0
 
-RUN apk add --no-cache wget \
-  && addgroup -S ledgerline \
-  && adduser -S ledgerline -G ledgerline
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends wget ca-certificates \
+  && rm -rf /var/lib/apt/lists/* \
+  && groupadd --system ledgerline \
+  && useradd --system --gid ledgerline ledgerline
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist

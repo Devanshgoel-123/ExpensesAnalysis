@@ -104,7 +104,9 @@ export function createApiClient(token: string) {
         },
       ),
 
-    enablePooling: (body: { month?: string; password?: string; maxMessages?: number } = {}) =>
+    enablePooling: (
+      body: { month?: string; password?: string; maxMessages?: number; banks?: string[] } = {},
+    ) =>
       requestJson<{ status: "running"; runId: string }>("/api/gmail/pooling/enable", {
         method: "POST",
         ...auth,
@@ -128,6 +130,14 @@ export function createApiClient(token: string) {
 
     attachPersonUpi: (body: { name: string; upiId: string }) =>
       requestJson<{ ok: true; attached: boolean }>("/api/rules/attach-upi", {
+        method: "POST",
+        ...auth,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+
+    detachPersonUpi: (body: { name: string; upiId: string }) =>
+      requestJson<{ ok: true; cleared: number }>("/api/rules/detach-upi", {
         method: "POST",
         ...auth,
         headers: { "Content-Type": "application/json" },

@@ -14,16 +14,18 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-FROM node:22-alpine AS runner
+FROM node:22-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-RUN apk add --no-cache wget \
-  && addgroup -S ledgerline \
-  && adduser -S ledgerline -G ledgerline
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends wget ca-certificates \
+  && rm -rf /var/lib/apt/lists/* \
+  && groupadd --system ledgerline \
+  && useradd --system --gid ledgerline ledgerline
 
 COPY --from=build /app/public ./public
 COPY --from=build --chown=ledgerline:ledgerline /app/.next/standalone ./

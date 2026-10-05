@@ -17,6 +17,8 @@ interface PayeeSpendPanelProps {
   detailByName?: Record<string, string[]>;
   onRemove?: (name: string) => void;
   removingName?: string | null;
+  onRemoveUpi?: (name: string, upiId: string) => void;
+  removingUpi?: string | null;
 }
 
 export function PayeeSpendPanel({
@@ -27,6 +29,8 @@ export function PayeeSpendPanel({
   detailByName = {},
   onRemove,
   removingName,
+  onRemoveUpi,
+  removingUpi,
 }: PayeeSpendPanelProps) {
   const people = [...items].sort((a, b) => (b.lastDate || "").localeCompare(a.lastDate || ""));
 
@@ -68,11 +72,25 @@ export function PayeeSpendPanel({
                         </p>
                         {upiIds.length > 0 ? (
                           <div className="payee-upis">
-                            {upiIds.map((upiId) => (
-                              <span key={upiId} className="payee-upi">
-                                {upiId}
-                              </span>
-                            ))}
+                            {upiIds.map((upiId) => {
+                              const busy = removingUpi === `${item.name}\0${upiId}`;
+                              return (
+                                <span key={upiId} className="payee-upi">
+                                  {upiId}
+                                  {onRemoveUpi ? (
+                                    <button
+                                      type="button"
+                                      className="payee-upi-remove"
+                                      aria-label={`Stop tracking ${upiId} as ${item.name}`}
+                                      disabled={busy}
+                                      onClick={() => onRemoveUpi(item.name, upiId)}
+                                    >
+                                      {busy ? "…" : "×"}
+                                    </button>
+                                  ) : null}
+                                </span>
+                              );
+                            })}
                           </div>
                         ) : null}
                       </div>

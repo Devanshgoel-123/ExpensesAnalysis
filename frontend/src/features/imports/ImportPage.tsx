@@ -9,8 +9,8 @@ import { useDashboard } from "@/lib/dashboard-context";
 import { LedgerlineFadeContent } from "@/components/animations/LedgerlineFadeContent";
 import { Panel, PanelHead } from "@/components/ui/Panel";
 import {
+  displayScanWindow,
   formatScanWindowLabel,
-  poolingScanWindow,
 } from "@/constants/pooling";
 
 function takeGmailParams(): {
@@ -46,12 +46,11 @@ export function ImportPage() {
     refreshStatus,
     goToOverview,
     scanning,
-    scanWindow,
   } = useDashboard();
   const searchParams = useSearchParams();
   const [banner, setBanner] = useState<string | null>(null);
   const [bannerError, setBannerError] = useState<string | null>(null);
-  const windowLabel = formatScanWindowLabel(scanWindow ?? poolingScanWindow());
+  const windowLabel = formatScanWindowLabel(displayScanWindow());
 
   useEffect(() => {
     const fromUrl = takeGmailParams();
@@ -68,8 +67,8 @@ export function ImportPage() {
         <header>
           <h2 className="month-label">Import</h2>
           <p className="meta mt-1">
-            Scan bank alerts from {windowLabel}. Newest mail first. Overview
-            uses the same window.
+            Scan bank alerts for {windowLabel}. Newest mail first. Overview
+            uses the same month.
           </p>
         </header>
       </LedgerlineFadeContent>

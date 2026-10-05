@@ -5,12 +5,20 @@ import { useApi } from "@/lib/useApi";
 import { useDashboard } from "@/lib/dashboard-context";
 import type { BankPreset, GmailStatus } from "@/lib/api/types";
 import { SpotlightCard } from "@/components/SpotlightCard";
+import { BrandMark } from "@/components/BrandMark";
 import {
   BACKFILL_DEFAULT_MAX_MESSAGES,
+  displayScanWindow,
   formatIsoDateLabel,
   formatScanWindowLabel,
   poolingScanWindow,
 } from "@/constants/pooling";
+
+const MAX_BANKS = 2;
+
+function bankLogo(bankId: string): string {
+  return `/providers/${bankId.toLowerCase()}.svg`;
+}
 
 export function BankPoolingPanel({
   onChanged,
@@ -27,17 +35,16 @@ export function BankPoolingPanel({
     scanError,
     mailScan,
     watchActiveScan,
-    scanWindow,
   } = useDashboard();
   const [presets, setPresets] = useState<BankPreset[]>([]);
-  const [bank, setBank] = useState("");
+  const [banks, setBanks] = useState<string[]>([]);
   const [gmail, setGmail] = useState<GmailStatus | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const windowLabel = formatScanWindowLabel(
-    gmail?.scanWindow ?? scanWindow ?? poolingScanWindow(),
+    displayScanWindow(gmail?.lastScannedOn ?? null),
   );
 
   const onChangedRef = useRef(onChanged);
@@ -62,20 +69,19 @@ export function BankPoolingPanel({
       ]);
       setPresets(presetRes.presets);
       applyGmail(gmailRes);
-      const primary =
-        accountRes.accounts.find((a) => a.poolingEnabled) ??
-        accountRes.accounts[0];
-      if (primary) {
-        setBank(primary.bank);
-      } else if (presetRes.presets[0]) {
-        setBank((current) => {
-          if (current) return current;
-          const defaultPreset =
-            presetRes.presets.find((p) => p.pdfAdapterReady) ??
-            presetRes.presets[0];
-          return defaultPreset?.id ?? current;
-        });
-      }
+      const enabled = accountRes.accounts
+        .filter((account) => account.poolingEnabled)
+        .map((account) => account.bank);
+      const fallback = accountRes.accounts[0]?.bank;
+      setBanks((current) => {
+        if (current.length > 0) return current;
+        if (enabled.length > 0) return enabled.slice(0, MAX_BANKS);
+        if (fallback) return [fallback];
+        const defaultPreset =
+          presetRes.presets.find((preset) => preset.pdfAdapterReady) ??
+          presetRes.presets[0];
+        return defaultPreset ? [defaultPreset.id] : [];
+      });
       return gmailRes;
     } catch {
       setError("Could not load bank setup. Refresh the page and try again.");
@@ -97,28 +103,39 @@ export function BankPoolingPanel({
   if (!api) return null;
 
   const client = api;
-  const selectedPreset = presets.find((p) => p.id === bank);
+  const selectedPresets = banks
+    .map((id) => presets.find((preset) => preset.id === id))
+    .filter((preset): preset is BankPreset => Boolean(preset));
   const scanning = scanRunning || busy;
+
+  function toggleBank(id: string) {
+    setBanks((current) => {
+      if (current.includes(id)) {
+        return current.length === 1 ? current : current.filter((item) => item !== id);
+      }
+      if (current.length >= MAX_BANKS) return current;
+      return [...current, id];
+    });
+  }
 
   async function handleScan() {
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
-      const resolvedBank =
-        bank.trim() || selectedPreset?.id || presets[0]?.id || "";
-      if (!resolvedBank) {
+      if (selectedPresets.length === 0) {
         throw new Error("Select a bank first.");
       }
-      const senders = selectedPreset?.defaultSenderEmails ?? [];
-      if (senders.length === 0) {
-        throw new Error("This bank has no sender addresses configured.");
+      if (selectedPresets.some((preset) => preset.defaultSenderEmails.length === 0)) {
+        throw new Error("One of the selected banks has no sender addresses configured.");
       }
-      await client.patchAccount({
-        bank: resolvedBank,
-        statementSenderEmails: senders,
-        createIfMissing: true,
-      });
+      for (const preset of selectedPresets) {
+        await client.patchAccount({
+          bank: preset.id,
+          statementSenderEmails: preset.defaultSenderEmails,
+          createIfMissing: true,
+        });
+      }
 
       if (!gmail?.connected) {
         if (!gmail?.configured) {
@@ -134,6 +151,8 @@ export function BankPoolingPanel({
 
       await client.enablePooling({
         maxMessages: BACKFILL_DEFAULT_MAX_MESSAGES,
+        month: poolingScanWindow().to.slice(0, 7),
+        banks: selectedPresets.map((preset) => preset.id),
       });
       watchActiveScan();
       const next = await client.gmailStatus().catch(() => null);
@@ -174,47 +193,54 @@ export function BankPoolingPanel({
       <header className="panel-head">
         <h2 className="ui-header">Bank mail</h2>
         <p className="meta">
-          Reads HDFC debit and credit alerts. Amount is stored.{" "}
+          Reads debit and credit alerts from the banks you pick. Amount is stored.{" "}
           {gmail?.lastScannedOn
-            ? `Scanned through ${formatIsoDateLabel(gmail.lastScannedOn)}. The next scan starts the following day.`
-            : `Mail is fetched from today backward through ${windowLabel}.`}
+            ? `Scanned through ${formatIsoDateLabel(gmail.lastScannedOn)}. This scan covers ${windowLabel}.`
+            : `This scan covers ${windowLabel}.`}
         </p>
       </header>
 
-      <label className="field" style={{ marginBottom: "1rem" }}>
-        <span>Bank</span>
-        <select
-          value={bank}
-          onChange={(e) => setBank(e.target.value)}
-          disabled={scanning}
-        >
-          <option value="" disabled>
-            Select your bank
-          </option>
-          {presets.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="import-bank-field">
+        <span className="import-bank-label">Banks</span>
+        <div className="import-bank-choices" role="group" aria-label="Banks">
+          {presets.map((preset) => {
+            const selected = banks.includes(preset.id);
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                className={`import-bank-choice ${selected ? "selected" : ""}`}
+                aria-pressed={selected}
+                disabled={scanning || (!selected && banks.length >= MAX_BANKS)}
+                onClick={() => toggleBank(preset.id)}
+              >
+                {selected ? (
+                  <BrandMark name={preset.label} logoUrl={bankLogo(preset.id)} size={28} />
+                ) : null}
+                <span>{preset.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="meta">Choose up to two banks. The logo shows on the ones you select.</p>
+      </div>
 
       {scanRunning ? (
-        <p className="meta" style={{ marginBottom: "0.85rem" }} role="status">
+        <p className="meta import-bank-status" role="status">
           Scanning {windowLabel} — {mailScan?.imported ?? 0} imported from{" "}
           {mailScan?.scanned ?? 0} emails.
         </p>
       ) : mailScan?.phase === "done" ? (
-        <p className="meta" style={{ marginBottom: "0.85rem" }} role="status">
+        <p className="meta import-bank-status" role="status">
           Last scan imported {mailScan.imported} of {mailScan.scanned} emails.
         </p>
       ) : null}
 
-      <div className="sort-bar" style={{ marginBottom: "0.75rem" }}>
+      <div className="import-bank-actions">
         <button
           type="button"
           className="cta"
-          disabled={scanning || !bank.trim()}
+          disabled={scanning || banks.length === 0}
           onClick={() => void handleScan()}
         >
           {scanning

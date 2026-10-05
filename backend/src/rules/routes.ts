@@ -4,7 +4,7 @@ import { getStore } from "../db/index.js";
 import { validate } from "../middleware/validate.js";
 import { uuidParamSchema } from "../validators/common.js";
 import { createRuleBodySchema } from "../validators/rules.js";
-import { matchRule } from "./engine.js";
+import { matchRule, UPI_BLOCK_TAG } from "./engine.js";
 import { ruleClassificationSource } from "../enums/index.js";
 
 export const rulesRouter = Router();
@@ -124,6 +124,15 @@ rulesRouter.post("/attach-upi", async (req, res) => {
     res.json({ ok: true, attached: false });
     return;
   }
+  for (const rule of rules) {
+    if (
+      rule.setTags.includes(UPI_BLOCK_TAG) &&
+      rule.setPayeeName?.toLowerCase() === name.toLowerCase() &&
+      rule.matchUpiId?.toLowerCase() === upiId
+    ) {
+      await store.deleteRule(req.user!.id, rule.id);
+    }
+  }
   const open = owned.find((rule) => !rule.matchUpiId);
   let rule = open ?? null;
   if (open) {
@@ -164,6 +173,103 @@ rulesRouter.post("/attach-upi", async (req, res) => {
   res.json({ ok: true, attached: true });
 });
 
+function sameUpi(left: string | null | undefined, right: string): boolean {
+  if (!left) return false;
+  return left.toLowerCase().includes(right.toLowerCase());
+}
+
+rulesRouter.post("/detach-upi", async (req, res) => {
+  const name = String((req.body as { name?: string }).name ?? "").trim();
+  const upiId = String((req.body as { upiId?: string }).upiId ?? "")
+    .trim()
+    .toLowerCase();
+  if (!name || !upiId.includes("@")) {
+    res.status(400).json({ error: { message: "Name and UPI id are required" } });
+    return;
+  }
+  const store = await getStore();
+  const lower = name.toLowerCase();
+  const rules = await store.listRules(req.user!.id);
+  const owned = rules.filter(
+    (rule) => rule.setPayeeName?.toLowerCase() === lower && !rule.setTags.includes(UPI_BLOCK_TAG),
+  );
+  if (owned.length === 0) {
+    res.status(404).json({ error: { message: "That person is not in your list" } });
+    return;
+  }
+
+  for (const rule of owned) {
+    if (rule.matchUpiId?.toLowerCase() === upiId) {
+      await store.deleteRule(req.user!.id, rule.id);
+    }
+  }
+
+  const alreadyBlocked = rules.some(
+    (rule) =>
+      rule.setTags.includes(UPI_BLOCK_TAG) &&
+      rule.setPayeeName?.toLowerCase() === lower &&
+      rule.matchUpiId?.toLowerCase() === upiId,
+  );
+  if (!alreadyBlocked) {
+    const sample = owned[0]!;
+    await store.createRule({
+      userId: req.user!.id,
+      name: `Don't track ${upiId} as ${sample.setPayeeName ?? name}`,
+      priority: 5,
+      enabled: true,
+      matchNarrationRe: null,
+      matchUpiId: upiId,
+      matchMerchantAlias: null,
+      matchAmountMin: null,
+      matchAmountMax: null,
+      matchType: null,
+      setProviderId: null,
+      setPayeeName: sample.setPayeeName ?? name,
+      setCategorySlug: null,
+      setTags: [UPI_BLOCK_TAG],
+    });
+  }
+
+  const remaining = (await store.listRules(req.user!.id)).filter(
+    (rule) =>
+      rule.setPayeeName?.toLowerCase() === lower && !rule.setTags.includes(UPI_BLOCK_TAG),
+  );
+  if (remaining.length === 0) {
+    const sample = owned[0]!;
+    await store.createRule({
+      userId: req.user!.id,
+      name: sample.name,
+      priority: sample.priority,
+      enabled: true,
+      matchNarrationRe: name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+      matchUpiId: null,
+      matchMerchantAlias: null,
+      matchAmountMin: null,
+      matchAmountMax: null,
+      matchType: null,
+      setProviderId: sample.setProviderId,
+      setPayeeName: sample.setPayeeName,
+      setCategorySlug: sample.setCategorySlug,
+      setTags: sample.setTags.filter((tag) => tag !== UPI_BLOCK_TAG),
+    });
+  }
+
+  const txs = await store.listTransactions(req.user!.id);
+  let cleared = 0;
+  for (const tx of txs) {
+    if (tx.payee?.toLowerCase() !== lower) continue;
+    if (!sameUpi(tx.upiId, upiId)) continue;
+    await store.updateTransaction(req.user!.id, tx.id, {
+      payee: null,
+      ...(tx.categorySlug === "family" ? { categorySlug: null } : {}),
+    });
+    cleared += 1;
+  }
+
+  await store.audit(req.user!.id, "person.upi_detached", { name, upiId, cleared });
+  res.json({ ok: true, cleared });
+});
+
 rulesRouter.post("/untrack", async (req, res) => {
   const name = String((req.body as { name?: string }).name ?? "").trim();
   if (!name) {
@@ -175,6 +281,7 @@ rulesRouter.post("/untrack", async (req, res) => {
   const rules = await store.listRules(req.user!.id);
   const matched = rules.filter((rule) => {
     if (rule.setPayeeName?.toLowerCase() !== lower) return false;
+    if (rule.setTags.includes(UPI_BLOCK_TAG)) return true;
     return (
       rule.setTags.includes("friend") ||
       rule.setTags.includes("family") ||

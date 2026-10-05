@@ -31,6 +31,29 @@ export function buildMatchFieldsFromText(text: string): {
   return { matchNarrationRe: escapeRegex(trimmed), matchUpiId: null };
 }
 
+/** A rule with this tag means "this UPI id is not that person." */
+export const UPI_BLOCK_TAG = "upi-block";
+
+export function upiBlockedForPayee(
+  rules: UserRuleRow[],
+  payeeName: string,
+  upiId: string | null | undefined,
+): boolean {
+  if (!upiId) return false;
+  const hay = upiId.toLowerCase();
+  const payee = payeeName.toLowerCase();
+  return rules.some((rule) => {
+    const needle = rule.matchUpiId?.toLowerCase();
+    if (!needle) return false;
+    return (
+      rule.enabled &&
+      rule.setTags.includes(UPI_BLOCK_TAG) &&
+      rule.setPayeeName?.toLowerCase() === payee &&
+      hay.includes(needle)
+    );
+  });
+}
+
 export function matchRule(
   rule: UserRuleRow,
   tx: Pick<
@@ -88,7 +111,11 @@ export function applyRules(
   };
 
   for (const rule of rules) {
+    if (rule.setTags.includes(UPI_BLOCK_TAG)) continue;
     if (!matchRule(rule, tx)) continue;
+    if (rule.setPayeeName && upiBlockedForPayee(rules, rule.setPayeeName, tx.upiId)) {
+      continue;
+    }
     if (rule.setPayeeName) result.payee = rule.setPayeeName;
     if (rule.setCategorySlug) result.categorySlug = rule.setCategorySlug;
     if (rule.setProviderId) {

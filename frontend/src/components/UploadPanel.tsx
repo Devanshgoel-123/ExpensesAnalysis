@@ -83,7 +83,7 @@ export function UploadPanel({ onParsed, loading, error }: UploadPanelProps) {
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="Usually DOB / phone / PAN"
+          placeholder="Password"
           autoComplete="off"
           disabled={loading}
         />

@@ -179,13 +179,31 @@
 }
 
 .payee-upi {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
   font-size: 0.7rem;
-  padding: 0.12rem 0.45rem;
+  padding: 0.12rem 0.35rem 0.12rem 0.45rem;
   border-radius: 999px;
   color: var(--info);
   background: var(--info-soft);
   border: 1px solid color-mix(in srgb, var(--info) 25%, transparent);
   font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.payee-upi-remove {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 0.15rem;
+  line-height: 1;
+  font-size: 0.9rem;
+}
+
+.payee-upi-remove:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 .payee-stats {

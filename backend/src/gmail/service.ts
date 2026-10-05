@@ -17,7 +17,8 @@ import {
   gmailConfigured,
   renewWatch,
 } from "./client.js";
-import { nextScanWindow, poolingScanWindow } from "../helpers/index.js";
+import { nextScanWindow, poolingScanWindow, toIstCalendarDate } from "../helpers/index.js";
+import { sendersForBank } from "../helpers/gmailSenders.js";
 import {
   failStaleRunningRuns,
   runPoolingPoll,
@@ -183,6 +184,57 @@ export async function runGmailBackfillForUser(
   return { status: "running" as const, runId };
 }
 
+const MAX_POOLING_BANKS = 2;
+
+/** Create or refresh up to two bank accounts and turn pooling on for those only. */
+async function preparePoolingBanks(
+  userId: string,
+  bankIds: string[],
+): Promise<AccountRow[]> {
+  const store = await getStore();
+  const selected = [
+    ...new Set(bankIds.map((id) => id.trim().toUpperCase()).filter(Boolean)),
+  ].slice(0, MAX_POOLING_BANKS);
+  if (selected.length === 0) {
+    throw AppError.badRequest("Select a bank first.");
+  }
+  const existing = await store.listAccounts(userId);
+  for (const account of existing) {
+    if (
+      account.poolingEnabled &&
+      !selected.includes(account.bank.toUpperCase())
+    ) {
+      await store.setPoolingEnabled(userId, account.id, false);
+    }
+  }
+  const ready: AccountRow[] = [];
+  for (const bank of selected) {
+    const preset = await store.getBankPreset(bank);
+    if (!preset) throw AppError.badRequest(`Unknown bank: ${bank}`);
+    const created = await store.getOrCreateAccount(userId, bank);
+    const updated =
+      (await store.updateAccountMailSources(userId, created.id, {
+        bank,
+        label: preset.label,
+        statementSenderEmails: preset.defaultSenderEmails,
+      })) ?? created;
+    const enabled = await store.setPoolingEnabled(userId, updated.id, true);
+    ready.push(enabled ?? updated);
+  }
+  return ready;
+}
+
+function sendersForAccounts(accounts: AccountRow[]): string[] {
+  const [first, ...rest] = accounts;
+  if (!first) return [];
+  return sendersForBank(
+    first.bank,
+    rest.flatMap((account) =>
+      sendersForBank(account.bank, account.statementSenderEmails),
+    ),
+  );
+}
+
 /** Enable hourly pooling and run the initial alert + PDF sync. */
 export async function enablePoolingForUser(
   userId: string,
@@ -200,13 +252,25 @@ export async function enablePoolingForUser(
       "Connect Gmail first so pooling can read bank statement emails.",
     );
   }
-  const account = await resolveAccountForPooling(userId, body.accountId);
-  const updated = await store.setPoolingEnabled(userId, account.id, true);
+  const selected = body.banks?.length
+    ? await preparePoolingBanks(userId, body.banks)
+    : null;
+  const account = selected?.[0] ?? (await resolveAccountForPooling(userId, body.accountId));
+  const updated = selected?.[0] ?? (await store.setPoolingEnabled(userId, account.id, true));
+  const senders = selected ? sendersForAccounts(selected) : undefined;
   const ready = await ensureHistoryId(connection);
-  // The window is already covered: re-check this month. Mail ingest is idempotent.
+  const scan = poolingScanWindow();
+  const oldest = toIstCalendarDate(await store.oldestMailReceivedAt(userId));
+  const historyOpen = !oldest || oldest > scan.from;
+  // Already caught up: re-check this month. Older mail still missing: walk back.
+  // Mail already stored is skipped by fingerprint.
   const month =
     body.month ??
-    (nextScanWindow(ready.lastScannedOn).covered ? poolingScanWindow().to.slice(0, 7) : undefined);
+    (historyOpen
+      ? undefined
+      : nextScanWindow(ready.lastScannedOn).covered
+        ? scan.to.slice(0, 7)
+        : undefined);
   gmailLog.enabled(userId, month ?? "from-cutoff");
   const runId = await beginPoolingSync(
     {
@@ -217,6 +281,7 @@ export async function enablePoolingForUser(
       maxMessages: body.maxMessages ?? BACKFILL_DEFAULT_MAX_MESSAGES,
       month,
       trigger: "enable",
+      senders,
     },
     async (sync) => {
       await store.audit(userId, "gmail.pooling_enabled", {
