@@ -68,7 +68,7 @@ export function DashboardDataGate({
           kicker="First insight starts here"
           kickerIcon={Leaf}
           title="Import a statement to understand your month."
-          lede="Upload a bank PDF or enable bank-mail pooling on Import. Empty charts stay hidden until your first transactions land."
+          lede="Upload a bank PDF, or scan bank mail on Import. In your bank app, turn on email alerts for transactions first. If those mails are off, the month stays empty."
           primary={{
             label: "Go to Import",
             href: pathForView("import"),

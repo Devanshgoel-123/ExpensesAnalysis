@@ -198,6 +198,10 @@ export function BankPoolingPanel({
             ? `Scanned through ${formatIsoDateLabel(gmail.lastScannedOn)}. This scan covers ${windowLabel}.`
             : `This scan covers ${windowLabel}.`}
         </p>
+        <p className="meta">
+          In your bank app, turn on email alerts for transactions. If those mails
+          are off, a scan has nothing to import.
+        </p>
       </header>
 
       <div className="import-bank-field">

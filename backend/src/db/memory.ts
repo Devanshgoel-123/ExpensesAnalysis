@@ -530,10 +530,15 @@ export class MemoryStore implements Store {
     id: string,
     patch: Partial<TransactionRow>,
   ): Promise<TransactionRow | null> {
-    const row = await this.getTransaction(userId, id);
+    const row = this.transactions.find((t) => t.id === id && t.userId === userId);
     if (!row) return null;
-    Object.assign(row, definedOnly(patch));
-    return row;
+    // getTransaction returns a copy with splits attached. Writing the patch
+    // onto that copy never reached the stored row, so category and type fixes
+    // disappeared on the next read.
+    const fields = definedOnly(patch);
+    delete fields.splits;
+    Object.assign(row, fields);
+    return this.withSplits(row);
   }
 
   async updateTransactions(

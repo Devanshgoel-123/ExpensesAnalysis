@@ -419,7 +419,7 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
                 ? gmail.email
                   ? `Reading bank mail for ${gmail.email}.`
                   : "Bank mail is connected."
-                : "Connect Gmail on Import to scan bank mail."}
+                : "Connect Gmail on Import to scan bank mail. Turn on email alerts for transactions in your bank app first."}
             </p>
           </div>
           <div className="settings-row-end">

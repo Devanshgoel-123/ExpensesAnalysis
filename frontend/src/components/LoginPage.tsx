@@ -27,7 +27,7 @@ const FEATURES = [
     icon: Mail,
     title: "Bank mail with Google",
     detail:
-      "Sign-in already requests read-only Gmail so we can find allowlisted bank senders — not your whole inbox.",
+      "Read-only Gmail, and only the bank senders you pick.",
   },
 ];
 
@@ -146,9 +146,9 @@ export function LoginPage({ authError, onContinue }: LoginPageProps) {
           <p className="brand compact login-card-brand">Ledgerline</p>
           <h2 className="login-card-title">Welcome</h2>
           <p className="meta login-card-lede">
-            Continue with Google, then import a bank PDF or turn on bank-mail
-            pooling. You&apos;ll land on setup until your first transactions
-            arrive.
+            Continue with Google, then import a bank PDF or scan bank mail.
+            In your bank app, turn on email alerts for transactions, or the
+            month stays empty.
           </p>
 
           {authError ? <p className="form-error">{authError}</p> : null}
