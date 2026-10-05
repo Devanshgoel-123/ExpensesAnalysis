@@ -103,6 +103,7 @@ export interface UpiRanking {
 
 export interface Summary {
   totalSpent: number;
+  totalInvested?: number;
   totalReceived: number;
   net: number;
   transactionCount: number;

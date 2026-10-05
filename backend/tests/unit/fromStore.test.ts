@@ -195,6 +195,28 @@ describe("buildAnalyticsFromRows spend", () => {
     assert.equal(result.summary.totalSpent, 900);
   });
 
+  it("keeps investments out of expenditure and totals them separately", () => {
+    const result = buildAnalyticsFromRows(
+      [
+        baseRow({ id: "food", amount: 400, fingerprint: "food" }),
+        baseRow({
+          id: "sip",
+          amount: 5000,
+          merchant: "Groww",
+          categorySlug: "investments",
+          fingerprint: "sip",
+        }),
+      ],
+      [],
+      [],
+      [],
+    );
+    assert.equal(result.summary.totalSpent, 400);
+    assert.equal(result.summary.totalInvested, 5000);
+    assert.equal(result.merchantSpend.find((row) => row.merchant === "Groww"), undefined);
+    assert.equal(result.daily.reduce((sum, day) => sum + day.amount, 0), 400);
+  });
+
   it("keeps a user override category, even when cleared, across rebuilds", () => {
     const swiggy = {
       id: "swiggy",

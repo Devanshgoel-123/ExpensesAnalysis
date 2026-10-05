@@ -576,6 +576,7 @@ export function buildAnalytics(
   return {
     summary: {
       totalSpent,
+      totalInvested: 0,
       totalReceived,
       net: Math.round((totalReceived - grossSpent) * 100) / 100,
       transactionCount: debits.length,

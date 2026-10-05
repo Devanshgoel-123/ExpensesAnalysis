@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useDashboard } from "@/lib/dashboard-context";
 import { useSaveDailyLimit } from "@/components/DailyLimitForm";
 import {
@@ -12,6 +13,9 @@ import {
 } from "@/helpers/finance";
 import { pathForView } from "@/lib/dashboardViews";
 import { formatInr } from "@/helpers/currency";
+import { formatShortDate } from "@/helpers/dates";
+import { CategorySlug } from "@/enums/category";
+import { SpotlightCard } from "@/components/SpotlightCard";
 
 import { StatsRow } from "@/components/StatsRow";
 import { SpendingHeatmap } from "@/components/charts/SpendingHeatmap";
@@ -25,6 +29,7 @@ import { LedgerlineFadeContent } from "@/components/animations/LedgerlineFadeCon
 export function OverviewPage() {
   const { data, dailyInsights, month, fetching } = useDashboard();
   const saveLimit = useSaveDailyLimit();
+  const [pane, setPane] = useState<"spend" | "invested">("spend");
 
   if (fetching && !data) {
     return <LoadingState text="Loading overview" variant="skeleton" />;
@@ -40,7 +45,13 @@ export function OverviewPage() {
   const categoryRows = allCategoryRows.slice(0, 5);
   const categorySpend = positiveTotal(allCategoryRows.map((row) => row.total));
   const merchantSpend = positiveTotal((data.merchantSpend ?? []).map((row) => row.total));
-  const spentHint = `${formatInr(data.summary.totalSpent)} spent · ${formatInr(data.summary.totalReceived)} received`;
+  const investedRows = data.transactions.filter(
+    (txn) => txn.category === CategorySlug.Investments && txn.type === "debit",
+  );
+  const investedTotal =
+    data.summary.totalInvested ??
+    investedRows.reduce((sum, txn) => sum + Math.abs(txn.myShare ?? txn.amount), 0);
+  const spentHint = `${formatInr(data.summary.totalSpent)} spent · ${formatInr(investedTotal)} invested · ${formatInr(data.summary.totalReceived)} received`;
   const weekend = weekendInsight(data.daily);
   const limit = dailyInsights.enabled ? dailyInsights.limit : null;
   const overDays = dailyInsights.daysOverLimit.length;
@@ -60,9 +71,55 @@ export function OverviewPage() {
               {spentHint} · {data.summary.transactionCount} transactions
             </p>
           </div>
+          <div className="overview-tabs" role="tablist" aria-label="Overview">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={pane === "spend"}
+              className={`sort-chip ${pane === "spend" ? "active" : ""}`}
+              onClick={() => setPane("spend")}
+            >
+              Spending
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={pane === "invested"}
+              className={`sort-chip ${pane === "invested" ? "active" : ""}`}
+              onClick={() => setPane("invested")}
+            >
+              Invested
+            </button>
+          </div>
         </header>
       </LedgerlineFadeContent>
 
+      {pane === "invested" ? (
+        <LedgerlineFadeContent delay={40}>
+          <SpotlightCard className="panel">
+            <p className="stat-kicker">Invested</p>
+            <strong className="display-num lg">{formatInr(investedTotal)}</strong>
+            <p className="meta mt-1">Moved into investments. Not counted as expenditure.</p>
+            {investedRows.length === 0 ? (
+              <p className="meta mt-4">Nothing invested in {formatMonthTitle(month)}.</p>
+            ) : (
+              <ul className="payee-timeline">
+                {investedRows.map((txn) => (
+                  <li key={txn.id ?? `${txn.date}-${txn.amount}`} className="paid">
+                    <span className="payee-dot" aria-hidden />
+                    <span className="payee-when">{formatShortDate(txn.date)}</span>
+                    <span className="payee-via">{txn.merchant ?? txn.description}</span>
+                    <span className="payee-amount">{formatInr(txn.myShare ?? txn.amount)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </SpotlightCard>
+        </LedgerlineFadeContent>
+      ) : null}
+
+      {pane === "spend" ? (
+      <>
       <LedgerlineFadeContent delay={40}>
         <StatsRow
           summary={data.summary}
@@ -136,6 +193,8 @@ export function OverviewPage() {
           spentTotal={merchantSpend}
         />
       </LedgerlineFadeContent>
+      </>
+      ) : null}
     </div>
   );
 }

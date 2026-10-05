@@ -86,6 +86,8 @@ export interface UpiRanking {
 
 export interface Summary {
   totalSpent: number;
+  /** Debits categorized as investments. Not included in totalSpent. */
+  totalInvested: number;
   totalReceived: number;
   net: number;
   transactionCount: number;

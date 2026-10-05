@@ -216,7 +216,7 @@ export function peopleFromTransactions(
 export function spendAmount(
   txn: Pick<Transaction, "type" | "amount" | "isRefund" | "category" | "myShare">,
 ): number {
-  if (txn.category === CategorySlug.PassedOn) return 0;
+  if (txn.category === CategorySlug.PassedOn || txn.category === CategorySlug.Investments) return 0;
   if (txn.type === TxType.Debit) return Math.abs(txn.myShare ?? txn.amount);
   if (txn.type === TxType.Credit && txn.isRefund) return -Math.abs(txn.amount);
   return 0;

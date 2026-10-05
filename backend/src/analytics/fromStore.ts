@@ -2,6 +2,7 @@ import type { CategoryRow, ProviderRow, TransactionRow } from "../db/types.js";
 import { myShare } from "../splits/share.js";
 import { resolveAmountBand } from "../categories/heuristics.js";
 import { ClassificationSource } from "../enums/classification.js";
+import { CategorySlug } from "../enums/category.js";
 import { counterpartyFromNarration, isAccountBank, merchantIsAccountBank } from "../narration/party.js";
 import { detectFromProviders } from "../rules/engine.js";
 import { buildDailyInsights } from "./dailyInsights.js";
@@ -155,6 +156,17 @@ function isPassedOn(
   return row.categorySlug === PASSED_ON || identity.categorySlug === PASSED_ON;
 }
 
+/** Money moved into investments is not expenditure. */
+function isInvestment(
+  row: Pick<TransactionRow, "categorySlug">,
+  identity: Pick<SpendIdentity, "categorySlug">,
+): boolean {
+  return (
+    row.categorySlug === CategorySlug.Investments ||
+    identity.categorySlug === CategorySlug.Investments
+  );
+}
+
 const REFUND_RE = /\b(refund|reversal|reversed|cashback|chargeback)\b/i;
 
 const BANK_RAIL_RE = /\b(neft|imps|rtgs|payroll|salary)\b/i;
@@ -253,8 +265,11 @@ export function buildAnalyticsFromRows(
   const identities = new Map(rows.map((row) => [row.id, resolveSpendIdentity(row, providers)]));
   const identityOf = (row: TransactionRow) => identities.get(row.id)!;
   const mine = (row: TransactionRow) => !isPassedOn(row, identityOf(row));
-  const debits = rows.filter((t) => t.type === "debit" && mine(t));
-  const credits = rows.filter((t) => t.type === "credit" && mine(t));
+  const invested = (row: TransactionRow) => isInvestment(row, identityOf(row));
+  const spendable = (row: TransactionRow) => mine(row) && !invested(row);
+  const debits = rows.filter((t) => t.type === "debit" && spendable(t));
+  const credits = rows.filter((t) => t.type === "credit" && spendable(t));
+  const investedDebits = rows.filter((t) => t.type === "debit" && mine(t) && invested(t));
   const refunds = credits.filter((row) => isRefund(row, identityOf(row), providers));
 
   const spendByDay = new Map<string, number>();
@@ -274,7 +289,7 @@ export function buildAnalyticsFromRows(
   const upiMap = new Map<string, UpiRanking>();
   for (const t of rows) {
     if (t.type !== "debit" && t.type !== "credit") continue;
-    if (!mine(t)) continue;
+    if (!spendable(t)) continue;
     const identity = identityOf(t);
     if (!identity.upiId) continue;
     const existing = upiMap.get(identity.upiId);
@@ -312,7 +327,7 @@ export function buildAnalyticsFromRows(
   );
   const refundIds = new Set(refunds.map((row) => row.id));
   for (const t of rows) {
-    if (!mine(t)) continue;
+    if (!spendable(t)) continue;
     if (t.type !== "debit" && !refundIds.has(t.id)) continue;
     const payee = t.payee?.trim().toLowerCase();
     const identity =
@@ -395,6 +410,7 @@ export function buildAnalyticsFromRows(
     } satisfies AmountBand);
 
   const grossSpent = round2(debits.reduce((sum, t) => sum + countedAmount(t), 0));
+  const totalInvested = round2(investedDebits.reduce((sum, t) => sum + countedAmount(t), 0));
   const totalReceived = round2(credits.reduce((sum, t) => sum + t.amount, 0));
   const totalRefunded = round2(refunds.reduce((sum, t) => sum + t.amount, 0));
   const totalSpent = round2(grossSpent - totalRefunded);
@@ -402,6 +418,7 @@ export function buildAnalyticsFromRows(
 
   const summary: Summary = {
     totalSpent,
+    totalInvested,
     totalReceived,
     net: round2(totalReceived - grossSpent),
     transactionCount: rows.filter((t) => t.type === "debit").length,
