@@ -158,13 +158,24 @@ function isPassedOn(
 
 /** Money moved into investments is not expenditure. */
 function isInvestment(
-  row: Pick<TransactionRow, "categorySlug">,
-  identity: Pick<SpendIdentity, "categorySlug">,
+  row: Pick<TransactionRow, "categorySlug" | "providerId">,
+  identity: Pick<SpendIdentity, "categorySlug" | "providerId">,
+  providers: ProviderRow[],
 ): boolean {
-  return (
+  if (
     row.categorySlug === CategorySlug.Investments ||
     identity.categorySlug === CategorySlug.Investments
-  );
+  ) {
+    return true;
+  }
+  const providerId = identity.providerId ?? row.providerId;
+  const provider = providerId
+    ? providers.find((item) => item.id === providerId) ?? null
+    : null;
+  if (provider?.categorySlug !== CategorySlug.Investments) return false;
+  // A category the user actually chose, other than investments, still counts as spend.
+  const chosen = row.categorySlug;
+  return !chosen || chosen === "other";
 }
 
 const REFUND_RE = /\b(refund|reversal|reversed|cashback|chargeback)\b/i;
@@ -201,8 +212,10 @@ function rowToApiTransaction(
 } {
   const provider = providers.find((p) => p.id === row.providerId) ?? null;
   const identity = resolveSpendIdentity(row, providers);
-  const category =
-    categories.find((c) => c.slug === identity.categorySlug) ?? null;
+  const categorySlug = isInvestment(row, identity, providers)
+    ? CategorySlug.Investments
+    : identity.categorySlug;
+  const category = categories.find((c) => c.slug === categorySlug) ?? null;
   return {
     isRefund: isRefund(row, identity, providers),
     origin: row.origin,
@@ -219,7 +232,7 @@ function rowToApiTransaction(
     merchant: identity.merchant,
     payee: row.payee,
     providerId: identity.providerId ?? provider?.id ?? null,
-    category: identity.categorySlug,
+    category: categorySlug,
     categoryLabel: category?.label ?? null,
     logoUrl: identity.logoUrl ?? provider?.logoUrl ?? null,
   };
@@ -265,7 +278,7 @@ export function buildAnalyticsFromRows(
   const identities = new Map(rows.map((row) => [row.id, resolveSpendIdentity(row, providers)]));
   const identityOf = (row: TransactionRow) => identities.get(row.id)!;
   const mine = (row: TransactionRow) => !isPassedOn(row, identityOf(row));
-  const invested = (row: TransactionRow) => isInvestment(row, identityOf(row));
+  const invested = (row: TransactionRow) => isInvestment(row, identityOf(row), providers);
   const spendable = (row: TransactionRow) => mine(row) && !invested(row);
   const debits = rows.filter((t) => t.type === "debit" && spendable(t));
   const credits = rows.filter((t) => t.type === "credit" && spendable(t));

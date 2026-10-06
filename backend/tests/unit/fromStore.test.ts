@@ -217,6 +217,40 @@ describe("buildAnalyticsFromRows spend", () => {
     assert.equal(result.daily.reduce((sum, day) => sum + day.amount, 0), 400);
   });
 
+  it("treats a payment to an investments app as invested even without a category", () => {
+    const savings = {
+      id: "savings",
+      userId: null,
+      canonicalName: "Savings",
+      aliases: ["Savings"],
+      upiHandles: [],
+      senderDomains: [],
+      websiteDomain: null,
+      logoUrl: null,
+      categorySlug: "investments",
+      isGlobal: false,
+    };
+    const result = buildAnalyticsFromRows(
+      [
+        baseRow({
+          id: "move",
+          amount: 95000,
+          merchant: "Savings",
+          categorySlug: null,
+          providerId: "savings",
+          classificationSource: "user_override",
+          fingerprint: "move",
+        }),
+      ],
+      [savings],
+      [],
+      [],
+    );
+    assert.equal(result.summary.totalSpent, 0);
+    assert.equal(result.summary.totalInvested, 95000);
+    assert.equal(result.transactions[0]?.category, "investments");
+  });
+
   it("keeps a user override category, even when cleared, across rebuilds", () => {
     const swiggy = {
       id: "swiggy",
