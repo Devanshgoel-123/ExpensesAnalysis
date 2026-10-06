@@ -6,7 +6,7 @@ About 8 minutes. Use your own month of data. Do not open someone else's statemen
 
 1. API on port 4000, web on http://localhost:3000, and you are signed in.
 2. Pick a month that has a handful of real payments, a daily limit, and at least one day over or under that limit.
-3. Gmail is already connected. Telegram is linked if you want to show the bot. If either is not ready, skip that section. Do not connect a new account live.
+3. Gmail is already connected, and email alerts for transactions are already on in the bank app. Telegram is linked if you want to show the bot. If either is not ready, skip that section. Do not connect a new account live.
 4. Close other tabs that show mail, bank sites, or this repo's `.env`.
 5. Browser zoom at 100%. Sidebar visible. Start on Overview.
 
@@ -14,7 +14,7 @@ About 8 minutes. Use your own month of data. Do not open someone else's statemen
 
 Say:
 
-> Most UPI apps tell you the payment went through. They do not tell you what the month actually felt like. Ledgerline reads the bank alerts you already get, turns them into categories, and shows the month as a spend picture. It is not a bank, and it does not hold a password.
+> Most UPI apps tell you the payment went through. They do not tell you what the month actually felt like. Ledgerline reads the bank alerts you already get, turns them into categories, and shows the month as a spend picture. Those alerts have to be turned on in the bank app. If the mail is off, there is nothing to read. It is not a bank, and it does not hold a password.
 
 Stay on Overview. Point at the month title and the total.
 
@@ -52,7 +52,7 @@ Open **Transactions** and filter or scroll to one payment you know.
 
 Open **Import**. Do not start a new scan unless you have already rehearsed it.
 
-> There are two ways in. A statement PDF, or Gmail. Gmail is read-only, and only the bank senders you allow. The Google password stays with Google. A PDF password, if a file needs one, opens that file and is not saved.
+> There are two ways in. A statement PDF, or Gmail. Gmail is read-only, and only the bank senders you allow. In the bank app, email alerts for transactions have to be on. If those mails are off, a scan has nothing to import. The Google password stays with Google. A PDF password, if a file needs one, opens that file and is not saved.
 
 Open **Statement match** only if you have a prepared match.
 
