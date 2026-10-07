@@ -157,7 +157,7 @@ export function AppsPage() {
             open{" "}
             <Link
               href={pathForView("transactions")}
-              className="text-[var(--primary)] underline-offset-2 hover:underline"
+              className="text-link"
             >
               Transactions
             </Link>{" "}

@@ -96,7 +96,7 @@ export function LifestylePage() {
               ) : null}
               <li className="meta">
                 {data.summary.transactionCount} transactions this period ·{" "}
-                <Link href={pathForView("transactions")} className="text-[var(--primary)]">
+                <Link href={pathForView("transactions")} className="text-link">
                   View all
                 </Link>
               </li>

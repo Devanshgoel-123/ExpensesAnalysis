@@ -84,7 +84,6 @@
 }
 
 .import-bank-field {
-  max-width: 36rem;
   margin-bottom: 0.85rem;
 }
 
@@ -155,8 +154,11 @@
 .settings-sections {
   display: grid;
   gap: 0.85rem;
-  width: min(100%, 32rem);
-  margin-inline: auto;
+  width: min(100%, 46rem);
+}
+
+.settings-sections > header {
+  margin-bottom: 0.4rem;
 }
 
 .profile-form {

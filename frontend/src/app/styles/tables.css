@@ -97,7 +97,13 @@
 .txn-search {
   flex: 1;
   min-width: 180px;
-  max-width: 280px;
+  max-width: 340px;
+}
+
+.txn-search input {
+  min-height: 2.15rem;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.82rem;
 }
 
 .txn-filters {
@@ -163,6 +169,13 @@
 .txn-panel col.col-upi { width: 12%; }
 .txn-panel col.col-amount { width: 11%; }
 
+@media (max-width: 1100px) {
+  .txn-panel col.col-date { width: 10%; }
+  .txn-panel col.col-merchant { width: 33%; }
+  .txn-panel col.col-upi { width: 10%; }
+  .txn-panel col.col-amount { width: 15%; }
+}
+
 .txn-panel td.upi-cell {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -189,7 +202,7 @@ th {
   position: sticky;
   top: 0;
   z-index: 3;
-  background: var(--surface);
+  background: var(--surface-solid, var(--surface));
   color: var(--muted);
   font-size: 0.7rem;
   text-transform: uppercase;
@@ -271,7 +284,8 @@ th.num {
 }
 
 .brand-mark.fallback {
-  background: var(--bg-muted);
+  background: var(--primary-soft);
+  border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent);
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--primary);
@@ -329,6 +343,10 @@ td.credit,
   display: grid;
   justify-items: end;
   gap: 0.15rem;
+}
+
+.txn-amount > span {
+  white-space: nowrap;
 }
 
 .txn-delete {

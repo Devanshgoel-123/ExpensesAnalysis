@@ -65,8 +65,9 @@ export function ImportPage() {
     <div className="view-stack">
       <LedgerlineFadeContent>
         <header>
-          <h2 className="month-label">Import</h2>
-          <p className="meta mt-1">
+          <p className="stat-kicker mb-2">Import</p>
+          <h2 className="month-label">Bank mail and statements</h2>
+          <p className="meta mt-1.5">
             Scan bank alerts for {windowLabel}. Newest mail first. Overview
             uses the same month.
           </p>

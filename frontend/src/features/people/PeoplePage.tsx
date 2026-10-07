@@ -112,6 +112,16 @@ export function PeoplePage() {
   return (
     <div className="view-stack">
       <LedgerlineFadeContent>
+        <header>
+          <p className="stat-kicker mb-2">People</p>
+          <h2 className="month-label">{periodLabel}</h2>
+          <p className="meta mt-1.5">
+            Friends and family you pay, and what moved between you this month.
+          </p>
+        </header>
+      </LedgerlineFadeContent>
+
+      <LedgerlineFadeContent>
         <Panel>
           <PanelHead
             title="Add a person"

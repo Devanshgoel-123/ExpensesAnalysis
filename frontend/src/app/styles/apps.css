@@ -94,7 +94,9 @@
 }
 
 .app-upi {
-  display: grid;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
   gap: 0.45rem;
   min-width: 0;
 }
@@ -129,6 +131,7 @@
   display: flex;
   gap: 0.4rem;
   min-width: 0;
+  margin-top: auto;
 }
 
 .app-upi-add input {
@@ -167,10 +170,26 @@
   gap: 0.75rem;
 }
 
+.statement-steps {
+  margin-bottom: 0;
+  padding-left: 1.1rem;
+  list-style: decimal;
+  line-height: 1.6;
+}
+
+.statement-steps li::marker {
+  color: var(--muted-2);
+  font-variant-numeric: tabular-nums;
+}
+
 @media (min-width: 720px) {
   .apps-add {
     grid-template-columns: 1fr 10rem auto;
     align-items: end;
+  }
+
+  .apps-add.statement-read {
+    grid-template-columns: 1fr 14rem auto;
   }
 
   .people-add {

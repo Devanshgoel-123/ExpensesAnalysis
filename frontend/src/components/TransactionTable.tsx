@@ -156,6 +156,8 @@ export function TransactionTable({
     return sortDir === "asc" ? " ↑" : " ↓";
   }
 
+  const creditCount = items.filter((txn) => txn.type === "credit").length;
+
   function assignControls(txn: Transaction) {
     return (
       <TxnAssignPicker
@@ -176,7 +178,7 @@ export function TransactionTable({
           <p className="meta">
             {sorted.length} of {items.length} rows
             {" · "}
-            {items.filter((txn) => txn.type === "credit").length} credits
+            {creditCount} credit{creditCount === 1 ? "" : "s"}
             {assignError ? ` · ${assignError}` : ""}
           </p>
         </div>

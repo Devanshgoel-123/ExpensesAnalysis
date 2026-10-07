@@ -51,6 +51,19 @@ a {
   color: inherit;
 }
 
+.text-link {
+  color: var(--copper);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--copper) 40%, transparent);
+  text-underline-offset: 3px;
+  transition: text-decoration-color var(--ease);
+}
+
+.text-link:hover {
+  text-decoration-color: currentColor;
+}
+
 button,
 input,
 select,

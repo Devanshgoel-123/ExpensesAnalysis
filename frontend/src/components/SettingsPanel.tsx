@@ -121,7 +121,8 @@ export function SettingsPanel({ onChanged }: { onChanged?: () => void }) {
   return (
     <div className="settings-sections">
       <header>
-        <h2 className="month-label">Settings</h2>
+        <p className="stat-kicker mb-2">Settings</p>
+        <h2 className="month-label">Limits and account</h2>
       </header>
 
       {(message || error) && (

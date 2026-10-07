@@ -153,7 +153,7 @@ export function OverviewPage() {
               {weekend && weekend.topDays.length > 0
                 ? ` Busiest days: ${weekend.topDays.join(" and ")}.`
                 : ""}{" "}
-              <Link href={pathForView("settings")} className="text-[var(--primary)] underline-offset-2 hover:underline">
+              <Link href={pathForView("settings")} className="text-link">
                 Change limit
               </Link>
             </p>

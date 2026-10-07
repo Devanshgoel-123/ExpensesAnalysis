@@ -385,7 +385,7 @@ export function StatementMatchPage() {
         <header>
           <p className="stat-kicker mb-2">Statement match</p>
           <h2 className="month-label">Approve vendor UPI ids</h2>
-          <ol className="meta mt-3" style={{ paddingLeft: "1.1rem", lineHeight: 1.6 }}>
+          <ol className="meta statement-steps mt-2">
             <li>Upload one PDF. It is read in memory and is not inserted as new transactions.</li>
             <li>Review UPI ids that match a known vendor, from this file and from payments already in the mail-tracking window.</li>
             <li>Approve saves that UPI id on the vendor first, so later mail and statement parses label it on their own.</li>
@@ -403,7 +403,7 @@ export function StatementMatchPage() {
         {error ? <p className="form-error">{error}</p> : null}
         {message ? <p className="meta">{message}</p> : null}
         <form
-          className="apps-add"
+          className="apps-add statement-read"
           onSubmit={(event) => {
             event.preventDefault();
             const input = event.currentTarget.elements.namedItem("statement");
