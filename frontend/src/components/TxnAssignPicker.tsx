@@ -6,6 +6,7 @@ import type { CategorySummary, Transaction } from "@/types";
 import type { Provider } from "@/lib/api/types";
 import { BrandMark } from "@/components/BrandMark";
 import { logoForCategory } from "@/helpers/apps";
+import { upiPartyHint, upiPartyHintLabel } from "@/helpers/upiHint";
 import { useApi } from "@/lib/useApi";
 
 interface TxnAssignPickerProps {
@@ -70,6 +71,12 @@ export function TxnAssignPicker({
   const parentLabel = category?.meta?.parent
     ? categories.find((item) => item.slug === category.meta?.parent)?.label
     : null;
+  const unlabeled =
+    !labeled &&
+    !bankChoice &&
+    !txn.payee &&
+    (!txn.category || txn.category === "other");
+  const partyHint = unlabeled ? upiPartyHintLabel(upiPartyHint(txn.upiId)) : null;
   const subcategories = useMemo(
     () => categories.filter((category) => category.meta?.parent === browse),
     [categories, browse],
@@ -244,30 +251,34 @@ export function TxnAssignPicker({
     <div className="txn-assign" ref={anchorRef}>
       <button
         type="button"
-        className={`txn-assign-trigger ${open ? "open" : ""} ${labeled || bankChoice || txn.payee || (txn.category && txn.category !== "other") ? "" : "empty"}`}
+        className={`txn-assign-trigger ${open ? "open" : ""} ${unlabeled ? "empty" : ""}`}
         aria-haspopup="dialog"
         aria-expanded={open}
         disabled={disabled}
         onClick={() => setOpen((value) => !value)}
       >
         <BrandMark
-          name={labeled?.canonicalName ?? bankChoice?.canonicalName ?? txn.payee ?? categoryLabel ?? "?"}
-          logoUrl={labeled?.logoUrl ?? bankChoice?.logoUrl ?? categoryMark}
+          name={
+            labeled?.canonicalName ??
+            bankChoice?.canonicalName ??
+            txn.payee ??
+            (unlabeled ? "?" : categoryLabel ?? "?")
+          }
+          logoUrl={labeled?.logoUrl ?? bankChoice?.logoUrl ?? (unlabeled ? null : categoryMark)}
         />
         <span className="txn-assign-copy">
           <strong>
             {labeled?.canonicalName ??
               bankChoice?.canonicalName ??
               txn.payee ??
-              categoryLabel ??
-              "Choose app"}
+              (unlabeled ? "Choose app" : categoryLabel ?? "Choose app")}
           </strong>
           <em>
             {labeled || bankChoice
               ? categoryLabel
               : txn.payee
                 ? "Family"
-                : (parentLabel ?? categoryLabel ?? "Unlabeled")}
+                : partyHint ?? (unlabeled ? "Unlabeled" : parentLabel ?? categoryLabel ?? "Unlabeled")}
           </em>
         </span>
         <i className="txn-assign-caret" aria-hidden />
