@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { FileUp } from "lucide-react";
 import { UploadPanel } from "@/components/UploadPanel";
 import { BankPoolingPanel } from "@/components/BankPoolingPanel";
+import { OnboardingWelcome } from "@/components/OnboardingWelcome";
 import { useDashboard } from "@/lib/dashboard-context";
+import { createApiClient } from "@/lib/api/client";
+import { useAuth } from "@/lib/auth";
 import { LedgerlineFadeContent } from "@/components/animations/LedgerlineFadeContent";
 import { Panel, PanelHead } from "@/components/ui/Panel";
 import {
@@ -48,18 +51,60 @@ export function ImportPage() {
     scanning,
   } = useDashboard();
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const { token } = useAuth();
   const [banner, setBanner] = useState<string | null>(null);
   const [bannerError, setBannerError] = useState<string | null>(null);
+  const [showWelcome, setShowWelcome] = useState(true);
+  const [loadingDemo, setLoadingDemo] = useState(false);
   const windowLabel = formatScanWindowLabel(displayScanWindow());
+
+  useEffect(() => {
+    if (hasAnyData) {
+      setShowWelcome(false);
+    }
+  }, [hasAnyData]);
 
   useEffect(() => {
     const fromUrl = takeGmailParams();
     if (fromUrl.status === "connected") {
       setBanner("Gmail connected. Scan bank mail below.");
+      setShowWelcome(false);
     } else if (fromUrl.status === "error") {
       setBannerError(fromUrl.detail ?? "Gmail connection failed. Try again.");
     }
   }, [searchParams]);
+
+  const handleTryDemo = async () => {
+    if (!token) return;
+    setLoadingDemo(true);
+    try {
+      const client = createApiClient(token);
+      await client.post("/demo/load", {});
+      await refreshStatus();
+      refresh();
+      router.push("/overview");
+    } catch (error) {
+      setBannerError("Failed to load demo data. Please try again.");
+    } finally {
+      setLoadingDemo(false);
+    }
+  };
+
+  const handleLearnMore = () => {
+    // TODO: Open documentation or tutorial
+    setShowWelcome(false);
+  };
+
+  if (showWelcome && !hasAnyData) {
+    return (
+      <OnboardingWelcome
+        onStartImport={() => setShowWelcome(false)}
+        onTryDemo={handleTryDemo}
+        onLearnMore={handleLearnMore}
+      />
+    );
+  }
 
   return (
     <div className="view-stack">
