@@ -251,6 +251,26 @@ export function DailySpendChart({
               </li>
             ))}
           </ul>
+
+          {/* Data table for screen reader accessibility */}
+          <table className="sr-only" role="table" aria-label="Daily spend data">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Amount</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {points.map((point) => (
+                <tr key={point.key}>
+                  <td>{point.title}</td>
+                  <td>{point.amountLabel}</td>
+                  <td>{point.overLimit ? "Over limit" : point.toneLabel}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </>
       )}
     </Panel>
