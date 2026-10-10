@@ -225,6 +225,9 @@ export type ReconcileSummary = {
   /** Lines left unmatched: failed balance check, or a nearby unmatched row suggests a mis-parsed alert. */
   unresolved: number;
   months: MonthCheck[];
+  /** Duplicate import feedback */
+  isDuplicate?: boolean;
+  previousImportDate?: string | null;
 };
 
 async function applyMatches(
@@ -444,12 +447,38 @@ export async function ingestStatementPdf(input: {
   const attachmentHash = sha256Hex(input.buffer);
   const byHash = await store.findImportByHash(input.userId, attachmentHash);
   if (byHash?.status === ImportStatus.Completed) {
-    return { importId: byHash.id, parsed: 0, summary: null };
+    return {
+      importId: byHash.id,
+      parsed: 0,
+      summary: {
+        lines: 0,
+        verified: 0,
+        typeCorrected: 0,
+        inserted: 0,
+        unresolved: 0,
+        months: [],
+        isDuplicate: true,
+        previousImportDate: byHash.createdAt,
+      },
+    };
   }
   if (input.gmailMessageId) {
     const byMail = await store.findImportByGmailMessage(input.userId, input.gmailMessageId);
     if (byMail?.status === ImportStatus.Completed) {
-      return { importId: byMail.id, parsed: 0, summary: null };
+      return {
+        importId: byMail.id,
+        parsed: 0,
+        summary: {
+          lines: 0,
+          verified: 0,
+          typeCorrected: 0,
+          inserted: 0,
+          unresolved: 0,
+          months: [],
+          isDuplicate: true,
+          previousImportDate: byMail.createdAt,
+        },
+      };
     }
   }
 

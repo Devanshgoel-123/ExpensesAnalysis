@@ -73,6 +73,8 @@ export async function processPdfImport(input: {
   inserted: number;
   skipped: number;
   summary: ReconcileSummary | null;
+  isDuplicate?: boolean;
+  previousImportDate?: string | null;
 }> {
   const store = await getStore();
   const ingest = await ingestStatementPdf({
@@ -101,6 +103,8 @@ export async function processPdfImport(input: {
     inserted,
     skipped: ingest.parsed - inserted,
     summary: ingest.summary,
+    isDuplicate: ingest.summary?.isDuplicate ?? false,
+    previousImportDate: ingest.summary?.previousImportDate ?? null,
   };
 }
 

@@ -50,14 +50,22 @@ export const uploadImportController: RequestHandler = async (req, res) => {
   const file = assertPdfUpload(req.file);
   const body = req.body as { password?: string };
   try {
-    const { importId, result, inserted, skipped } = await processPdfImport({
-      userId: req.user!.id,
-      buffer: file.buffer,
-      filename: file.originalname,
-      password: body.password ?? "",
-      source: ImportSource.Upload,
-    });
-    res.json({ importId, inserted, skipped, ...result });
+    const { importId, result, inserted, skipped, isDuplicate, previousImportDate } =
+      await processPdfImport({
+        userId: req.user!.id,
+        buffer: file.buffer,
+        filename: file.originalname,
+        password: body.password ?? "",
+        source: ImportSource.Upload,
+      });
+    const response = { importId, inserted, skipped, ...result };
+    if (isDuplicate && previousImportDate) {
+      Object.assign(response, {
+        isDuplicate: true,
+        message: `This bank statement was already imported on ${new Date(previousImportDate).toLocaleDateString()}`,
+      });
+    }
+    res.json(response);
   } catch (error) {
     mapPdfImportError(error);
   }
