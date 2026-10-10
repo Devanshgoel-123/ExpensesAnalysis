@@ -87,3 +87,19 @@ export const uploadRateLimiter: RateLimitRequestHandler = rateLimit({
     );
   },
 });
+
+/** Mutation limiter for DELETE/PATCH operations — prevents spam deletion/editing. */
+export const mutationRateLimiter: RateLimitRequestHandler = rateLimit({
+  ...shared,
+  max: 30, // 30 mutations per window
+  keyGenerator: keyByIpAndUser,
+  windowMs: 60000, // 1 minute window
+  handler: (req, res, _next, optionsUsed) => {
+    sendRateLimitResponse(
+      req,
+      res,
+      optionsUsed.windowMs,
+      "Too many modifications. Please wait before making more changes.",
+    );
+  },
+});

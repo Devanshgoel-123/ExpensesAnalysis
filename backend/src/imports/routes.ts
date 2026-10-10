@@ -1,7 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import { requireAuth } from "../auth/service.js";
-import { uploadRateLimiter } from "../middleware/rateLimit.js";
+import { mutationRateLimiter, uploadRateLimiter } from "../middleware/rateLimit.js";
 import { validate } from "../middleware/validate.js";
 import { uuidParamSchema } from "../validators/common.js";
 import {
@@ -59,12 +59,14 @@ importRouter.put(
 
 importRouter.delete(
   "/transactions/:id",
+  mutationRateLimiter,
   validate(uuidParamSchema, "params"),
   deleteTransactionController,
 );
 
 importRouter.patch(
   "/transactions/:id",
+  mutationRateLimiter,
   validate(uuidParamSchema, "params"),
   validate(correctTransactionBodySchema),
   correctTransactionController,
