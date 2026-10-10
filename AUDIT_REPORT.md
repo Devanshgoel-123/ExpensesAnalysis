@@ -56,11 +56,10 @@ Ledgerline is a **well-engineered** expense tracker with **solid technical found
 Real Google OAuth credentials and Telegram bot token are committed to git history. This violates security best practices and exposes authentication systems.
 
 **Evidence:**
-```
-GOOGLE_CLIENT_ID=REDACTED
-GOOGLE_CLIENT_SECRET=REDACTED
-TELEGRAM_BOT_TOKEN=REDACTED
-```
+Real credentials found in git history (REDACTED for security):
+- GOOGLE_CLIENT_ID (OAuth client identifier)
+- GOOGLE_CLIENT_SECRET (OAuth secret key)
+- TELEGRAM_BOT_TOKEN (bot authentication token)
 
 **Immediate Actions Required:**
 1. Revoke Google OAuth credentials in Google Cloud Console
