@@ -155,4 +155,38 @@
   .sidebar-link-copy .meta {
     display: none;
   }
+
+  /* Improve mobile form inputs */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="date"],
+  input[type="number"],
+  textarea,
+  select {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  /* Improve button touch targets */
+  button,
+  a.cta,
+  .icon-btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Better spacing for mobile panels */
+  .panel {
+    padding: 1rem;
+  }
+
+  /* Improve view stack spacing */
+  .view-stack {
+    gap: 1rem;
+  }
+
+  .view-stack > header {
+    margin-bottom: 0.5rem;
+  }
 }
