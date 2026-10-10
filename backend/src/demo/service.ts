@@ -1,4 +1,4 @@
-import { db } from "../db/postgres.js";
+import { getStore } from "../db/index.js";
 import { transactions as txnTable } from "../db/schema.js";
 
 const DEMO_TRANSACTIONS = [
@@ -24,10 +24,11 @@ const DEMO_TRANSACTIONS = [
 ];
 
 export async function loadDemoData(userId: string): Promise<{ created: number }> {
+  const store = getStore();
   const created = [];
 
   for (const txn of DEMO_TRANSACTIONS) {
-    const result = await db
+    const result = await store.db
       .insert(txnTable)
       .values({
         userId,
