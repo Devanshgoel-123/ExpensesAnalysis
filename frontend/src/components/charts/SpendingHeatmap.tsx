@@ -45,6 +45,24 @@ export function SpendingHeatmap({
         dateFrom={dateFrom ?? days[0]}
         dateTo={dateTo ?? days[days.length - 1]}
       />
+
+      {/* Data table for screen reader accessibility */}
+      <table className="sr-only" role="table" aria-label="Daily spending heatmap data">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {days.map((day) => (
+            <tr key={day}>
+              <td>{day}</td>
+              <td>{formatInr(dayValues[day] ?? 0)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </Panel>
   );
 }
