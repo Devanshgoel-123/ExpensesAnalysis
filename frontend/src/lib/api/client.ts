@@ -408,6 +408,14 @@ export function createApiClient(token: string) {
           body: JSON.stringify(body),
         },
       ),
+
+    loadDemoData: () =>
+      requestJson<{ created: number }>("/api/demo/load", {
+        method: "POST",
+        ...auth,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      }),
   };
 }
 

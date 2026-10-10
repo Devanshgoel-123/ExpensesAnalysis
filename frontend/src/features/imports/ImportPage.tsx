@@ -80,7 +80,7 @@ export function ImportPage() {
     setLoadingDemo(true);
     try {
       const client = createApiClient(token);
-      await client.post("/demo/load", {});
+      await client.loadDemoData();
       await refreshStatus();
       refresh();
       router.push("/overview");
