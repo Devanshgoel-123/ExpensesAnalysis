@@ -63,11 +63,15 @@ export function VendorLogoPicker({
     setMounted(true);
   }, []);
 
+  // Reset UI state when menu opens/closes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!open) {
+      // Reset placed state when menu closes
       setPlaced(false);
       return;
     }
+    // Reset search and position when menu opens
     setQuery("");
     place();
 

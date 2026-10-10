@@ -19,6 +19,7 @@ import {
 import { requestContext } from "./middleware/requestContext.js";
 import { requestLogger } from "./middleware/requestLogger.js";
 import { corsMiddleware, securityHeaders } from "./middleware/security.js";
+import { tenantContext } from "./middleware/tenantContext.js";
 import { validate } from "./middleware/validate.js";
 import { providersRouter } from "./providers/routes.js";
 import { accountsRouter } from "./accounts/routes.js";
@@ -59,16 +60,17 @@ export function createApp(): express.Application {
   app.use("/api", healthRouter);
 
   app.use("/api/auth", authRateLimiter, authRouter);
-  app.use("/api/imports", importRouter);
-  app.use("/api/accounts", accountsRouter);
-  app.use("/api/categories", categoriesRouter);
-  app.use("/api/rules", rulesRouter);
-  app.use("/api/providers", providersRouter);
-  app.use("/api/preferences", preferencesRouter);
-  app.use("/api/admin", adminRouter);
-  app.use("/api/gmail", gmailRouter);
-  app.use("/api/telegram", telegramRouter);
-  app.use("/api/statement-match", statementMatchRouter);
+  // Tenant context enforcement middleware (requireAuth is applied within each router)
+  app.use("/api/imports", tenantContext, importRouter);
+  app.use("/api/accounts", tenantContext, accountsRouter);
+  app.use("/api/categories", tenantContext, categoriesRouter);
+  app.use("/api/rules", tenantContext, rulesRouter);
+  app.use("/api/providers", tenantContext, providersRouter);
+  app.use("/api/preferences", tenantContext, preferencesRouter);
+  app.use("/api/admin", tenantContext, adminRouter);
+  app.use("/api/gmail", tenantContext, gmailRouter);
+  app.use("/api/telegram", tenantContext, telegramRouter);
+  app.use("/api/statement-match", tenantContext, statementMatchRouter);
   app.get("/api/v1/auth/google/callback", handleGmailOAuthCallback);
 
   /** Authenticated parse+persist (preferred). */
