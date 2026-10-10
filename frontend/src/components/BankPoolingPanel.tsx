@@ -50,9 +50,12 @@ export function BankPoolingPanel({
   const onChangedRef = useRef(onChanged);
   const onImportedRef = useRef(onImported);
   const onGmailStatusRef = useRef(onGmailStatus);
-  onChangedRef.current = onChanged;
-  onImportedRef.current = onImported;
-  onGmailStatusRef.current = onGmailStatus;
+
+  useEffect(() => {
+    onChangedRef.current = onChanged;
+    onImportedRef.current = onImported;
+    onGmailStatusRef.current = onGmailStatus;
+  }, [onChanged, onImported, onGmailStatus]);
 
   const applyGmail = useCallback((next: GmailStatus | null) => {
     setGmail(next);

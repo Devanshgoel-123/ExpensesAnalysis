@@ -26,7 +26,6 @@ export interface DashboardNavItem {
 /** URL paths for each dashboard view (App Router). */
 export const DASHBOARD_PATHS: Record<DashboardView, string> = {
   overview: "/overview",
-  insights: "/daily-limit",
   categories: "/lifestyle",
   apps: "/apps",
   people: "/people",
