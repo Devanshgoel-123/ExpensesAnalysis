@@ -50,6 +50,7 @@ export function ImportPage() {
   const searchParams = useSearchParams();
   const [banner, setBanner] = useState<string | null>(null);
   const [bannerError, setBannerError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const windowLabel = formatScanWindowLabel(displayScanWindow());
 
   useEffect(() => {
@@ -74,6 +75,11 @@ export function ImportPage() {
         </header>
       </LedgerlineFadeContent>
 
+      {successMessage ? (
+        <p className="meta" style={{ color: "var(--success)" }} role="status">
+          {successMessage}
+        </p>
+      ) : null}
       {banner ? (
         <p className="meta" role="status">
           {banner}
@@ -92,7 +98,12 @@ export function ImportPage() {
             void (async () => {
               await refreshStatus();
               refresh();
-              if (count > 0) goToOverview();
+              if (count > 0) {
+                setSuccessMessage(`✅ Successfully imported ${count} transaction${count === 1 ? "" : "s"}. Redirecting to overview…`);
+                setTimeout(() => {
+                  goToOverview();
+                }, 2000);
+              }
             })();
           }}
         />
