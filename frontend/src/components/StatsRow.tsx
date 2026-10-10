@@ -39,7 +39,13 @@ export function StatsRow({ summary, dailyInsights, onSaveLimit }: StatsRowProps)
           <strong className="display-num lg copper">
             <LedgerlineCountUp value={summary.totalSpent} format={(n) => formatInr(n)} />
           </strong>
-          <p className="meta mt-1">money out, less refunds</p>
+          <p className="meta mt-1">
+            actual spending (debits minus refunds &amp; transfers)
+            <br />
+            <span className="text-xs text-muted-2">
+              excludes investments &amp; transfers to own accounts
+            </span>
+          </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <span className="badge-pill !m-0 !text-[0.7rem]">
               {summary.transactionCount} debits

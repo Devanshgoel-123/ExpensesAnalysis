@@ -99,7 +99,13 @@ export function OverviewPage() {
           <SpotlightCard className="panel">
             <p className="stat-kicker">Invested</p>
             <strong className="display-num lg">{formatInr(investedTotal)}</strong>
-            <p className="meta mt-1">Moved into investments. Not counted as expenditure.</p>
+            <p className="meta mt-1">
+              Money moved into investments (brokers, mutual funds, trading apps).
+              <br />
+              <span className="text-xs text-muted-2">
+                These transactions are NOT counted in total spending above.
+              </span>
+            </p>
             {investedRows.length === 0 ? (
               <p className="meta mt-4">Nothing invested in {formatMonthTitle(month)}.</p>
             ) : (
