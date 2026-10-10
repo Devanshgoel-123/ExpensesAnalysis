@@ -29,6 +29,7 @@ import { preferencesRouter } from "./preferences/routes.js";
 import { adminRouter } from "./admin/routes.js";
 import { telegramRouter } from "./telegram/routes.js";
 import { statementMatchRouter } from "./statementMatch/routes.js";
+import { demoRouter } from "./demo/routes.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -69,6 +70,7 @@ export function createApp(): express.Application {
   app.use("/api/gmail", gmailRouter);
   app.use("/api/telegram", telegramRouter);
   app.use("/api/statement-match", statementMatchRouter);
+  app.use("/api/demo", demoRouter);
   app.get("/api/v1/auth/google/callback", handleGmailOAuthCallback);
 
   /** Authenticated parse+persist (preferred). */
