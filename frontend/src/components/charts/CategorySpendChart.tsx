@@ -155,6 +155,29 @@ export function CategorySpendChart({
           />
         </ChartTooltip>
       ) : null}
+
+      {/* Data table for screen reader accessibility */}
+      <table className="sr-only" role="table" aria-label="Category spending data">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Amount</th>
+            <th>Share of spend</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const share = total > 0 ? row.total / total : 0;
+            return (
+              <tr key={row.id}>
+                <td>{row.label}</td>
+                <td>{formatInr(row.total)}</td>
+                <td>{Math.round(share * 100)}%</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </Panel>
   );
 }
